@@ -15,6 +15,10 @@ const DEFAULTS = {
   visible: true,
   welcomed: false,   // she has introduced herself (her welcome panel)
   linked: false,     // a Claude Code event has reached her at least once
+  llm: {
+    baseUrl: 'http://localhost:1235/v1',
+    model: 'google/gemma-4-e2b',
+  },
 };
 
 let cache = null;
@@ -26,7 +30,8 @@ function file() {
 function load() {
   if (cache) return cache;
   try {
-    cache = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(file(), 'utf8')) };
+    const saved = JSON.parse(fs.readFileSync(file(), 'utf8'));
+    cache = { ...DEFAULTS, ...saved, llm: { ...DEFAULTS.llm, ...(saved.llm || {}) } };
   } catch {
     cache = { ...DEFAULTS };
   }

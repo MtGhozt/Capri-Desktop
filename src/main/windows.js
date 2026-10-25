@@ -64,4 +64,14 @@ function startWindowWatch({ overlay, onUpdate }) {
   };
 }
 
-module.exports = { startWindowWatch };
+function restoreForeground(hwnd) {
+  if (process.platform !== 'win32' || !hwnd) return;
+  const { spawnSync } = require('node:child_process');
+  const script = path.join(__dirname, 'focus.ps1').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+  spawnSync('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', script, String(hwnd),
+  ], { windowsHide: true, timeout: 4000 });
+}
+
+module.exports = { startWindowWatch, restoreForeground };

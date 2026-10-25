@@ -2,6 +2,7 @@ import { Capri } from './capri.js';
 import { FxLayer } from './fx.js';
 import { Chip, Mask } from './chip.js';
 import { Panel } from './panel.js';
+import { Bubble } from './bubble.js';
 import { Voice } from './voice.js';
 import { Brain } from './brain.js';
 import { Guide } from './guide.js';
@@ -51,6 +52,7 @@ async function boot() {
     ticker: document.getElementById('ticker'),
     labels: LINES[config.lang] || LINES.fr,
   });
+  const bubble = new Bubble({ el: document.getElementById('bubble') });
 
   const capri = new Capri({
     root: document.getElementById('capri'),
@@ -79,8 +81,10 @@ async function boot() {
     if (!mouse) return setInteractive(false);
     const r = panel.rect();
     const onPanel = r && mouse.x >= r.left && mouse.x <= r.right && mouse.y >= r.top && mouse.y <= r.bottom;
+    const b = bubble.rect();
+    const onBubble = b && mouse.x >= b.left && mouse.x <= b.right && mouse.y >= b.top && mouse.y <= b.bottom;
     document.body.style.cursor = onChip() ? 'pointer' : '';
-    return setInteractive(Boolean(onPanel || capri.hit(mouse.x, mouse.y) || onChip()));
+    return setInteractive(Boolean(onPanel || onBubble || capri.hit(mouse.x, mouse.y) || onChip()));
   };
   // Her biochip: her eyes on it follow the pointer over it, and she comes out when you click it
   // (only then, so the pointer passing through that corner doesn't call her back).
@@ -126,6 +130,7 @@ async function boot() {
   capri.onMove = (head) => {
     // pointing at something: the panel goes on her other side, so it doesn't cover it
     panel.setAnchor({ ...head, lean: capri.pointing ? -capri.pointing.dir : 0 }, capri.view);
+    bubble.setAnchor(head, capri.view);
     // she may have moved out from under a still pointer: never leave a dead click zone behind
     refreshHit();
   };
@@ -154,11 +159,17 @@ async function boot() {
     if (!panel.visible && Math.random() < (when === 'end' ? 0.6 : 0.4)) panel.say({ kind: 'info', line: pick(lines), hold: 3800 });
   };
   capri.onClick = () => {
+    if (bubble.visible) return;
     if (panel.visible) panel.hide();
     else brain.status();
   };
   panel.onChar = (kind) => voice.play('blip', { mood: kind });
   panel.onTalk = (talking) => talking && capri.perform('talk');
+  bubble.onTalk = (talking) => talking && capri.perform('talk');
+  bubble.onOpenChange = (open) => {
+    if (open) panel.hide();
+    refreshHit();
+  };
   capri.onMenu = () => host.openMenu();
 
   // Her guide (guide.js): her welcome on first launch, and "How does it work?" in her menu,
@@ -247,6 +258,10 @@ async function boot() {
     panel.say({ kind: 'info', line: t.end, hold: 5000 });
   };
 
+  host.onChatToken((piece) => bubble.onToken(typeof piece === 'string' ? piece : piece?.text || ''));
+  host.onChatDone((payload) => bubble.onDone(payload?.text || ''));
+  host.onChatError(() => bubble.onError());
+
   host.onClaudeEvent((evt) => brain.handle(evt));
   host.onWindows((data) => {
     capri.setWindows(data);
@@ -304,8 +319,22 @@ async function boot() {
         else if (typeof guide[cmd.topic] === 'function') guide.scene(() => guide[cmd.topic]());
         break;
       case 'stow': // Ctrl+Alt+C: into her biochip, or back out
-        if (cmd.on) capri.stow();
-        else capri.unstow();
+        if (cmd.on) {
+          bubble.hide({ fromHost: true });
+          capri.stow();
+        } else capri.unstow();
+        break;
+      case 'chat': // Ctrl+Alt+T
+        if (cmd.on) {
+          if (capri.stowed) {
+            host.setConfig({ visible: true });
+            await capri.unstow();
+          }
+          capri.wake();
+          bubble.show();
+        } else {
+          bubble.hide({ fromHost: true });
+        }
         break;
       case 'satellite': // the whole sequence, on demand (tray)
         if (capri.stowed) {

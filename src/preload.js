@@ -28,4 +28,10 @@ contextBridge.exposeInMainWorld('host', {
   windowsNow: () => ipcRenderer.invoke('windows:get'),
   trayPlace: () => ipcRenderer.invoke('guide:tray'),
   openClaudeFolder: () => ipcRenderer.invoke('guide:claudeFolder'),
+  sendChat: (text) => ipcRenderer.invoke('chat:send', text),
+  cancelChat: () => ipcRenderer.send('chat:cancel'),
+  closeChat: () => ipcRenderer.send('chat:close'),
+  onChatToken: on('chat:token'),
+  onChatDone: on('chat:done'),
+  onChatError: on('chat:error'),
 });

@@ -10,7 +10,8 @@ const {
 const config = require('./config');
 const { TRAY, LANGS } = require('./labels');
 const { createBridge } = require('./bridge');
-const { startWindowWatch } = require('./windows');
+const { startWindowWatch, restoreForeground } = require('./windows');
+const { createLlm } = require('./llm');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
 
@@ -31,6 +32,9 @@ let demoTimer = null;
 let windowWatch = null;
 // the watcher only speaks when something changes: the overlay asks for this when it (re)loads
 let lastWindows = null;
+let llm = null;
+let chatOpen = false;
+let previousForeground = null;
 
 const userSoundsDir = () => path.join(app.getPath('userData'), 'sounds');
 
@@ -109,9 +113,51 @@ function sendCommand(name, payload = {}) {
   overlay?.webContents.send('capri:command', { name, ...payload });
 }
 
-// Ctrl+Alt+C: she folds herself away into her biochip in the corner, or comes back out of it.
+function overlayHwnd() {
+  if (!overlay) return null;
+  const handle = overlay.getNativeWindowHandle();
+  return handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0));
+}
+
+function captureForeground() {
+  const self = overlayHwnd();
+  const fg = lastWindows?.fg;
+  if (fg != null && self != null && String(fg) !== String(self)) return fg;
+  return previousForeground;
+}
+
+function openChat() {
+  if (!overlay) return;
+  if (!chatOpen) previousForeground = captureForeground();
+  chatOpen = true;
+  overlay.setFocusable(true);
+  overlay.show();
+  overlay.focus();
+  sendCommand('chat', { on: true });
+}
+
+function closeChat() {
+  const wasOpen = chatOpen;
+  chatOpen = false;
+  llm?.cancel();
+  if (wasOpen) sendCommand('chat', { on: false });
+  overlay?.setIgnoreMouseEvents(true, { forward: true });
+  const target = previousForeground;
+  previousForeground = null;
+  // Restore first while we still own focus, then drop keyboard on the overlay.
+  if (target != null) restoreForeground(target);
+  overlay?.setFocusable(false);
+  overlay?.showInactive();
+}
+
+function toggleChat() {
+  if (chatOpen) closeChat();
+  else openChat();
+}
+
 function toggleVisible(force) {
   const visible = typeof force === 'boolean' ? force : !config.load().visible;
+  if (!visible && chatOpen) closeChat();
   config.save({ visible });
   sendCommand('stow', { on: !visible });
   rebuildTray();
@@ -321,6 +367,19 @@ function registerIpc() {
     else shell.openPath(dir);
     return { found: true, dir, file: fs.existsSync(file) };
   });
+  ipcMain.handle('chat:send', async (_e, text) => {
+    const line = String(text || '').trim();
+    if (!line || !overlay) return { ok: false };
+    await llm.chat({
+      user: line,
+      onToken: (piece) => overlay?.webContents.send('chat:token', piece),
+      onDone: (payload) => overlay?.webContents.send('chat:done', payload),
+      onError: (payload) => overlay?.webContents.send('chat:error', payload),
+    });
+    return { ok: true };
+  });
+  ipcMain.on('chat:cancel', () => llm?.cancel());
+  ipcMain.on('chat:close', () => closeChat());
   ipcMain.handle('sounds:list', () => {
     try {
       return fs.readdirSync(userSoundsDir())
@@ -407,6 +466,10 @@ function main() {
   app.whenReady().then(() => {
     serveProtocol();
     registerIpc();
+    llm = createLlm({
+      loadConfig: () => config.load(),
+      personaPath: path.join(__dirname, 'persona.md'),
+    });
     createOverlay();
     createTray();
     windowWatch = startWindowWatch({
@@ -422,6 +485,7 @@ function main() {
       onDebug: DEV ? debugHandler : null,
     });
     globalShortcut.register('Control+Alt+C', () => toggleVisible());
+    globalShortcut.register('Control+Alt+T', () => toggleChat());
     screen.on('display-metrics-changed', fitOverlay);
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });

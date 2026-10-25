@@ -63,6 +63,7 @@
   --green: oklch(0.88 0.24 148);
   --violet: oklch(0.55 0.255 292);
   --blue: oklch(0.6 0.2 260);
+  --cyan: oklch(0.86 0.14 204);
 
   --font-display: 'Chakra Petch', 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
@@ -454,6 +455,106 @@ body {
   transform: scaleY(-1);
 }
 
+/* ---------- chat bubble ---------- */
+
+.bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  width: clamp(280px, 22vw, 400px);
+  color: var(--cyan);
+  will-change: transform;
+}
+
+.bubble__frame {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 10px;
+  background: #000;
+  border: 1px solid var(--cyan);
+  font-family: var(--font-mono);
+  clip-path: polygon(
+    0 10px, 10px 0,
+    58% 0, 60% 6px, 63% 0,
+    calc(100% - 14px) 0, 100% 14px,
+    100% calc(100% - 10px), calc(100% - 10px) 100%,
+    18px 100%, 0 calc(100% - 18px)
+  );
+}
+
+.bubble__status {
+  font-size: var(--text-meta);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+.bubble[data-state='THINKING'] .bubble__state,
+.bubble[data-state='TALKING'] .bubble__state {
+  animation: blink 700ms steps(2, jump-none) infinite;
+}
+
+.bubble__log {
+  max-height: min(28vh, 240px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: var(--text-data);
+  line-height: 1.45;
+  color: #d7fffb;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cyan) transparent;
+}
+
+.bubble__row {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.bubble__prefix {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.bubble__row.is-you .bubble__prefix,
+.bubble__row.is-you .bubble__text {
+  color: #8fd9d3;
+}
+
+.bubble__prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid color-mix(in oklch, var(--cyan) 35%, black);
+  padding-top: 8px;
+}
+
+.bubble__you {
+  flex: none;
+  font-size: var(--text-data);
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+}
+
+.bubble__field {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: var(--text-data);
+  outline: none;
+  user-select: text;
+}
+
+.bubble__field::placeholder {
+  color: color-mix(in oklch, var(--cyan) 45%, black);
+}
+
 /* ---------- ticker ---------- */
 
 .ticker {
@@ -516,6 +617,11 @@ body {
 /* ---------- reduced motion ---------- */
 
 @media (prefers-reduced-motion: reduce) {
+  .bubble[data-state='THINKING'] .bubble__state,
+  .bubble[data-state='TALKING'] .bubble__state {
+    animation: none;
+  }
+
   .panel.is-entering .panel__frame,
   .panel.is-leaving .panel__frame,
   .panel__face img,
