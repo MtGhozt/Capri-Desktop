@@ -34,4 +34,8 @@ contextBridge.exposeInMainWorld('host', {
   onChatToken: on('chat:token'),
   onChatDone: on('chat:done'),
   onChatError: on('chat:error'),
+  onLlmBoot: on('llm:boot'),
+  llmStatus: () => ipcRenderer.invoke('llm:status'),
+  getMenu: () => ipcRenderer.invoke('menu:get'),
+  menuAction: (payload) => ipcRenderer.invoke('menu:action', payload),
 });

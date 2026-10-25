@@ -3,6 +3,7 @@ import { FxLayer } from './fx.js';
 import { Chip, Mask } from './chip.js';
 import { Panel } from './panel.js';
 import { Bubble } from './bubble.js';
+import { AppMenu } from './menu.js';
 import { Voice } from './voice.js';
 import { Brain } from './brain.js';
 import { Guide } from './guide.js';
@@ -53,6 +54,7 @@ async function boot() {
     labels: LINES[config.lang] || LINES.fr,
   });
   const bubble = new Bubble({ el: document.getElementById('bubble') });
+  const appMenu = new AppMenu({ el: document.getElementById('app-menu'), host });
 
   const capri = new Capri({
     root: document.getElementById('capri'),
@@ -77,14 +79,16 @@ async function boot() {
   };
   const onChip = () => Boolean(chip.visible && mouse && chip.contains(mouse.x, mouse.y, 0));
   const refreshHit = () => {
-    if (capri.dragging) return setInteractive(true);
+    if (capri.dragging || appMenu.visible) return setInteractive(true);
     if (!mouse) return setInteractive(false);
     const r = panel.rect();
     const onPanel = r && mouse.x >= r.left && mouse.x <= r.right && mouse.y >= r.top && mouse.y <= r.bottom;
     const b = bubble.rect();
     const onBubble = b && mouse.x >= b.left && mouse.x <= b.right && mouse.y >= b.top && mouse.y <= b.bottom;
+    const m = appMenu.rect();
+    const onMenu = m && mouse.x >= m.left && mouse.x <= m.right && mouse.y >= m.top && mouse.y <= m.bottom;
     document.body.style.cursor = onChip() ? 'pointer' : '';
-    return setInteractive(Boolean(onPanel || onBubble || capri.hit(mouse.x, mouse.y) || onChip()));
+    return setInteractive(Boolean(onPanel || onBubble || onMenu || capri.hit(mouse.x, mouse.y) || onChip()));
   };
   // Her biochip: her eyes on it follow the pointer over it, and she comes out when you click it
   // (only then, so the pointer passing through that corner doesn't call her back).
@@ -118,9 +122,13 @@ async function boot() {
     refreshHit();
     hoverChip();
   });
+  const openAppMenu = (x, y) => {
+    appMenu.show(x, y);
+    setInteractive(true);
+  };
   window.addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    if (chip.visible && chip.contains(e.clientX, e.clientY, 0)) host.openMenu();
+    if (chip.visible && chip.contains(e.clientX, e.clientY, 0)) openAppMenu(e.clientX, e.clientY);
   });
   window.addEventListener('click', (e) => {
     if (chip.visible && chip.contains(e.clientX, e.clientY, 0)) comeOut();
@@ -159,6 +167,7 @@ async function boot() {
     if (!panel.visible && Math.random() < (when === 'end' ? 0.6 : 0.4)) panel.say({ kind: 'info', line: pick(lines), hold: 3800 });
   };
   capri.onClick = () => {
+    if (appMenu.visible) return;
     if (bubble.visible) return;
     if (panel.visible) panel.hide();
     else brain.status();
@@ -170,7 +179,8 @@ async function boot() {
     if (open) panel.hide();
     refreshHit();
   };
-  capri.onMenu = () => host.openMenu();
+  appMenu.onOpenChange = () => refreshHit();
+  capri.onMenu = (at) => openAppMenu(at?.x ?? capri.head().x, at?.y ?? capri.head().y);
 
   // Her guide (guide.js): her welcome on first launch, and "How does it work?" in her menu,
   // where she takes you to things and points at them.
@@ -257,6 +267,24 @@ async function boot() {
     await wait(600);
     panel.say({ kind: 'info', line: t.end, hold: 5000 });
   };
+
+  const applyBoot = (state) => {
+    bubble.setBoot(state);
+    if (state === 'booting') {
+      panel.say({ kind: 'info', badge: 'BOOTING', line: 'Spinning up the local stack. Hold still, choom.', hold: null });
+    } else if (state === 'failed') {
+      panel.say({
+        kind: 'error',
+        badge: 'BOOTING',
+        line: "Couldn't wake LM Studio. Fire it yourself if you want a brain.",
+        hold: 7000,
+      });
+    } else if (panel.current?.badge === 'BOOTING') {
+      panel.hide();
+    }
+  };
+  host.llmStatus().then(applyBoot);
+  host.onLlmBoot((payload) => applyBoot(payload?.state || payload));
 
   host.onChatToken((piece) => bubble.onToken(typeof piece === 'string' ? piece : piece?.text || ''));
   host.onChatDone((payload) => bubble.onDone(payload?.text || ''));
@@ -398,9 +426,13 @@ async function boot() {
   if (config.visible === false) capri.stowNow();
   else if (intro) await capri.intro(capri.spot('post'));
   else await capri.materialize(capri.spot('post'));
-  const hooks = await host.hooksStatus();
-  if (!config.welcomed || !hooks.installed) guide.welcome();
-  else panel.say({ kind: 'info', line: pick(brain.t.online), hold: 4000 });
+  if (config.guide?.welcome) {
+    const hooks = await host.hooksStatus();
+    if (!config.welcomed || !hooks.installed) guide.welcome();
+    else panel.say({ kind: 'info', line: pick(brain.t.online), hold: 4000 });
+  } else if ((await host.llmStatus()) !== 'booting') {
+    panel.say({ kind: 'info', line: pick(brain.t.online), hold: 4000 });
+  }
 }
 
 boot().catch((err) => {

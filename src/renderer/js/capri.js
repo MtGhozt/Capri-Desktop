@@ -1516,7 +1516,7 @@ export class Capri {
     let down = null;
     this.canvas.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      if (this.hit(e.clientX, e.clientY)) this.onMenu?.(); // right-click: her menu
+      if (this.hit(e.clientX, e.clientY)) this.onMenu?.({ x: e.clientX, y: e.clientY }); // right-click: her menu
     });
     this.canvas.addEventListener('mousedown', (e) => {
       if (e.button !== 0 || this.busy || !this.hit(e.clientX, e.clientY)) return;

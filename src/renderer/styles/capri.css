@@ -492,7 +492,8 @@ body {
 }
 
 .bubble[data-state='THINKING'] .bubble__state,
-.bubble[data-state='TALKING'] .bubble__state {
+.bubble[data-state='TALKING'] .bubble__state,
+.bubble[data-state='BOOTING'] .bubble__state {
   animation: blink 700ms steps(2, jump-none) infinite;
 }
 
@@ -553,6 +554,71 @@ body {
 
 .bubble__field::placeholder {
   color: color-mix(in oklch, var(--cyan) 45%, black);
+}
+
+/* ---------- overlay context menu ---------- */
+
+.appmenu {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  min-width: 240px;
+  max-width: min(360px, 90vw);
+  padding: 8px 0 10px;
+  background: #000;
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: var(--text-data);
+  clip-path: polygon(
+    0 8px, 8px 0,
+    72% 0, 74% 5px, 77% 0,
+    calc(100% - 12px) 0, 100% 12px,
+    100% calc(100% - 8px), calc(100% - 8px) 100%,
+    12px 100%, 0 calc(100% - 12px)
+  );
+}
+
+.appmenu__item {
+  display: block;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 5px 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.appmenu__item:hover:not(:disabled) {
+  background: var(--cyan);
+  color: #000;
+}
+
+.appmenu__item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.appmenu__item.is-on {
+  color: #fff;
+}
+
+.appmenu__item.is-branch {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: var(--text-meta);
+}
+
+.appmenu__sep {
+  height: 1px;
+  margin: 6px 12px;
+  background: color-mix(in oklch, var(--cyan) 35%, black);
 }
 
 /* ---------- ticker ---------- */
@@ -618,7 +684,8 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .bubble[data-state='THINKING'] .bubble__state,
-  .bubble[data-state='TALKING'] .bubble__state {
+  .bubble[data-state='TALKING'] .bubble__state,
+  .bubble[data-state='BOOTING'] .bubble__state {
     animation: none;
   }
 

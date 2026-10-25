@@ -12,6 +12,7 @@ const { TRAY, LANGS } = require('./labels');
 const { createBridge } = require('./bridge');
 const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
+const { createLms } = require('./lms');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
 
@@ -33,6 +34,7 @@ let windowWatch = null;
 // the watcher only speaks when something changes: the overlay asks for this when it (re)loads
 let lastWindows = null;
 let llm = null;
+let lms = null;
 let chatOpen = false;
 let previousForeground = null;
 
@@ -226,75 +228,126 @@ function updateConfig(patch) {
   return cfg;
 }
 
-function rebuildTray() {
-  if (!tray) return;
-  const cfg = config.load();
-  const hookState = hooks.status();
-  const t = TRAY[resolveLang(cfg.lang)];
+function applyMenuAction(id, value) {
+  switch (id) {
+    case 'teleport': sendCommand('teleport'); break;
+    case 'satellite': sendCommand('satellite'); break;
+    case 'demo': playDemo(); break;
+    case 'help': sendCommand('welcome'); break;
+    case 'visible': toggleVisible(); break;
+    case 'scale': updateConfig({ scale: Number(value) }); break;
+    case 'muted': updateConfig({ muted: Boolean(value) }); break;
+    case 'sounds-dir':
+      fs.mkdirSync(userSoundsDir(), { recursive: true });
+      shell.openPath(userSoundsDir());
+      break;
+    case 'display':
+      config.save({ displayId: value });
+      fitOverlay();
+      rebuildTray();
+      break;
+    case 'wander': updateConfig({ wander: Boolean(value) }); break;
+    case 'possess': updateConfig({ possess: Boolean(value) }); break;
+    case 'lang': updateConfig({ lang: value }); break;
+    case 'startup':
+      app.setLoginItemSettings({ ...loginItemOptions(), openAtLogin: Boolean(value) });
+      rebuildTray();
+      break;
+    case 'hooks-install': runHooks('install'); break;
+    case 'hooks-remove': runHooks('uninstall'); break;
+    case 'quit': app.quit(); break;
+    default: break;
+  }
+}
 
+function menuState() {
+  const cfg = config.load();
+  const lang = resolveLang(cfg.lang);
+  const t = TRAY[lang];
   const displays = screen.getAllDisplays();
   const current = targetDisplay().id;
+  return {
+    labels: t,
+    langs: [['auto', t.auto], ...LANGS.map((code) => [code, TRAY[code].name])],
+    lang,
+    langSetting: cfg.lang,
+    cfg: {
+      visible: cfg.visible,
+      scale: cfg.scale,
+      muted: cfg.muted,
+      wander: cfg.wander,
+      possess: cfg.possess,
+    },
+    displays: displays.map((d, i) => ({
+      id: d.id,
+      label: `${i + 1} — ${d.size.width}×${d.size.height}`,
+      current: d.id === current,
+    })),
+    hooks: hooks.status(),
+    login: app.getLoginItemSettings(loginItemOptions()).openAtLogin,
+    online: t.online(PORT),
+  };
+}
+
+function rebuildTray() {
+  if (!tray) return;
+  const s = menuState();
+  const t = s.labels;
 
   const menu = Menu.buildFromTemplate([
-    { label: t.online(PORT), enabled: false },
+    { label: s.online, enabled: false },
     { type: 'separator' },
-    { label: t.teleport, click: () => sendCommand('teleport') },
-    { label: t.satellite, click: () => sendCommand('satellite') },
-    { label: t.demo, click: playDemo },
-    { label: t.help, click: () => sendCommand('welcome') },
-    { label: cfg.visible ? t.hide : t.show, accelerator: 'Ctrl+Alt+C', click: () => toggleVisible() },
+    { label: t.teleport, click: () => applyMenuAction('teleport') },
+    { label: t.satellite, click: () => applyMenuAction('satellite') },
+    { label: t.demo, click: () => applyMenuAction('demo') },
+    { label: t.help, click: () => applyMenuAction('help') },
+    { label: s.cfg.visible ? t.hide : t.show, accelerator: 'Ctrl+Alt+C', click: () => applyMenuAction('visible') },
     { type: 'separator' },
     {
       label: t.size,
       submenu: [[t.small, 0.45], [t.medium, 0.6], [t.large, 0.8]].map(([label, scale]) => ({
-        label, type: 'radio', checked: Math.abs(cfg.scale - scale) < 0.01, click: () => updateConfig({ scale }),
+        label, type: 'radio', checked: Math.abs(s.cfg.scale - scale) < 0.01, click: () => applyMenuAction('scale', scale),
       })),
     },
     {
       label: t.sound,
       submenu: [
-        { label: t.mute, type: 'checkbox', checked: cfg.muted, click: (item) => updateConfig({ muted: item.checked }) },
+        { label: t.mute, type: 'checkbox', checked: s.cfg.muted, click: (item) => applyMenuAction('muted', item.checked) },
         { type: 'separator' },
-        {
-          label: t.soundsDir,
-          click: () => {
-            fs.mkdirSync(userSoundsDir(), { recursive: true });
-            shell.openPath(userSoundsDir());
-          },
-        },
+        { label: t.soundsDir, click: () => applyMenuAction('sounds-dir') },
       ],
     },
     {
       label: t.screen,
-      enabled: displays.length > 1,
-      submenu: displays.map((d, i) => ({
-        label: `${i + 1} — ${d.size.width}×${d.size.height}`,
+      enabled: s.displays.length > 1,
+      submenu: s.displays.map((d) => ({
+        label: d.label,
         type: 'radio',
-        checked: d.id === current,
-        click: () => { config.save({ displayId: d.id }); fitOverlay(); rebuildTray(); },
+        checked: d.current,
+        click: () => applyMenuAction('display', d.id),
       })),
     },
-    { label: t.wander, type: 'checkbox', checked: cfg.wander, click: (item) => updateConfig({ wander: item.checked }) },
-    { label: t.possess, type: 'checkbox', checked: cfg.possess, click: (item) => updateConfig({ possess: item.checked }) },
+    { label: t.wander, type: 'checkbox', checked: s.cfg.wander, click: (item) => applyMenuAction('wander', item.checked) },
+    { label: t.possess, type: 'checkbox', checked: s.cfg.possess, click: (item) => applyMenuAction('possess', item.checked) },
     {
       label: t.lang,
-      submenu: [[t.auto, 'auto'], ...LANGS.map((lang) => [TRAY[lang].name, lang])].map(([label, lang]) => ({
-        label, type: 'radio', checked: cfg.lang === lang, click: () => updateConfig({ lang }),
+      submenu: s.langs.map(([value, label]) => ({
+        label, type: 'radio', checked: s.langSetting === value, click: () => applyMenuAction('lang', value),
       })),
     },
     {
       label: t.startup,
       type: 'checkbox',
-      checked: app.getLoginItemSettings(loginItemOptions()).openAtLogin,
-      click: (item) => app.setLoginItemSettings({ ...loginItemOptions(), openAtLogin: item.checked }),
+      checked: s.login,
+      click: (item) => applyMenuAction('startup', item.checked),
     },
     { type: 'separator' },
-    hookState.installed
+    s.hooks.installed
       ? { label: t.hooksOn, enabled: false }
-      : { label: t.hooksOff, click: () => runHooks('install') },
-    ...(hookState.installed ? [{ label: t.hooksRemove, click: () => runHooks('uninstall') }] : []),
+      : { label: t.hooksOff, click: () => applyMenuAction('hooks-install') },
+    ...(s.hooks.installed ? [{ label: t.hooksRemove, click: () => applyMenuAction('hooks-remove') }] : []),
     { type: 'separator' },
-    { label: t.quit, click: () => app.quit() },
+    { label: t.quit, click: () => applyMenuAction('quit') },
   ]);
   tray.setContextMenu(menu);
   trayMenu = menu;
@@ -303,7 +356,8 @@ function rebuildTray() {
 // Run from a clone (`npm start`), electron.exe alone would open the default Electron app at login:
 // it needs the project folder as argument.
 function loginItemOptions() {
-  return app.isPackaged ? {} : { path: process.execPath, args: [ROOT] };
+  if (app.isPackaged) return { path: process.execPath, args: [] };
+  return { path: process.execPath, args: [ROOT] };
 }
 
 // From the tray, she says how it went; from her welcome panel (quiet), the panel does.
@@ -367,9 +421,20 @@ function registerIpc() {
     else shell.openPath(dir);
     return { found: true, dir, file: fs.existsSync(file) };
   });
+  ipcMain.handle('menu:get', () => menuState());
+  ipcMain.handle('menu:action', (_e, payload = {}) => {
+    applyMenuAction(payload.id, payload.value);
+    return { ok: true };
+  });
+  ipcMain.handle('llm:status', () => lms?.status() || 'ready');
   ipcMain.handle('chat:send', async (_e, text) => {
     const line = String(text || '').trim();
     if (!line || !overlay) return { ok: false };
+    const boot = await lms.whenReady();
+    if (boot === 'failed') {
+      overlay.webContents.send('chat:error', { kind: 'offline' });
+      return { ok: false };
+    }
     await llm.chat({
       user: line,
       onToken: (piece) => overlay?.webContents.send('chat:token', piece),
@@ -470,6 +535,11 @@ function main() {
       loadConfig: () => config.load(),
       personaPath: path.join(__dirname, 'persona.md'),
     });
+    lms = createLms({
+      loadConfig: () => config.load(),
+      onStatus: (state) => overlay?.webContents.send('llm:boot', { state }),
+    });
+    lms.start();
     createOverlay();
     createTray();
     windowWatch = startWindowWatch({
@@ -494,6 +564,7 @@ function main() {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     windowWatch?.stop();
+    lms?.unload();
   });
   app.on('window-all-closed', (e) => e.preventDefault());
 }

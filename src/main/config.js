@@ -18,6 +18,14 @@ const DEFAULTS = {
   llm: {
     baseUrl: 'http://localhost:1235/v1',
     model: 'google/gemma-4-e2b',
+    autoStart: true,
+    lmsPath: null,           // null → %USERPROFILE%\.lmstudio\bin\lms.exe
+    contextLength: 8192,
+    gpu: 'max',
+    bootTimeoutMs: 120000,
+  },
+  guide: {
+    welcome: false,          // Claude Code "plug me in" onboarding
   },
 };
 
@@ -31,7 +39,12 @@ function load() {
   if (cache) return cache;
   try {
     const saved = JSON.parse(fs.readFileSync(file(), 'utf8'));
-    cache = { ...DEFAULTS, ...saved, llm: { ...DEFAULTS.llm, ...(saved.llm || {}) } };
+    cache = {
+      ...DEFAULTS,
+      ...saved,
+      llm: { ...DEFAULTS.llm, ...(saved.llm || {}) },
+      guide: { ...DEFAULTS.guide, ...(saved.guide || {}) },
+    };
   } catch {
     cache = { ...DEFAULTS };
   }
@@ -39,7 +52,13 @@ function load() {
 }
 
 function save(patch) {
-  cache = { ...load(), ...patch };
+  const current = load();
+  cache = {
+    ...current,
+    ...patch,
+    llm: { ...DEFAULTS.llm, ...(current.llm || {}), ...(patch.llm || {}) },
+    guide: { ...DEFAULTS.guide, ...(current.guide || {}), ...(patch.guide || {}) },
+  };
   try {
     fs.mkdirSync(path.dirname(file()), { recursive: true });
     fs.writeFileSync(file(), JSON.stringify(cache, null, 2));

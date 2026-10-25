@@ -27,6 +27,7 @@ export class Bubble {
     this.thinkTimer = null;
     this.onTalk = null;
     this.onOpenChange = null;
+    this.boot = 'ready';
 
     this.field.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -57,7 +58,7 @@ export class Bubble {
     }
     this.open = true;
     this.el.hidden = false;
-    this.setState('ONLINE');
+    this.setState(this.boot === 'booting' ? 'BOOTING' : 'ONLINE');
     this.place();
     const focusField = () => this.field.focus();
     focusField();
@@ -191,6 +192,13 @@ export class Bubble {
   stopThink() {
     clearInterval(this.thinkTimer);
     this.thinkTimer = null;
+  }
+
+  setBoot(state) {
+    this.boot = state;
+    if (this.open && !this.busy) {
+      this.setState(state === 'booting' ? 'BOOTING' : 'ONLINE');
+    }
   }
 
   setState(name, pct) {
