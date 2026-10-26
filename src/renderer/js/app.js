@@ -25,6 +25,7 @@ function loadImage(src) {
 
 // close-ups of her for the cut-ins, frames of the show (tools/build-cutins.py)
 const CUTINS = ['grin', 'laugh', 'eyes', 'many', 'look'];
+const WATCH_MS = 2000; // how often she checks the pointer still reaches her
 
 async function boot() {
   const [config, image, intro, ...cutins] = await Promise.all([
@@ -142,7 +143,9 @@ async function boot() {
       }, 400);
     }
   };
+  let lastMove = 0;
   window.addEventListener('mousemove', (e) => {
+    lastMove = performance.now();
     mouse = { x: e.clientX, y: e.clientY };
     refreshHit();
     hoverChip();
@@ -153,6 +156,21 @@ async function boot() {
     refreshHit();
     hoverChip();
   });
+  // Where the pointer really is, every couple of seconds: if it moved over her window and no
+  // mousemove came, the hook that brings it to her is gone (Windows drops it without a word, after
+  // sleep say), and main.js puts in a new one.
+  let seen = null;
+  let rearmedAt = -Infinity;
+  setInterval(async () => {
+    const at = await host.cursor().catch(() => null);
+    const before = seen;
+    seen = at;
+    if (!at?.inside || !before?.inside || (at.x === before.x && at.y === before.y)) return;
+    const now = performance.now();
+    if (now - lastMove < WATCH_MS * 1.5 || now - rearmedAt < 20000) return;
+    rearmedAt = now;
+    host.rearm();
+  }, WATCH_MS);
   const menuAvoid = (x, y) => {
     if (dormant.contains(x, y)) return dormant.rect();
     if (chip.visible && chip.contains(x, y, 0)) {
@@ -633,6 +651,19 @@ async function boot() {
           },
         });
         break;
+      case 'rearmed': // a new mouse hook (main.js): click-through until the pointer comes over her again
+        mouse = null;
+        refreshHit();
+        break;
+      case 'rearm': // --dev: as if she'd noticed the pointer no longer reaches her
+        host.rearm();
+        break;
+      case 'loseGl': { // --dev: as if the GPU had been reset (waking from sleep): she goes, then comes back
+        const lose = capri.sprite.gl.getExtension('WEBGL_lose_context');
+        lose?.loseContext();
+        setTimeout(() => lose?.restoreContext(), cmd.ms ?? 1500);
+        break;
+      }
       case 'line': // a short notice from a menu action (memory, clip)
         panel.say({ kind: 'info', badge: cmd.badge, line: cmd.text, hold: 4600 });
         break;
