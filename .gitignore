@@ -7,3 +7,9 @@ Thumbs.db
 
 # local debug captures
 captures/
+
+# voice sidecar (venv + downloaded models)
+voice/.venv/
+voice/models/
+voice/__pycache__/
+voice/**/__pycache__/
