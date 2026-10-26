@@ -272,6 +272,7 @@ export class AppMenu {
     // COMPORTAMIENTO
     section('COMPORTAMIENTO');
     toggle('Arrastrar', { on: cfg.locked, labels: ['NORMAL', 'FIJO'], onChange: (on) => this.act('drag-lock', on) });
+    toggle('Iniciar con Windows', { on: state.login, labels: ['INACTIVO', 'ACTIVO'], onChange: (on) => this.act('startup', on) });
     selector('Tema', {
       options: THEME_OPTIONS,
       current: cfg.theme,
@@ -312,7 +313,8 @@ export class AppMenu {
       return;
     }
     this.confirmForget = false;
-    const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock' || id === 'theme';
+    const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock' || id === 'theme'
+      || id === 'startup';
     await this.host.menuAction({ id, value });
     if (!keep) {
       this.hide();
