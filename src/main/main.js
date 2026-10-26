@@ -16,6 +16,9 @@ const { createLms } = require('./lms');
 const { createVoice } = require('./voice');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
+const { isClipCommand } = require('./clip-command');
+const { saveClip, openClipsFolder, clipFolderLabel } = require('./clips');
+const { micActive } = require('./voice-config');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
 
@@ -250,18 +253,43 @@ function requestSleep() {
   sendCommand('sleep');
 }
 
+function speakLine(line) {
+  const speakId = ttsOn() ? speakQueue?.start() : 0;
+  if (!speakId) return;
+  speakQueue.feed(line);
+  speakQueue.flush(speakId);
+}
+
 function goSleepReply() {
   const bye = SLEEP_LINES[Math.floor(Math.random() * SLEEP_LINES.length)];
   overlay?.webContents.send('chat:token', bye);
   overlay?.webContents.send('chat:done', { text: bye });
-  const speakId = ttsOn() ? speakQueue?.start() : 0;
-  if (speakId) {
-    speakQueue.feed(bye);
-    speakQueue.flush(speakId);
-  }
+  speakLine(bye);
   pendingSleep = true;
   sleepTimer = setTimeout(requestSleep, 2200);
   return { ok: true };
+}
+
+const CLIP_LINES = [
+  'Clip guardado. NVIDIA hizo lo suyo, yo también, ¿sí?',
+  'Ahí va tu clip, choom. No lo pierdas.',
+  'Capturado. Otro momento para el archivo de la humanidad.',
+];
+
+function clipFailLine(error) {
+  return `No pude disparar el atajo del clip. Revisá NVIDIA o el atajo en config.${error ? ` (${error})` : ''}`;
+}
+
+async function goClipReply() {
+  const cfg = config.load();
+  const result = await saveClip(cfg.clips?.saveHotkey || 'Alt+F10');
+  const line = result.ok
+    ? CLIP_LINES[Math.floor(Math.random() * CLIP_LINES.length)]
+    : clipFailLine(result.error);
+  overlay?.webContents.send('chat:token', line);
+  overlay?.webContents.send('chat:done', { text: line });
+  speakLine(line);
+  return { ok: result.ok };
 }
 
 function ttsOn() {
@@ -308,6 +336,36 @@ function applyMenuAction(id, value) {
     case 'possess': updateConfig({ possess: Boolean(value) }); break;
     case 'mic': updateConfig({ voice: { enabled: Boolean(value) } }); break;
     case 'mic-device': updateConfig({ voice: { inputDevice: value } }); break;
+    case 'forget':
+      llm.reset();
+      sendCommand('line', { badge: 'MEM', text: 'Memoria borrada. Como si nunca hubiéramos hablado, ¿sí?' });
+      break;
+    case 'persona-reload': {
+      const r = llm.reloadPersona();
+      sendCommand('line', {
+        badge: 'MEM',
+        text: r.ok ? 'Personalidad recargada. Soy más yo que antes.' : 'No pude releer persona.md.',
+      });
+      break;
+    }
+    case 'clip-save': {
+      const hotkey = config.load().clips?.saveHotkey || 'Alt+F10';
+      saveClip(hotkey).then((r) => sendCommand('line', {
+        badge: 'CLIP',
+        text: r.ok ? 'Clip guardado. NVIDIA hizo lo suyo, yo también, ¿sí?' : clipFailLine(r.error),
+      }));
+      break;
+    }
+    case 'clips-dir': openClipsFolder(config.load()); break;
+    case 'drag-lock':
+      config.save({ position: { locked: Boolean(value) } });
+      sendCommand('lock-position', { on: Boolean(value) });
+      break;
+    case 'shortcuts-file':
+      config.load();
+      if (!fs.existsSync(config.filePath())) config.save({});
+      shell.openPath(config.filePath());
+      break;
     case 'lang': updateConfig({ lang: value }); break;
     case 'startup':
       app.setLoginItemSettings({ ...loginItemOptions(), openAtLogin: Boolean(value) });
@@ -321,6 +379,33 @@ function applyMenuAction(id, value) {
 }
 
 let overlayFolded = false;
+let registeredShortcuts = [];
+
+// The combos shown in her menu; edit shortcuts.* in config.json and restart to change them.
+function registerShortcuts() {
+  for (const accel of registeredShortcuts) {
+    try { globalShortcut.unregister(accel); } catch { /* already gone */ }
+  }
+  registeredShortcuts = [];
+  const bind = (accel, run) => {
+    const combo = String(accel || '').trim();
+    if (!combo) return;
+    try {
+      if (globalShortcut.register(combo, run)) registeredShortcuts.push(combo);
+      else console.error(`[capri] shortcut already taken: ${combo}`);
+    } catch (err) {
+      console.error(`[capri] bad shortcut "${combo}": ${err.message}`);
+    }
+  };
+  const s = config.load().shortcuts || {};
+  bind(s.toggle, () => toggleVisible());
+  bind(s.chat, () => toggleChat());
+  bind(s.talk, () => {
+    llm?.cancel();
+    speakQueue?.stop();
+    voice?.pttStart();
+  });
+}
 
 function menuState(extra = {}) {
   const cfg = config.load();
@@ -344,10 +429,20 @@ function menuState(extra = {}) {
       muted: cfg.muted,
       wander: cfg.wander,
       possess: cfg.possess,
-      mic: cfg.voice?.enabled !== false,
+      mic: micActive(cfg),
       micDevice: cfg.voice?.inputDevice ?? null,
       replyMode: String(cfg.voice?.replyMode || 'voice'),
+      locked: Boolean(cfg.position?.locked),
     },
+    clips: {
+      hotkey: cfg.clips?.saveHotkey || 'Alt+F10',
+      folder: clipFolderLabel(cfg),
+    },
+    shortcuts: [
+      { label: 'Mostrar / ocultar Capri', accel: cfg.shortcuts?.toggle || '' },
+      { label: 'Abrir el chat', accel: cfg.shortcuts?.chat || '' },
+      { label: 'Hablar (push to talk)', accel: cfg.shortcuts?.talk || '' },
+    ],
     micDevices: voice?.devices() || [],
     displays: displays.map((d, i) => ({
       id: d.id,
@@ -538,6 +633,7 @@ function registerIpc() {
     const line = String(text || '').trim();
     if (!line || !overlay) return { ok: false };
     if (isSleepCommand(line)) return goSleepReply();
+    if (isClipCommand(line)) return goClipReply();
     const boot = await lms.whenReady();
     if (boot === 'failed') {
       overlay.webContents.send('chat:error', { kind: 'offline' });
@@ -700,13 +796,7 @@ function main() {
       onEvent: (evt) => overlay?.webContents.send('claude:event', evt),
       onDebug: DEV ? debugHandler : null,
     });
-    globalShortcut.register('Control+Alt+C', () => toggleVisible());
-    globalShortcut.register('Control+Alt+T', () => toggleChat());
-    globalShortcut.register('Control+Alt+V', () => {
-      llm?.cancel();
-      speakQueue?.stop();
-      voice?.pttStart();
-    });
+    registerShortcuts();
     screen.on('display-metrics-changed', fitOverlay);
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });

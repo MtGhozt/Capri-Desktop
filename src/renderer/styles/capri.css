@@ -17,6 +17,24 @@
   font-display: block;
 }
 @font-face {
+  font-family: 'Rajdhani';
+  src: url('../../../node_modules/@fontsource/rajdhani/files/rajdhani-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Rajdhani';
+  src: url('../../../node_modules/@fontsource/rajdhani/files/rajdhani-latin-600-normal.woff2') format('woff2');
+  font-weight: 600;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Rajdhani';
+  src: url('../../../node_modules/@fontsource/rajdhani/files/rajdhani-latin-700-normal.woff2') format('woff2');
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
   font-family: 'JetBrains Mono';
   src: url('../../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2') format('woff2');
   font-weight: 400;
@@ -67,6 +85,7 @@
 
   --font-display: 'Chakra Petch', 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --font-menu: 'Rajdhani', 'Chakra Petch', 'Segoe UI', sans-serif;
 
   --text-line: clamp(15px, calc(0.45vw + 8.5px), 19px);
   --text-meta: 10px;
@@ -598,71 +617,343 @@ body {
   color: color-mix(in oklch, var(--cyan) 45%, black);
 }
 
-/* ---------- overlay context menu ---------- */
+/* ---------- overlay context menu: Cyberpunk 2077 settings plate ---------- */
 
 .appmenu {
+  --menu-ink: #0b1418;
+  --menu-coral: #ff5a4f;
+  --menu-cyan: #5ef6ff;
+  --menu-grid: rgba(94, 246, 255, 0.05);
+  --menu-edge: rgba(94, 246, 255, 0.32);
   position: absolute;
   left: 0;
   top: 0;
   z-index: 6;
-  min-width: 240px;
-  max-width: min(360px, 90vw);
+  display: flex;
+  min-width: 320px;
+  max-width: min(430px, 92vw);
   max-height: calc(100vh - 16px);
-  overflow-y: auto;
-  padding: 8px 0 10px;
-  background: #000;
-  border: 1px solid var(--cyan);
-  color: var(--cyan);
-  font-family: var(--font-mono);
-  font-size: var(--text-data);
+  padding: 1px;
+  background: var(--menu-edge);
+  filter: drop-shadow(0 0 14px rgba(94, 246, 255, 0.1));
   clip-path: polygon(
-    0 8px, 8px 0,
-    72% 0, 74% 5px, 77% 0,
+    0 12px, 12px 0,
+    70% 0, 71.5% 5px, 74% 0,
     calc(100% - 12px) 0, 100% 12px,
-    100% calc(100% - 8px), calc(100% - 8px) 100%,
-    12px 100%, 0 calc(100% - 12px)
+    100% calc(100% - 12px), calc(100% - 12px) 100%,
+    16px 100%, 0 calc(100% - 16px)
+  );
+  color: var(--menu-coral);
+  font-family: var(--font-menu);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.appmenu__plate {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background-color: var(--menu-ink);
+  background-image:
+    linear-gradient(var(--menu-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--menu-grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+  clip-path: polygon(
+    0 11px, 11px 0,
+    70% 0, 71.5% 4px, 74% 0,
+    calc(100% - 11px) 0, 100% 11px,
+    100% calc(100% - 11px), calc(100% - 11px) 100%,
+    15px 100%, 0 calc(100% - 15px)
   );
 }
 
-.appmenu__item {
-  display: block;
+.appmenu__rail {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px 6px;
+  border-bottom: 1px solid rgba(94, 246, 255, 0.14);
+  color: rgba(94, 246, 255, 0.45);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.appmenu__rail-text:last-child {
+  color: rgba(255, 90, 79, 0.45);
+}
+
+.appmenu__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 14px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(94, 246, 255, 0.35) transparent;
+}
+
+.appmenu__body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.appmenu__body::-webkit-scrollbar-thumb {
+  background: rgba(94, 246, 255, 0.28);
+}
+
+.appmenu__section {
+  margin: 12px 0 3px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.appmenu__section:first-child {
+  margin-top: 4px;
+}
+
+.appmenu__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   width: 100%;
-  appearance: none;
-  border: 0;
   margin: 0;
-  padding: 5px 14px;
+  padding: 6px 4px 5px;
   background: transparent;
-  color: inherit;
+  border: 0;
+  color: var(--menu-coral);
   font: inherit;
   text-align: left;
-  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+button.appmenu__row {
   cursor: pointer;
 }
 
-.appmenu__item:hover:not(:disabled) {
-  background: var(--cyan);
-  color: #000;
+.appmenu__row--action:hover {
+  background: rgba(94, 246, 255, 0.06);
 }
 
-.appmenu__item:disabled {
-  opacity: 0.45;
-  cursor: default;
+.appmenu__row--action:hover .appmenu__label {
+  text-shadow: 0 0 8px rgba(255, 90, 79, 0.55);
 }
 
-.appmenu__item.is-on {
+.appmenu__row--action.is-danger {
+  background: rgba(255, 90, 79, 0.12);
+}
+
+.appmenu__row--action.is-danger .appmenu__label {
   color: #fff;
 }
 
-.appmenu__item.is-branch {
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: var(--text-meta);
+.appmenu__row--sub {
+  padding-left: 18px;
 }
 
-.appmenu__sep {
+.appmenu__row--sub .appmenu__label {
+  color: rgba(255, 90, 79, 0.78);
+  font-size: 12.5px;
+}
+
+.appmenu__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.035em;
+}
+
+.appmenu__meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(94, 246, 255, 0.55);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.appmenu__chevron {
+  flex: none;
+  color: var(--menu-cyan);
+  font-family: var(--font-menu);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.85;
+  transition: transform 120ms var(--ease-out);
+}
+
+.appmenu__chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.appmenu__kbd {
+  display: inline-block;
+  flex: none;
+  padding: 1px 5px 2px;
+  background: rgba(94, 246, 255, 0.07);
+  border: 1px solid rgba(94, 246, 255, 0.45);
+  color: var(--menu-cyan);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0 100%, 0 3px);
+}
+
+.appmenu__toggle {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.appmenu__toggle-btn {
+  min-width: 52px;
+  appearance: none;
+  border: 0;
+  padding: 3px 6px 2px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.25);
+  font-family: var(--font-menu);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  cursor: pointer;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  transition: background 120ms linear, color 120ms linear;
+}
+
+.appmenu__toggle-btn[data-state='off'] {
+  box-shadow: inset 0 0 0 1px rgba(255, 90, 79, 0.22);
+  color: rgba(255, 90, 79, 0.5);
+}
+
+.appmenu__toggle-btn[data-state='on'] {
+  box-shadow: inset 0 0 0 1px rgba(94, 246, 255, 0.18);
+  color: rgba(94, 246, 255, 0.5);
+}
+
+.appmenu__toggle-btn:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.appmenu__toggle-btn.is-active[data-state='off'] {
+  background: var(--menu-coral);
+  box-shadow: none;
+  color: #071215;
+  filter: drop-shadow(0 0 5px rgba(255, 90, 79, 0.4));
+}
+
+.appmenu__toggle-btn.is-active[data-state='on'] {
+  background: var(--menu-cyan);
+  box-shadow: none;
+  color: #071215;
+  filter: drop-shadow(0 0 5px rgba(94, 246, 255, 0.4));
+}
+
+.appmenu__select {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 1px;
+  background: rgba(94, 246, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(94, 246, 255, 0.18);
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+}
+
+.appmenu__arrow {
+  appearance: none;
+  border: 0;
+  padding: 2px 7px 1px;
+  background: transparent;
+  color: var(--menu-cyan);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.4;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.appmenu__arrow:hover {
+  opacity: 1;
+  text-shadow: 0 0 8px var(--menu-cyan);
+}
+
+.appmenu__select-value {
+  position: relative;
+  min-width: 88px;
+  max-width: 170px;
+  overflow: hidden;
+  padding: 2px 4px 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appmenu__select-value::after {
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  width: 38px;
   height: 1px;
-  margin: 6px 12px;
-  background: color-mix(in oklch, var(--cyan) 35%, black);
+  margin-left: -19px;
+  background: var(--menu-coral);
+  content: '';
+}
+
+.appmenu__keys {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 7px 14px 8px;
+  border-top: 1px solid rgba(94, 246, 255, 0.14);
+  color: rgba(255, 255, 255, 0.62);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.appmenu__key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.appmenu__keys-meta {
+  margin-left: auto;
+  color: rgba(255, 90, 79, 0.4);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.appmenu button:focus-visible {
+  outline: 1px solid var(--menu-cyan);
+  outline-offset: -2px;
 }
 
 /* ---------- ticker ---------- */

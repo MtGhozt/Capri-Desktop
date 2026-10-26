@@ -52,6 +52,7 @@ export class Capri {
     this.dormant = false; // asleep, down to her mask
     this.wander = true;
     this.possessWindows = true; // tray: "Possess my windows"
+    this.locked = false;  // menu: FIJO, no dragging
     this.dragging = false;
 
     this.p = {
@@ -428,6 +429,10 @@ export class Capri {
 
   // What she does with herself when nobody needs her.
   wanderStep() {
+    if (this.locked) { // FIJO: she stays where you put her
+      this.flourish();
+      return;
+    }
     if (!this.wander || this.stance === 'peek') {
       if (this.stance !== 'peek') this.flourish();
       return;
@@ -1552,7 +1557,7 @@ export class Capri {
       this.mouse = { x: e.clientX, y: e.clientY }; // a window she's in watches it
       if (down) {
         const dx = e.clientX - down.x, dy = e.clientY - down.y;
-        if (!this.dragging && Math.hypot(dx, dy) > 5 && !this.busy) {
+        if (!this.dragging && Math.hypot(dx, dy) > 5 && !this.busy && !this.locked) {
           this.dragging = true;
           if (this.upside) {
             // flip back upright under the pointer

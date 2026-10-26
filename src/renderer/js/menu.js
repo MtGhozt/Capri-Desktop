@@ -1,6 +1,13 @@
-// Overlay context menu. Same actions as the tray, drawn like the chat bubble.
+// Overlay context menu, laid out like the Cyberpunk 2077 settings plate: coral labels,
+// toggles as OFF|ON blocks, selectors as ◀ value ▶, and microtext on the rails.
 
 import { clamp } from './util.js';
+
+const REPLY_OPTIONS = [
+  { id: 'voice', label: 'VOZ' },
+  { id: 'blips', label: 'BLIPS' },
+  { id: 'silent', label: 'SILENCIO' },
+];
 
 export class AppMenu {
   constructor({ el, host, folded }) {
@@ -11,6 +18,7 @@ export class AppMenu {
     this.opening = false;
     this.openedAt = 0;
     this.expanded = null;
+    this.confirmForget = false;
     this.onOpenChange = null;
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
@@ -39,13 +47,14 @@ export class AppMenu {
     return this.open || this.opening;
   }
 
-  async show(x, y, avoid) {
+  async show(x, y, avoid, expand = null) {
     this.opening = true;
     this.openedAt = performance.now();
     this.onOpenChange?.(true);
     try {
       const state = await this.host.getMenu({ folded: this.folded() });
-      this.expanded = null;
+      this.expanded = expand;
+      this.confirmForget = false;
       this.at = { x, y };
       this.avoid = avoid || { left: x, top: y, right: x, bottom: y };
       this.render(state);
@@ -70,6 +79,7 @@ export class AppMenu {
     this.open = false;
     this.opening = false;
     this.expanded = null;
+    this.confirmForget = false;
     this.el.hidden = true;
     this.onOpenChange?.(false);
   }
@@ -120,147 +130,182 @@ export class AppMenu {
   }
 
   render(state) {
-    const t = state.labels;
     const { cfg } = state;
-    const scale = cfg.scale;
-    const rows = [];
+    const build = (tag, className, text) => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    };
+    const kbd = (text) => build('kbd', 'appmenu__kbd', text);
 
-    const item = (label, { action, checked, radio, disabled, expander } = {}) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'appmenu__item';
-      if (disabled) btn.disabled = true;
-      if (expander) btn.classList.add('is-branch');
-      if (checked) btn.classList.add('is-on');
-      const mark = checked ? (radio ? '● ' : '■ ') : expander ? '> ' : '  ';
-      btn.textContent = mark + label;
-      if (action && !disabled) {
-        btn.addEventListener('click', (e) => {
+    const body = build('div', 'appmenu__body');
+    const plate = build('div', 'appmenu__plate');
+
+    const rail = build('div', 'appmenu__rail');
+    rail.append(
+      build('span', 'appmenu__rail-text', 'CAPRI.SYS // OVERLAY CONFIG'),
+      build('span', 'appmenu__rail-text', 'LOCAL LINK'),
+    );
+
+    const keys = build('div', 'appmenu__keys');
+    const escape = build('span', 'appmenu__key');
+    escape.append(kbd('ESC'), build('span', 'appmenu__key-label', 'Cerrar'));
+    keys.append(escape, build('span', 'appmenu__keys-meta', 'CAPRICORN'));
+
+    const section = (title) => body.append(build('div', 'appmenu__section', title));
+
+    const action = (label, { value = '', hotkey = '', danger = false, sub = false, chevron = '', onClick } = {}) => {
+      const row = build(onClick ? 'button' : 'div', 'appmenu__row appmenu__row--action');
+      if (onClick) row.type = 'button';
+      if (danger) row.classList.add('is-danger');
+      if (sub) row.classList.add('appmenu__row--sub');
+      row.append(build('span', 'appmenu__label', label));
+      if (hotkey) row.append(kbd(hotkey));
+      else if (value) row.append(build('span', 'appmenu__meta', value));
+      if (chevron) {
+        const mark = build('span', 'appmenu__chevron', '›');
+        if (this.expanded === chevron) mark.classList.add('is-open');
+        row.append(mark);
+      }
+      if (onClick) {
+        row.addEventListener('click', (e) => {
           e.stopPropagation();
-          action();
+          onClick();
         });
       }
-      return btn;
+      body.append(row);
     };
 
-    const sep = () => {
-      const hr = document.createElement('div');
-      hr.className = 'appmenu__sep';
-      return hr;
+    // labels: [estado apagado, estado encendido]; por defecto OFF|ON.
+    const toggle = (label, { on, onChange, labels = ['OFF', 'ON'] }) => {
+      const row = build('div', 'appmenu__row');
+      row.append(build('span', 'appmenu__label', label));
+      const group = build('div', 'appmenu__toggle');
+      for (const [id, text] of [['off', labels[0]], ['on', labels[1]]]) {
+        const pressed = (id === 'on') === Boolean(on);
+        const btn = build('button', 'appmenu__toggle-btn', text);
+        btn.type = 'button';
+        btn.dataset.state = id;
+        btn.classList.toggle('is-active', pressed);
+        btn.setAttribute('aria-pressed', String(pressed));
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onChange(id === 'on');
+        });
+        group.append(btn);
+      }
+      row.append(group);
+      body.append(row);
     };
 
-    const folded = Boolean(state.folded);
-    rows.push(item(state.online, { disabled: true }));
-    rows.push(sep());
-    rows.push(item(t.teleport, { action: () => this.act('teleport') }));
-    if (!folded) {
-      rows.push(item(t.satellite, { action: () => this.act('satellite') }));
-      rows.push(item(t.demo, { action: () => this.act('demo') }));
-    }
-    rows.push(item(t.help, { action: () => this.act('help') }));
-    if (!folded) rows.push(item(cfg.visible ? t.hide : t.show, { action: () => this.act('visible') }));
-    rows.push(item(folded ? t.wake : t.sleep, { action: () => this.act(folded ? 'wake' : 'sleep') }));
-    rows.push(sep());
+    const selector = (label, { options, current, onChange }) => {
+      const index = Math.max(0, options.findIndex((o) => String(o.id) === String(current)));
+      const row = build('div', 'appmenu__row');
+      row.append(build('span', 'appmenu__label', label));
+      const box = build('div', 'appmenu__select');
+      const step = (delta) => onChange(options[(index + delta + options.length) % options.length].id);
+      const back = build('button', 'appmenu__arrow', '◀');
+      back.type = 'button';
+      back.setAttribute('aria-label', `${label}: anterior`);
+      back.addEventListener('click', (e) => {
+        e.stopPropagation();
+        step(-1);
+      });
+      const placed = options[index];
+      const value = build('span', 'appmenu__select-value', placed.label);
+      value.title = placed.label;
+      const next = build('button', 'appmenu__arrow', '▶');
+      next.type = 'button';
+      next.setAttribute('aria-label', `${label}: siguiente`);
+      next.addEventListener('click', (e) => {
+        e.stopPropagation();
+        step(1);
+      });
+      box.append(back, value, next);
+      row.append(box);
+      body.append(row);
+    };
 
-    rows.push(item(t.size, { expander: true, action: () => this.toggle('size', state) }));
-    if (this.expanded === 'size') {
-      for (const [label, value] of [[t.small, 0.45], [t.medium, 0.6], [t.large, 0.8]]) {
-        rows.push(item(label, {
-          radio: true,
-          checked: Math.abs(scale - value) < 0.01,
-          action: () => this.act('scale', value),
-        }));
+    // AUDIO
+    section('AUDIO');
+    toggle('Micrófono', { on: cfg.mic, labels: ['MUTEADO', 'ACTIVO'], onChange: (on) => this.act('mic', on) });
+    const devices = [
+      { id: null, label: 'Predeterminado' },
+      ...(state.micDevices || []).map((d) => ({ id: d.id, label: d.name })),
+    ];
+    selector('Dispositivo de entrada', {
+      options: devices,
+      current: cfg.micDevice,
+      onChange: (id) => this.act('mic-device', id),
+    });
+    selector('Respuesta', {
+      options: REPLY_OPTIONS,
+      current: String(cfg.replyMode || 'voice'),
+      onChange: (id) => this.act('reply-mode', id),
+    });
+
+    // MEMORIA
+    section('MEMORIA');
+    action('Olvidar conversación', {
+      value: this.confirmForget ? 'CONFIRMAR' : '',
+      danger: this.confirmForget,
+      onClick: () => this.act('forget'),
+    });
+    action('Recargar personalidad', { value: 'PERSONA.MD', onClick: () => this.act('persona-reload') });
+
+    // CLIPS
+    section('CLIPS');
+    action('Guardar clip', { hotkey: state.clips.hotkey, onClick: () => this.act('clip-save') });
+    action('Abrir carpeta de clips', { value: state.clips.folder, onClick: () => this.act('clips-dir') });
+
+    // COMPORTAMIENTO
+    section('COMPORTAMIENTO');
+    toggle('Arrastrar', { on: cfg.locked, labels: ['NORMAL', 'FIJO'], onChange: (on) => this.act('drag-lock', on) });
+    action('Atajos', { chevron: 'shortcuts', onClick: () => this.toggle('shortcuts', state) });
+    if (this.expanded === 'shortcuts') {
+      for (const s of state.shortcuts || []) {
+        action(s.label, s.accel ? { hotkey: s.accel, sub: true } : { value: '—', sub: true });
       }
+      action('Abrir config.json', {
+        value: 'EDITAR',
+        sub: true,
+        onClick: () => this.act('shortcuts-file'),
+      });
     }
 
-    rows.push(item(t.sound, { expander: true, action: () => this.toggle('sound', state) }));
-    if (this.expanded === 'sound') {
-      rows.push(item(t.mute, { checked: cfg.muted, action: () => this.act('muted', !cfg.muted) }));
-      rows.push(item(t.reply, { disabled: true }));
-      for (const [mode, label] of [['voice', t.replyVoice], ['blips', t.replyBlips], ['silent', t.replySilent]]) {
-        rows.push(item(label, {
-          radio: true,
-          checked: String(cfg.replyMode || 'voice') === mode,
-          action: () => this.act('reply-mode', mode),
-        }));
-      }
-      rows.push(item(t.soundsDir, { action: () => this.act('sounds-dir') }));
-    }
+    // SALIR
+    section('SALIR');
+    action('Salir', { onClick: () => this.act('quit') });
 
-    rows.push(item(t.screen, {
-      expander: true,
-      disabled: state.displays.length < 2,
-      action: () => this.toggle('screen', state),
-    }));
-    if (this.expanded === 'screen') {
-      for (const d of state.displays) {
-        rows.push(item(d.label, {
-          radio: true,
-          checked: d.current,
-          action: () => this.act('display', d.id),
-        }));
-      }
-    }
-
-    if (!folded) rows.push(item(t.wander, { checked: cfg.wander, action: () => this.act('wander', !cfg.wander) }));
-    rows.push(item(t.possess, { checked: cfg.possess, action: () => this.act('possess', !cfg.possess) }));
-    rows.push(item(cfg.mic ? t.micOn : t.micOff, { checked: cfg.mic, action: () => this.act('mic', !cfg.mic) }));
-    rows.push(item(t.micDevice, { expander: true, action: () => this.toggle('mic-device', state) }));
-    if (this.expanded === 'mic-device') {
-      rows.push(item(t.micDefault, {
-        radio: true,
-        checked: cfg.micDevice == null,
-        action: () => this.act('mic-device', null),
-      }));
-      for (const d of state.micDevices || []) {
-        rows.push(item(d.name, {
-          radio: true,
-          checked: Number(cfg.micDevice) === Number(d.id),
-          action: () => this.act('mic-device', d.id),
-        }));
-      }
-    }
-    rows.push(item(t.lang, { expander: true, action: () => this.toggle('lang', state) }));
-    if (this.expanded === 'lang') {
-      for (const [value, label] of state.langs) {
-        rows.push(item(label, {
-          radio: true,
-          checked: state.langSetting === value,
-          action: () => this.act('lang', value),
-        }));
-      }
-    }
-
-    rows.push(item(t.startup, {
-      checked: state.login,
-      action: () => this.act('startup', !state.login),
-    }));
-    rows.push(sep());
-    rows.push(item(t.quit, { action: () => this.act('quit') }));
-
-    this.el.replaceChildren(...rows);
+    plate.append(rail, body, keys);
+    this.el.replaceChildren(plate);
     if (this.open && this.at) this.place();
   }
 
   toggle(name, state) {
+    this.confirmForget = false;
     this.expanded = this.expanded === name ? null : name;
     this.render(state);
   }
 
   async act(id, value) {
-    const keep = id === 'scale' || id === 'muted' || id === 'display' || id === 'wander'
-      || id === 'possess' || id === 'lang' || id === 'startup' || id === 'sounds-dir'
-      || id === 'mic' || id === 'mic-device' || id === 'reply-mode';
+    if (id === 'forget' && !this.confirmForget) {
+      this.confirmForget = true;
+      const state = await this.host.getMenu({ folded: this.folded() });
+      this.render(state);
+      return;
+    }
+    this.confirmForget = false;
+    const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock';
     await this.host.menuAction({ id, value });
-    if (id === 'quit' || id === 'teleport' || id === 'satellite' || id === 'demo' || id === 'help' || id === 'visible' || id === 'sleep' || id === 'wake') {
+    if (!keep) {
       this.hide();
       return;
     }
-    if (keep && this.open) {
+    if (this.open) {
       const state = await this.host.getMenu({ folded: this.folded() });
       this.render(state);
-    } else {
-      this.hide();
     }
   }
 }

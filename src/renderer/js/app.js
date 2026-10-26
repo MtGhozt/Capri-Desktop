@@ -79,6 +79,19 @@ async function boot() {
   capri.possessWindows = config.possess;
   capri.setScale(config.scale);
 
+  // COMPORTAMIENTO > Arrastrar: FIJO keeps her where she was dropped and remembers it.
+  const applyPosition = (cfg) => {
+    capri.locked = Boolean(cfg.position?.locked);
+    const x = Number(cfg.position?.x);
+    const y = Number(cfg.position?.y);
+    if (capri.locked && Number.isFinite(x) && Number.isFinite(y)
+      && (Math.abs(capri.pos.x - x) > 1 || Math.abs(capri.pos.y - y) > 1)) {
+      capri.pos = { x, y };
+      capri.place();
+    }
+  };
+  applyPosition(config);
+
   const brain = new Brain({ capri, panel, voice, host, lang: config.lang });
 
   // Click-through everywhere except on her body, the panel and her biochip.
@@ -147,9 +160,9 @@ async function boot() {
     if (!capri.hidden && capri.p.alpha >= 0.5) return capri.bounds();
     return { left: x, top: y, right: x, bottom: y };
   };
-  const openAppMenu = (x, y, avoid) => {
+  const openAppMenu = (x, y, avoid, expand = null) => {
     setInteractive(true);
-    appMenu.show(x, y, avoid || menuAvoid(x, y));
+    appMenu.show(x, y, avoid || menuAvoid(x, y), expand);
   };
   const onAppMenuTarget = (x, y) => (
     (chip.visible && chip.contains(x, y, 0)) || dormant.contains(x, y) || capri.hit(x, y)
@@ -547,6 +560,7 @@ async function boot() {
   host.onConfig((cfg) => {
     voice.configure(cfg);
     applyVoiceHold(cfg);
+    applyPosition(cfg);
     capri.wander = cfg.wander;
     capri.possessWindows = cfg.possess;
     idleMs = Number(cfg.idle?.dormantAfterMs);
@@ -586,6 +600,9 @@ async function boot() {
         else if (cmd.topic === 'menu') guide.menu();
         else if (typeof guide[cmd.topic] === 'function') guide.scene(() => guide[cmd.topic]());
         break;
+      case 'menu': // --dev: open her context menu, to look at it
+        openAppMenu(capri.head().x, capri.head().y - 20, capri.bounds(), cmd.expand || null);
+        break;
       case 'stow': // Ctrl+Alt+C: into her biochip, or back out
         if (cmd.on) {
           bubble.hide({ fromHost: true });
@@ -604,6 +621,18 @@ async function boot() {
         break;
       case 'sleep':
         await fold({ force: true });
+        break;
+      case 'lock-position':
+        host.setConfig({
+          position: {
+            locked: Boolean(cmd.on),
+            x: Math.round(capri.pos.x),
+            y: Math.round(capri.pos.y),
+          },
+        });
+        break;
+      case 'line': // a short notice from a menu action (memory, clip)
+        panel.say({ kind: 'info', badge: cmd.badge, line: cmd.text, hold: 4600 });
         break;
       case 'wake':
         await unfold();

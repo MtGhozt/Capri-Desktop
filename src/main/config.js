@@ -35,6 +35,20 @@ const DEFAULTS = {
     glitch: true,
     intro: true,           // boot grab-the-screen intro; false skips to materialize
   },
+  position: {
+    locked: false,         // menu: NORMAL / FIJO; when locked she stays at x,y
+    x: null,
+    y: null,
+  },
+  shortcuts: {
+    toggle: 'Ctrl+Alt+C',  // put her away / bring her back
+    chat: 'Ctrl+Alt+T',    // open the chat bubble
+    talk: 'Ctrl+Alt+V',    // push to talk
+  },
+  clips: {
+    saveHotkey: 'Alt+F10', // NVIDIA Instant Replay
+    folder: null,          // null → NVIDIA's Videos\NVIDIA if it exists, otherwise Videos
+  },
   voice: {
     enabled: true,
     dir: null,               // null → repo voice/ in dev; set an absolute path for the installed exe
@@ -86,6 +100,9 @@ function load() {
       },
       fx: { ...DEFAULTS.fx, ...(saved.fx || {}) },
       voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
+      position: { ...DEFAULTS.position, ...(saved.position || {}) },
+      shortcuts: { ...DEFAULTS.shortcuts, ...(saved.shortcuts || {}) },
+      clips: { ...DEFAULTS.clips, ...(saved.clips || {}) },
     };
   } catch {
     cache = { ...DEFAULTS };
@@ -117,9 +134,12 @@ function save(patch) {
     },
     fx: { ...DEFAULTS.fx, ...(current.fx || {}), ...(patch.fx || {}) },
     voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
+    position: { ...DEFAULTS.position, ...(current.position || {}), ...(patch.position || {}) },
+    shortcuts: { ...DEFAULTS.shortcuts, ...(current.shortcuts || {}), ...(patch.shortcuts || {}) },
+    clips: { ...DEFAULTS.clips, ...(current.clips || {}), ...(patch.clips || {}) },
   };
   persist();
   return cache;
 }
 
-module.exports = { load, save, DEFAULTS };
+module.exports = { load, save, filePath: file, DEFAULTS };
