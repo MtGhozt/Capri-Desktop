@@ -71,11 +71,23 @@ function targetDisplay() {
   return screen.getAllDisplays().find((d) => d.id === displayId) || screen.getPrimaryDisplay();
 }
 
+// Her window: the work area, or the whole screen while she rests on the taskbar (her legs hang
+// over it), less its top row of pixels: a window on top covering the whole screen is a fullscreen
+// app to Windows (animated wallpapers pause, notifications wait). `gap`: how much of her window is
+// below the top of the taskbar (0, or its height).
+function overlayArea() {
+  const { workArea, bounds } = targetDisplay();
+  const area = config.load().rest === 'taskbar'
+    ? { ...bounds, y: bounds.y + 1, height: bounds.height - 1 }
+    : workArea;
+  return { area, gap: area.y + area.height - (workArea.y + workArea.height) };
+}
+
 function fitOverlay() {
   if (!overlay) return;
-  const { workArea } = targetDisplay();
-  overlay.setBounds(workArea);
-  overlay.webContents.send('overlay:resize', { width: workArea.width, height: workArea.height });
+  const { area, gap } = overlayArea();
+  overlay.setBounds(area);
+  overlay.webContents.send('overlay:resize', { width: area.width, height: area.height, gap });
 }
 
 // The pointer reaches her click-through window through a mouse hook, and Windows drops a hook that
@@ -91,10 +103,21 @@ function rearmOverlay() {
   console.log('[capri] mouse hook set up again');
 }
 
+// Back on top of everything, the taskbar included (it comes up over her when it's clicked). Twice:
+// the taskbar can come up again a moment later, as its menus and previews open.
+function raiseOverlay() {
+  for (const wait of [0, 400]) {
+    setTimeout(() => {
+      if (!overlay || overlay.isDestroyed()) return;
+      overlay.setAlwaysOnTop(true, 'screen-saver');
+      overlay.moveTop();
+    }, wait);
+  }
+}
+
 function createOverlay() {
-  const { workArea } = targetDisplay();
   overlay = new BrowserWindow({
-    ...workArea,
+    ...overlayArea().area,
     transparent: true,
     backgroundColor: '#00000000',
     frame: false,
@@ -122,8 +145,10 @@ function createOverlay() {
   overlay.setAlwaysOnTop(true, 'screen-saver');
   overlay.setIgnoreMouseEvents(true, { forward: true });
   overlay.loadURL('capri://app/src/renderer/index.html');
-  // always shown: put away, she's still there as her biochip in the corner
+  // always shown: put away, she's still there as her biochip in the corner. Sized again first:
+  // Windows keeps a new window inside the work area, and resting on the taskbar it covers it too.
   overlay.once('ready-to-show', () => {
+    fitOverlay();
     overlay.showInactive();
     for (const payload of voiceQueue) overlay.webContents.send('voice:event', payload);
     voiceQueue = [];
@@ -248,7 +273,7 @@ function rendererConfig() {
   const idle = { ...cfg.idle };
   // --dev only: 10 s idle for testing. Never written to config.json.
   if (DEV) idle.dormantAfterMs = 10_000;
-  return { ...cfg, idle, lang: resolveLang(cfg.lang), langSetting: cfg.lang, dev: DEV };
+  return { ...cfg, idle, lang: resolveLang(cfg.lang), langSetting: cfg.lang, dev: DEV, floorGap: overlayArea().gap };
 }
 
 const SLEEP_LINES = [
@@ -317,6 +342,7 @@ function ttsOn() {
 
 function updateConfig(patch) {
   config.save(patch);
+  if ('rest' in patch) fitOverlay(); // the taskbar in her window or not
   const cfg = rendererConfig();
   overlay?.webContents.send('capri:config', cfg);
   voice?.applyConfig();
@@ -811,6 +837,8 @@ function main() {
     windowWatch = startWindowWatch({
       overlay,
       onUpdate: (data) => {
+        // a click on the taskbar brings it up over her: sitting on it, her legs would vanish behind it
+        if (data.taskbar && !lastWindows?.taskbar && config.load().rest === 'taskbar') raiseOverlay();
         lastWindows = data;
         overlay?.webContents.send('windows:update', data);
       },
