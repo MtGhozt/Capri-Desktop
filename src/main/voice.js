@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { app } = require('electron');
 const { sidecarConfig } = require('./voice-config');
+const { logLines, voiceLogPath } = require('./log');
 
 const PORT = 47824;
 
@@ -32,20 +33,6 @@ function resolveVoiceDir(root, cfg) {
   return null;
 }
 
-function voiceLogPath() {
-  const dir = path.join(app.getPath('userData'), 'logs');
-  fs.mkdirSync(dir, { recursive: true });
-  return path.join(dir, 'voice.log');
-}
-
-function appendVoiceLog(file, text) {
-  const line = String(text).replace(/\s+$/, '');
-  if (!line) return;
-  try {
-    fs.appendFileSync(file, `${new Date().toISOString()} ${line}\n`);
-  } catch { /* disk full / locked */ }
-}
-
 function createVoice({ root, loadConfig, onEvent }) {
   let child = null;
   let ws = null;
@@ -65,7 +52,7 @@ function createVoice({ root, loadConfig, onEvent }) {
   }
 
   function skip(message) {
-    appendVoiceLog(logFile, `[capri] ${message}`);
+    logLines(logFile, `[capri] ${message}`);
     console.log(`[capri] ${message}`);
     emit({ type: 'notice', message });
   }
@@ -79,10 +66,10 @@ function createVoice({ root, loadConfig, onEvent }) {
     if (kind === 'speak' || kind === 'speak_start' || kind === 'speak_flush' || kind === 'stop_speak') {
       const extra = `${payload.id != null ? ` id=${payload.id}` : ''}${kind === 'speak' ? ` ${String(payload.text || '').length}c` : ''}`;
       if (!ws || ws.readyState !== 1) {
-        appendVoiceLog(logFile, `[capri] ws skip ${kind}${extra}`);
+        logLines(logFile, `[capri] ws skip ${kind}${extra}`);
         return;
       }
-      appendVoiceLog(logFile, `[capri] ws ${kind}${extra}`);
+      logLines(logFile, `[capri] ws ${kind}${extra}`);
     }
     if (!ws || ws.readyState !== 1) return;
     try { ws.send(JSON.stringify(payload)); } catch { /* sidecar gone */ }
@@ -137,11 +124,13 @@ function createVoice({ root, loadConfig, onEvent }) {
     });
   }
 
-  function start() {
+  // `force` restarts the sidecar even when the mic is off in config: game mode unplugged it
+  // entirely, and her voice (TTS) still has to come back when the game is over.
+  function start({ force = false } = {}) {
     stopped = false;
     const cfg = loadConfig();
-    if (cfg.voice && cfg.voice.enabled === false) {
-      appendVoiceLog(logFile, '[capri] voice sidecar off (voice.enabled=false)');
+    if (!force && cfg.voice && cfg.voice.enabled === false) {
+      logLines(logFile, '[capri] voice sidecar off (voice.enabled=false)');
       return;
     }
     const dir = resolveVoiceDir(root, cfg);
@@ -169,7 +158,6 @@ function createVoice({ root, loadConfig, onEvent }) {
           CAPRI_VOICE_TOKEN: token,
           CAPRI_VOICE_PORT: String(PORT),
           CAPRI_DEV: process.argv.includes('--dev') ? '1' : '',
-          CAPRI_VOICE_LOG: logFile,
           PYTORCH_CUDA_ALLOC_CONF: process.env.PYTORCH_CUDA_ALLOC_CONF || 'expandable_segments:True',
           HF_HUB_DISABLE_SYMLINKS_WARNING: '1',
         },
@@ -179,20 +167,20 @@ function createVoice({ root, loadConfig, onEvent }) {
       child = null;
       return;
     }
-    appendVoiceLog(logFile, `[capri] voice sidecar spawn dir=${dir}`);
+    logLines(logFile, `[capri] voice sidecar spawn dir=${dir}`);
     child.stdout.on('data', (buf) => {
       const line = String(buf);
       process.stdout.write(line);
-      appendVoiceLog(logFile, line);
+      logLines(logFile, line);
       if (line.includes('CAPRI_VOICE_READY')) connect();
     });
     child.stderr.on('data', (buf) => {
       const line = String(buf);
       process.stderr.write(line);
-      appendVoiceLog(logFile, line);
+      logLines(logFile, line);
     });
     child.on('exit', (code) => {
-      appendVoiceLog(logFile, `[capri] voice sidecar exit ${code}`);
+      logLines(logFile, `[capri] voice sidecar exit ${code}`);
       console.log('[capri] voice sidecar exit', code);
       child = null;
       disconnect();
@@ -214,7 +202,7 @@ function createVoice({ root, loadConfig, onEvent }) {
     const next = Boolean(on);
     if (next === sleeping) return;
     sleeping = next;
-    appendVoiceLog(logFile, `[capri] voice sleeping=${sleeping}`);
+    logLines(logFile, `[capri] voice sleeping=${sleeping}`);
     send({ type: 'config', ...speakCfg() });
   }
 
@@ -243,6 +231,7 @@ function createVoice({ root, loadConfig, onEvent }) {
     listDevices: () => send({ type: 'list_devices' }),
     devices: () => devices,
     connected: () => Boolean(ws && ws.readyState === 1),
+    running: () => Boolean(child),
     resolveDir: () => resolveVoiceDir(root, loadConfig()),
   };
 }

@@ -3,7 +3,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
@@ -12,14 +11,6 @@ const VOICE = path.join(ROOT, 'voice');
 const PY = path.join(VOICE, '.venv', 'Scripts', 'python.exe');
 const PORT = 47891;
 const TOKEN = 'boot-test-token';
-
-function readLog(file) {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
-}
 
 function killTree(child) {
   if (!child || !child.pid) return;
@@ -57,7 +48,6 @@ function sendConfig(port, token) {
 
 test('sidecar boot log has wake word ready, whisper ready and tts engine', { timeout: 120000 }, async () => {
   assert.ok(fs.existsSync(PY), 'voice/.venv python is required for the boot test');
-  const logFile = path.join(os.tmpdir(), `capri-voice-boot-${Date.now()}.log`);
   const child = spawn(PY, ['-u', 'server.py'], {
     cwd: VOICE,
     windowsHide: true,
@@ -68,7 +58,6 @@ test('sidecar boot log has wake word ready, whisper ready and tts engine', { tim
       PYTHONUTF8: '1',
       CAPRI_VOICE_TOKEN: TOKEN,
       CAPRI_VOICE_PORT: String(PORT),
-      CAPRI_VOICE_LOG: logFile,
       HF_HUB_DISABLE_SYMLINKS_WARNING: '1',
     },
   });
@@ -86,18 +75,17 @@ test('sidecar boot log has wake word ready, whisper ready and tts engine', { tim
     const until = Date.now() + 90000;
     let log = '';
     while (Date.now() < until) {
-      log = `${buf}\n${readLog(logFile)}`;
+      log = buf;
       if (/wake word .+ ready/i.test(log) && /whisper ready/i.test(log) && /tts engine=/.test(log)) {
         break;
       }
       await new Promise((r) => setTimeout(r, 400));
     }
-    log = `${buf}\n${readLog(logFile)}`;
+    log = buf;
     assert.match(log, /wake word .+ ready/i, log.slice(-3000));
     assert.match(log, /whisper ready/i, log.slice(-3000));
     assert.match(log, /tts engine=/, log.slice(-3000));
   } finally {
     killTree(child);
-    try { fs.unlinkSync(logFile); } catch { /* ignore */ }
   }
 });

@@ -63,21 +63,11 @@ VK_V = 0x56
 
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 DEV = os.environ.get("CAPRI_DEV") == "1"
-LOG_FILE = os.environ.get("CAPRI_VOICE_LOG") or ""
 
 
 def log(msg: str) -> None:
-    line = f"[capri-voice] {msg}"
-    print(line, flush=True)
-    if not LOG_FILE:
-        return
-    try:
-        path = Path(LOG_FILE)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(time.strftime("%Y-%m-%dT%H:%M:%S") + " " + line + "\n")
-    except OSError:
-        pass
+    # stdout only: the Electron side timestamps it and writes voice.log (one line per event).
+    print(f"[capri-voice] {msg}", flush=True)
 
 
 def load_openwakeword():
