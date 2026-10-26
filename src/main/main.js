@@ -361,6 +361,9 @@ function applyMenuAction(id, value) {
       config.save({ position: { locked: Boolean(value) } });
       sendCommand('lock-position', { on: Boolean(value) });
       break;
+    case 'theme':
+      updateConfig({ ui: { theme: value === 'capri' ? 'capri' : 'cyberpunk' } });
+      break;
     case 'shortcuts-file':
       config.load();
       if (!fs.existsSync(config.filePath())) config.save({});
@@ -433,6 +436,7 @@ function menuState(extra = {}) {
       micDevice: cfg.voice?.inputDevice ?? null,
       replyMode: String(cfg.voice?.replyMode || 'voice'),
       locked: Boolean(cfg.position?.locked),
+      theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
     },
     clips: {
       hotkey: cfg.clips?.saveHotkey || 'Alt+F10',

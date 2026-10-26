@@ -620,11 +620,15 @@ body {
 /* ---------- overlay context menu: Cyberpunk 2077 settings plate ---------- */
 
 .appmenu {
-  --menu-ink: #0b1418;
-  --menu-coral: #ff5a4f;
-  --menu-cyan: #5ef6ff;
-  --menu-grid: rgba(94, 246, 255, 0.05);
-  --menu-edge: rgba(94, 246, 255, 0.32);
+  /* palette, swapped per [data-theme]; layout never changes */
+  --bg: #0b1418;
+  --grid: rgba(94, 246, 255, 0.05);
+  --label: #ff5a4f;
+  --title: #fff;
+  --accent-on: #5ef6ff;
+  --accent-alt: #ff5a4f;
+  --line: #5ef6ff;
+  --glow: #5ef6ff;
   position: absolute;
   left: 0;
   top: 0;
@@ -634,8 +638,8 @@ body {
   max-width: min(430px, 92vw);
   max-height: calc(100vh - 16px);
   padding: 1px;
-  background: var(--menu-edge);
-  filter: drop-shadow(0 0 14px rgba(94, 246, 255, 0.1));
+  background: color-mix(in srgb, var(--line) 32%, transparent);
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--glow) 12%, transparent));
   clip-path: polygon(
     0 12px, 12px 0,
     70% 0, 71.5% 5px, 74% 0,
@@ -643,10 +647,21 @@ body {
     100% calc(100% - 12px), calc(100% - 12px) 100%,
     16px 100%, 0 calc(100% - 16px)
   );
-  color: var(--menu-coral);
+  color: var(--label);
   font-family: var(--font-menu);
   font-size: 14px;
   font-weight: 500;
+}
+
+.appmenu[data-theme='capri'] {
+  --bg: #140a1f;
+  --grid: #2a1540;
+  --label: #ff2d6f;
+  --title: #fff;
+  --accent-on: #3dff8f;
+  --accent-alt: #7b3fe4;
+  --line: #7b3fe4;
+  --glow: #ff2d6f;
 }
 
 .appmenu__plate {
@@ -655,10 +670,10 @@ body {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background-color: var(--menu-ink);
+  background-color: var(--bg);
   background-image:
-    linear-gradient(var(--menu-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--menu-grid) 1px, transparent 1px);
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
   background-size: 22px 22px;
   clip-path: polygon(
     0 11px, 11px 0,
@@ -674,8 +689,8 @@ body {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 14px 6px;
-  border-bottom: 1px solid rgba(94, 246, 255, 0.14);
-  color: rgba(94, 246, 255, 0.45);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 20%, transparent);
+  color: color-mix(in srgb, var(--accent-on) 45%, transparent);
   font-family: var(--font-mono);
   font-size: 8px;
   letter-spacing: 0.2em;
@@ -684,7 +699,7 @@ body {
 }
 
 .appmenu__rail-text:last-child {
-  color: rgba(255, 90, 79, 0.45);
+  color: color-mix(in srgb, var(--label) 45%, transparent);
 }
 
 .appmenu__body {
@@ -693,7 +708,7 @@ body {
   overflow-y: auto;
   padding: 2px 14px 8px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(94, 246, 255, 0.35) transparent;
+  scrollbar-color: color-mix(in srgb, var(--accent-on) 35%, transparent) transparent;
 }
 
 .appmenu__body::-webkit-scrollbar {
@@ -701,14 +716,14 @@ body {
 }
 
 .appmenu__body::-webkit-scrollbar-thumb {
-  background: rgba(94, 246, 255, 0.28);
+  background: color-mix(in srgb, var(--accent-on) 28%, transparent);
 }
 
 .appmenu__section {
   margin: 12px 0 3px;
   padding-bottom: 3px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
-  color: #fff;
+  border-bottom: 1px solid color-mix(in srgb, var(--title) 22%, transparent);
+  color: var(--title);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.2em;
@@ -730,7 +745,7 @@ body {
   padding: 6px 4px 5px;
   background: transparent;
   border: 0;
-  color: var(--menu-coral);
+  color: var(--label);
   font: inherit;
   text-align: left;
   white-space: nowrap;
@@ -741,19 +756,19 @@ button.appmenu__row {
 }
 
 .appmenu button.appmenu__row--action:hover {
-  background: rgba(94, 246, 255, 0.06);
+  background: color-mix(in srgb, var(--accent-on) 6%, transparent);
 }
 
 .appmenu button.appmenu__row--action:hover .appmenu__label {
-  text-shadow: 0 0 8px rgba(255, 90, 79, 0.55);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--glow) 55%, transparent);
 }
 
 .appmenu__row--action.is-danger {
-  background: rgba(255, 90, 79, 0.12);
+  background: color-mix(in srgb, var(--label) 12%, transparent);
 }
 
 .appmenu__row--action.is-danger .appmenu__label {
-  color: #fff;
+  color: var(--title);
 }
 
 .appmenu__row--sub {
@@ -761,7 +776,7 @@ button.appmenu__row {
 }
 
 .appmenu__row--sub .appmenu__label {
-  color: rgba(255, 90, 79, 0.78);
+  color: color-mix(in srgb, var(--label) 78%, transparent);
   font-size: 12.5px;
 }
 
@@ -779,7 +794,7 @@ button.appmenu__row {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: rgba(94, 246, 255, 0.55);
+  color: color-mix(in srgb, var(--accent-on) 55%, transparent);
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.1em;
@@ -788,7 +803,7 @@ button.appmenu__row {
 
 .appmenu__chevron {
   flex: none;
-  color: var(--menu-cyan);
+  color: var(--accent-on);
   font-family: var(--font-menu);
   font-size: 16px;
   font-weight: 600;
@@ -805,9 +820,9 @@ button.appmenu__row {
   display: inline-block;
   flex: none;
   padding: 1px 5px 2px;
-  background: rgba(94, 246, 255, 0.07);
-  border: 1px solid rgba(94, 246, 255, 0.45);
-  color: var(--menu-cyan);
+  background: color-mix(in srgb, var(--accent-on) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-on) 45%, transparent);
+  color: var(--accent-on);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
@@ -828,9 +843,9 @@ button.appmenu__row {
   appearance: none;
   border: 0;
   padding: 3px 6px 2px;
-  background: rgba(255, 255, 255, 0.035);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--title) 4%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--title) 7%, transparent);
+  color: color-mix(in srgb, var(--title) 25%, transparent);
   font-family: var(--font-menu);
   font-size: 11px;
   font-weight: 700;
@@ -843,32 +858,32 @@ button.appmenu__row {
 }
 
 .appmenu__toggle-btn[data-state='off'] {
-  box-shadow: inset 0 0 0 1px rgba(255, 90, 79, 0.22);
-  color: rgba(255, 90, 79, 0.5);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--label) 22%, transparent);
+  color: color-mix(in srgb, var(--label) 50%, transparent);
 }
 
 .appmenu__toggle-btn[data-state='on'] {
-  box-shadow: inset 0 0 0 1px rgba(94, 246, 255, 0.18);
-  color: rgba(94, 246, 255, 0.5);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-on) 18%, transparent);
+  color: color-mix(in srgb, var(--accent-on) 50%, transparent);
 }
 
 .appmenu__toggle-btn:hover:not(.is-active) {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.7);
+  background: color-mix(in srgb, var(--title) 8%, transparent);
+  color: color-mix(in srgb, var(--title) 70%, transparent);
 }
 
 .appmenu__toggle-btn.is-active[data-state='off'] {
-  background: var(--menu-coral);
+  background: var(--label);
   box-shadow: none;
-  color: #071215;
-  filter: drop-shadow(0 0 5px rgba(255, 90, 79, 0.4));
+  color: var(--bg);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--label) 40%, transparent));
 }
 
 .appmenu__toggle-btn.is-active[data-state='on'] {
-  background: var(--menu-cyan);
+  background: var(--accent-on);
   box-shadow: none;
-  color: #071215;
-  filter: drop-shadow(0 0 5px rgba(94, 246, 255, 0.4));
+  color: var(--bg);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent-on) 40%, transparent));
 }
 
 .appmenu__select {
@@ -877,8 +892,8 @@ button.appmenu__row {
   align-items: center;
   gap: 2px;
   padding: 1px;
-  background: rgba(94, 246, 255, 0.05);
-  box-shadow: inset 0 0 0 1px rgba(94, 246, 255, 0.18);
+  background: color-mix(in srgb, var(--accent-on) 5%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-on) 18%, transparent);
   clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
 }
 
@@ -887,7 +902,7 @@ button.appmenu__row {
   border: 0;
   padding: 2px 7px 1px;
   background: transparent;
-  color: var(--menu-cyan);
+  color: var(--accent-on);
   font-family: var(--font-mono);
   font-size: 9px;
   line-height: 1.4;
@@ -897,7 +912,7 @@ button.appmenu__row {
 
 .appmenu__arrow:hover {
   opacity: 1;
-  text-shadow: 0 0 8px var(--menu-cyan);
+  text-shadow: 0 0 8px var(--accent-on);
 }
 
 .appmenu__select-value {
@@ -906,7 +921,7 @@ button.appmenu__row {
   max-width: 170px;
   overflow: hidden;
   padding: 2px 4px 6px;
-  color: #fff;
+  color: var(--title);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -922,7 +937,7 @@ button.appmenu__row {
   width: 38px;
   height: 1px;
   margin-left: -19px;
-  background: var(--menu-coral);
+  background: var(--accent-alt);
   content: '';
 }
 
@@ -931,8 +946,8 @@ button.appmenu__row {
   align-items: center;
   gap: 16px;
   padding: 7px 14px 8px;
-  border-top: 1px solid rgba(94, 246, 255, 0.14);
-  color: rgba(255, 255, 255, 0.62);
+  border-top: 1px solid color-mix(in srgb, var(--line) 20%, transparent);
+  color: color-mix(in srgb, var(--title) 62%, transparent);
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.08em;
@@ -946,13 +961,13 @@ button.appmenu__row {
 
 .appmenu__keys-meta {
   margin-left: auto;
-  color: rgba(255, 90, 79, 0.4);
+  color: color-mix(in srgb, var(--label) 40%, transparent);
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
 .appmenu button:focus-visible {
-  outline: 1px solid var(--menu-cyan);
+  outline: 1px solid var(--accent-on);
   outline-offset: -2px;
 }
 

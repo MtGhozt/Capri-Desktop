@@ -35,6 +35,9 @@ const DEFAULTS = {
     glitch: true,
     intro: true,           // boot grab-the-screen intro; false skips to materialize
   },
+  ui: {
+    theme: 'cyberpunk',    // overlay menu palette: 'cyberpunk' | 'capri'
+  },
   position: {
     locked: false,         // menu: NORMAL / FIJO; when locked she stays at x,y
     x: null,
@@ -99,6 +102,7 @@ function load() {
         widget: { ...DEFAULTS.idle.widget, ...((saved.idle && saved.idle.widget) || {}) },
       },
       fx: { ...DEFAULTS.fx, ...(saved.fx || {}) },
+      ui: { ...DEFAULTS.ui, ...(saved.ui || {}) },
       voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
       position: { ...DEFAULTS.position, ...(saved.position || {}) },
       shortcuts: { ...DEFAULTS.shortcuts, ...(saved.shortcuts || {}) },
@@ -133,6 +137,7 @@ function save(patch) {
       },
     },
     fx: { ...DEFAULTS.fx, ...(current.fx || {}), ...(patch.fx || {}) },
+    ui: { ...DEFAULTS.ui, ...(current.ui || {}), ...(patch.ui || {}) },
     voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
     position: { ...DEFAULTS.position, ...(current.position || {}), ...(patch.position || {}) },
     shortcuts: { ...DEFAULTS.shortcuts, ...(current.shortcuts || {}), ...(patch.shortcuts || {}) },

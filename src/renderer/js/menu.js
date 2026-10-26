@@ -9,6 +9,11 @@ const REPLY_OPTIONS = [
   { id: 'silent', label: 'SILENCIO' },
 ];
 
+const THEME_OPTIONS = [
+  { id: 'cyberpunk', label: 'CYBERPUNK' },
+  { id: 'capri', label: 'CAPRI' },
+];
+
 export class AppMenu {
   constructor({ el, host, folded }) {
     this.el = el;
@@ -89,6 +94,10 @@ export class AppMenu {
     return this.el.getBoundingClientRect();
   }
 
+  setTheme(theme) {
+    this.el.dataset.theme = theme === 'capri' ? 'capri' : 'cyberpunk';
+  }
+
   place() {
     const pad = 8;
     const mw = this.el.offsetWidth;
@@ -131,6 +140,7 @@ export class AppMenu {
 
   render(state) {
     const { cfg } = state;
+    this.setTheme(cfg.theme);
     const build = (tag, className, text) => {
       const node = document.createElement(tag);
       if (className) node.className = className;
@@ -262,6 +272,11 @@ export class AppMenu {
     // COMPORTAMIENTO
     section('COMPORTAMIENTO');
     toggle('Arrastrar', { on: cfg.locked, labels: ['NORMAL', 'FIJO'], onChange: (on) => this.act('drag-lock', on) });
+    selector('Tema', {
+      options: THEME_OPTIONS,
+      current: cfg.theme,
+      onChange: (id) => this.act('theme', id),
+    });
     action('Atajos', { chevron: 'shortcuts', onClick: () => this.toggle('shortcuts', state) });
     if (this.expanded === 'shortcuts') {
       for (const s of state.shortcuts || []) {
@@ -297,7 +312,7 @@ export class AppMenu {
       return;
     }
     this.confirmForget = false;
-    const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock';
+    const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock' || id === 'theme';
     await this.host.menuAction({ id, value });
     if (!keep) {
       this.hide();

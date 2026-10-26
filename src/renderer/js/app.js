@@ -64,6 +64,7 @@ async function boot() {
     host,
     folded: () => machine.get() === 'DORMANT',
   });
+  appMenu.setTheme(config.ui?.theme);
   const dormant = new DormantWidget({ el: document.getElementById('dormant'), host });
   const vhs = document.getElementById('vhs');
   dormant.loadPos(config.idle?.widget, innerWidth, innerHeight);
@@ -561,6 +562,7 @@ async function boot() {
     voice.configure(cfg);
     applyVoiceHold(cfg);
     applyPosition(cfg);
+    appMenu.setTheme(cfg.ui?.theme);
     capri.wander = cfg.wander;
     capri.possessWindows = cfg.possess;
     idleMs = Number(cfg.idle?.dormantAfterMs);
