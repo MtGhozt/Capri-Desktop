@@ -1,6 +1,7 @@
 """Swappable TTS engines. speak(text) -> (float32 PCM, sample_rate)."""
 from __future__ import annotations
 
+import time
 import urllib.request
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -63,6 +64,13 @@ class KokoroTTS(TTSEngine):
         _download(KOKORO_VOICES_URL, voices, self.log)
         self._kokoro = Kokoro(str(onnx), str(voices))
         self.log(f"kokoro ready voice={KOKORO_VOICE} lang={KOKORO_LANG}")
+        self.warmup()
+
+    def warmup(self) -> None:
+        t0 = time.perf_counter()
+        pcm, sr = self.speak("Hola.")
+        ms = (time.perf_counter() - t0) * 1000
+        self.log(f"kokoro warmup {ms:.0f}ms samples={pcm.size} sr={sr}")
 
     def speak(self, text: str) -> tuple[np.ndarray, int]:
         cleaned = clean_for_tts(text)
