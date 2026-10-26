@@ -4,11 +4,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
 import urllib.request
 from pathlib import Path
+from queue import Empty, Full, Queue
 
 import numpy as np
 import sounddevice as sd
@@ -18,7 +20,10 @@ ROOT = Path(__file__).resolve().parent
 MODELS = ROOT / "models"
 SAMPLE_RATE = 16000
 VAD_FRAME = 512
+MIC_BLOCK = 4096
+MIC_QUEUE = 48
 WAKE_FRAME = 1280
+MEDIUM_VRAM_MIB = 2800
 MAX_SECONDS = 15
 SILENCE_MS = 700
 MIN_SPEECH_MS = 250
@@ -26,7 +31,6 @@ WAKE_THRESHOLD = 0.2
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
 STT_PROMPT = "Capri, choom, Matias"
-STT_LANGS = ("es", "en")
 SILERO_URL = (
     "https://github.com/snakers4/silero-vad/raw/v5.1.2/"
     "src/silero_vad/data/silero_vad.onnx"
@@ -70,6 +74,19 @@ def load_openwakeword():
         return Model, download_models
     finally:
         sys.path[:] = saved
+
+
+def free_vram_mib() -> int:
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+            text=True,
+            timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        return int(out.strip().splitlines()[0].split()[0])
+    except Exception:
+        return 0
 
 
 def as_pcm16(frame: np.ndarray) -> np.ndarray:
@@ -168,8 +185,8 @@ class Engine:
             "wakeWord": True,
             "wakeThreshold": WAKE_THRESHOLD,
             "wakeModel": "hey_jarvis",
-            "sttModel": "small",
-            "language": "auto",
+            "sttModel": "auto",
+            "language": "es",
             "inputDevice": None,
             "debugSave": False,
         }
@@ -190,6 +207,10 @@ class Engine:
         self._level_t = 0.0
         self._wake_log_t = 0.0
         self._wake_logged_shape = False
+        self._stt_beam = 5
+        self._audio_q = Queue(maxsize=MIC_QUEUE)
+        self._audio_thread = None
+        self._audio_run = False
 
     def apply_cfg(self, patch: dict) -> None:
         before = (self.cfg.get("enabled"), self.cfg.get("inputDevice"))
@@ -238,17 +259,7 @@ class Engine:
                 log(f"silero vad fallback to energy: {err}")
                 self._vad = EnergyVAD()
         if self._whisper is None:
-            from faster_whisper import WhisperModel
-            name = self.cfg.get("sttModel") or "small"
-            if name not in ("base", "small", "medium"):
-                name = "small"
-            log(f"loading whisper {name} (cpu int8)")
-            self._whisper = WhisperModel(
-                name,
-                device="cpu",
-                compute_type="int8",
-                download_root=str(MODELS / "whisper"),
-            )
+            self._whisper = self._load_whisper()
         if self._wake is None and self.cfg.get("wakeWord"):
             try:
                 Model, download_models = load_openwakeword()
@@ -262,6 +273,28 @@ class Engine:
             except Exception as err:
                 log(f"wake word unavailable: {err}")
                 self._wake = False
+
+    def _load_whisper(self):
+        from faster_whisper import WhisperModel
+        root = str(MODELS / "whisper")
+        wanted = str(self.cfg.get("sttModel") or "auto").lower()
+        self._stt_beam = 5
+        free = free_vram_mib()
+        log(f"vram free ~{free} MiB")
+        try_medium = wanted in ("auto", "medium") and free >= MEDIUM_VRAM_MIB
+        if try_medium:
+            try:
+                log("loading whisper medium (cuda float16)")
+                model = WhisperModel("medium", device="cuda", compute_type="float16", download_root=root)
+                log("whisper medium cuda ready")
+                return model
+            except Exception as err:
+                log(f"whisper medium cuda failed: {err}")
+        name = "small" if wanted in ("auto", "medium") else wanted
+        if name not in ("base", "small", "medium"):
+            name = "small"
+        log(f"loading whisper {name} (cpu int8) beam={self._stt_beam}")
+        return WhisperModel(name, device="cpu", compute_type="int8", download_root=root)
 
     def wake_threshold(self) -> float:
         try:
@@ -285,25 +318,40 @@ class Engine:
             except (TypeError, ValueError):
                 device = None
         try:
+            self._audio_q = Queue(maxsize=MIC_QUEUE)
+            self._audio_run = True
+            self._audio_thread = threading.Thread(target=self._audio_loop, name="capri-mic", daemon=True)
+            self._audio_thread.start()
             self.stream = sd.InputStream(
                 samplerate=SAMPLE_RATE,
                 channels=1,
                 dtype="float32",
-                blocksize=VAD_FRAME,
+                blocksize=MIC_BLOCK,
+                latency="high",
                 device=device,
                 callback=self._on_audio,
             )
             self.stream.start()
             log(
                 f"mic stream device={device if device is not None else 'default'} "
-                f"sr={self.stream.samplerate} ch={self.stream.channels} dtype=float32"
+                f"sr={self.stream.samplerate} ch={self.stream.channels} "
+                f"block={MIC_BLOCK} queue={MIC_QUEUE}"
             )
         except Exception as err:
             log(f"mic failed: {err}")
             self.broadcast({"type": "error", "message": str(err)})
             self.stream = None
+            self.stop_stream()
 
     def stop_stream(self) -> None:
+        self._audio_run = False
+        try:
+            self._audio_q.put_nowait(None)
+        except Exception:
+            pass
+        if self._audio_thread and self._audio_thread.is_alive() and threading.current_thread() is not self._audio_thread:
+            self._audio_thread.join(timeout=1.5)
+        self._audio_thread = None
         if self.stream is not None:
             try:
                 self.stream.stop()
@@ -336,19 +384,38 @@ class Engine:
         self.begin_capture(hold=ptt_held())
 
     def _on_audio(self, indata, frames, tinfo, status) -> None:
-        if status:
+        if status and "overflow" not in str(status).lower():
             log(str(status))
-        chunk = np.asarray(indata[:, 0], dtype=np.float32)
-        now = time.monotonic()
-        rms = float(np.sqrt(np.mean(np.square(chunk), dtype=np.float32)))
-        if now - self._level_t > 0.1 and self.capturing:
-            self._level_t = now
-            self.broadcast({"type": "level", "rms": min(1.0, rms * 8)})
-        if self.capturing:
-            self._capture_chunk(chunk, now)
-            return
-        if self.wake_live():
-            self._wake_chunk(chunk)
+        chunk = np.asarray(indata[:, 0], dtype=np.float32).copy()
+        try:
+            self._audio_q.put_nowait(chunk)
+        except Full:
+            try:
+                self._audio_q.get_nowait()
+            except Empty:
+                pass
+            try:
+                self._audio_q.put_nowait(chunk)
+            except Full:
+                pass
+
+    def _audio_loop(self) -> None:
+        while self._audio_run:
+            try:
+                chunk = self._audio_q.get(timeout=0.25)
+            except Empty:
+                continue
+            if chunk is None:
+                break
+            now = time.monotonic()
+            rms = float(np.sqrt(np.mean(np.square(chunk), dtype=np.float32)))
+            if now - self._level_t > 0.1 and self.capturing:
+                self._level_t = now
+                self.broadcast({"type": "level", "rms": min(1.0, rms * 8)})
+            if self.capturing:
+                self._capture_chunk(chunk, now)
+            elif self.wake_live():
+                self._wake_chunk(chunk)
 
     def wake_live(self) -> bool:
         return bool(self.cfg.get("wakeWord")) and self._wake not in (None, False)
@@ -438,31 +505,15 @@ class Engine:
         if text:
             self.broadcast({"type": "transcript", "text": text})
 
-    def pick_language(self, audio: np.ndarray) -> str:
-        forced = self.cfg.get("language") or "auto"
-        if forced in STT_LANGS:
-            return forced
-        try:
-            detected, prob, _rest = self._whisper.detect_language(audio)
-        except Exception as err:
-            log(f"stt language detect failed: {err}")
-            return "es"
-        if detected in STT_LANGS:
-            log(f"stt language {detected} p={float(prob):.2f}")
-            return detected
-        log(f"stt language {detected} not es/en, using es")
-        return "es"
-
     def transcribe(self, audio: np.ndarray) -> str:
         self.ensure_models()
-        language = self.pick_language(audio)
         segments, _info = self._whisper.transcribe(
             audio,
-            language=language,
+            language="es",
             task="transcribe",
             initial_prompt=STT_PROMPT,
             vad_filter=False,
-            beam_size=1,
+            beam_size=self._stt_beam,
         )
         return " ".join(seg.text.strip() for seg in segments if seg.text).strip()
 

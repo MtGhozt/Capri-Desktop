@@ -27,8 +27,8 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
   "wakeWord": true,
   "wakeThreshold": 0.2,
   "wakeModel": "hey_jarvis",
-  "sttModel": "small",
-  "language": "auto",
+  "sttModel": "auto",
+  "language": "es",
   "inputDevice": null
 }
 ```
@@ -36,9 +36,7 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
 - **dev** (`pnpm start` / `pnpm dev`): si `dir` es `null`, Electron usa `<repo>/voice`.
 - **exe instalado**: poné una ruta absoluta al sidecar, por ejemplo `"dir": "C:\\Programacion\\Capri\\Capri-Desktop\\voice"`. Si falta `dir` o el `.venv`, Capri avisa en el panel (badge `VOICE`) y sigue con chat de texto. Logs: `%APPDATA%\capri-desktop\logs\voice.log`.
 
-`sttModel`: `base`, `small` (default) o `medium`. Whisper corre en **CPU int8**; la GPU queda para el LLM (y el TTS de 3B).
-
-Idioma: no hay autodetección libre. Whisper elige solo **es** o **en** (`task=transcribe`, nunca translate). Si detecta otro idioma, usa **es**. Prompt fijo `Capri, choom, Matias` para los nombres. Wake word: `voice.wakeThreshold` (default **0.2**). En `pnpm dev` el sidecar loguea `wake score=...`.
+`sttModel`: `auto` (default) intenta **medium en CUDA float16** si hay ≥ ~2.8 GB de VRAM libre; si no, **small en CPU int8**. Siempre `language=es`, `task=transcribe`, `beam_size=5`. Prompt fijo `Capri, choom, Matias`. Wake word: `voice.wakeThreshold` (default **0.2**). En `pnpm dev` el sidecar loguea `wake score=...`.
 
 ## Uso
 
