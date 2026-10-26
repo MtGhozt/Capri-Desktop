@@ -40,6 +40,7 @@ let llm = null;
 let lms = null;
 let voice = null;
 let speakQueue = null;
+let ttsLoading = false;
 let voiceQueue = [];
 let chatOpen = false;
 let pendingSleep = false;
@@ -268,6 +269,7 @@ function ttsOn() {
   if (cfg.muted) return false;
   const mode = String(cfg.voice?.replyMode || 'voice').toLowerCase();
   if (mode !== 'voice') return false;
+  if (ttsLoading) return false; // OmniVoice is booting: the bubble answers with blips
   const kind = String(cfg.voice?.tts || 'auto').toLowerCase();
   return kind !== 'off' && kind !== 'none' && kind !== 'false';
 }
@@ -669,6 +671,7 @@ function main() {
       root: ROOT,
       loadConfig: () => config.load(),
       onEvent: (payload) => {
+        if (payload?.type === 'tts_state') ttsLoading = payload.state === 'loading';
         if (payload?.type === 'listening') openChat();
         if (payload?.type === 'devices') rebuildTray();
         if (pendingSleep && payload?.type === 'talking_done') requestSleep();

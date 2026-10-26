@@ -8,7 +8,12 @@ _ready = False
 
 
 def preload_torch(log=None) -> None:
-    """Import heavy ML packages once on the caller thread before worker threads start."""
+    """Import torch and transformers once on the caller thread before worker threads start.
+
+    OmniVoice is imported lazily by import_omnivoice() when the engine is actually
+    loaded: importing it at boot used to fail when a pip install was rewriting the
+    venv, and it is wasted work when Capri runs in blips/silent mode.
+    """
     global _ready
     with IMPORT_LOCK:
         if _ready:
@@ -25,14 +30,6 @@ def preload_torch(log=None) -> None:
         except Exception as err:
             if log:
                 log(f"transformers skip: {err}")
-        try:
-            import omnivoice  # noqa: F401
-
-            if log:
-                log("omnivoice imported")
-        except Exception as err:
-            if log:
-                log(f"omnivoice import skip: {err}")
         _ready = True
 
 
@@ -50,9 +47,11 @@ def import_whisper_model():
         return WhisperModel
 
 
-def import_omnivoice():
+def import_omnivoice(log=None):
     with IMPORT_LOCK:
         import torch
         from omnivoice import OmniVoice, VoiceClonePrompt
 
+        if log:
+            log("omnivoice imported")
         return torch, OmniVoice, VoiceClonePrompt

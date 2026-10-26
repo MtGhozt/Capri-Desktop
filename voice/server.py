@@ -800,21 +800,30 @@ class Engine:
                 log(f"talking_done queue-empty id={rid}")
                 self.broadcast({"type": "talking_done", "interrupted": False})
 
+    def _announce_tts(self, engine: str, state: str) -> None:
+        log(f"tts state engine={engine} state={state}")
+        self.broadcast({"type": "tts_state", "engine": engine, "state": state})
+
     def _bind_session_tts(self) -> None:
         with self._tts_lock:
             if self._omni is not None:
                 self._session_tts = self._omni
                 reason = "omnivoice"
             elif self._omni_loading:
-                self._session_tts = self._tts
+                # Kokoro is reserved for real failures: while OmniVoice loads Capri
+                # answers with blips instead of a voice she is about to replace.
+                self._session_tts = None
                 reason = "omnivoice_loading"
             else:
                 self._session_tts = self._tts
                 reason = "kokoro" if self._tts and not isinstance(self._tts, NullTTS) else "off"
         free, usable, _loaded = self._vram_budget()
-        engine = "omnivoice" if self._session_tts is self._omni and self._omni is not None else (
-            "kokoro" if reason in ("kokoro", "omnivoice_loading") else "off"
-        )
+        if self._omni is not None or reason == "omnivoice_loading":
+            engine = "omnivoice"
+        elif reason == "kokoro":
+            engine = "kokoro"
+        else:
+            engine = "off"
         log(f"tts engine={engine} reason={reason} vram_free={free} vram_usable={usable}")
 
     def _warn_low_vram(self) -> None:
@@ -839,28 +848,45 @@ class Engine:
                 pass
 
     def start_tts(self) -> None:
-        if self.reply_mode() != "voice":
+        mode = self.reply_mode()
+        if mode != "voice":
             self._want_tts = False
             self._drop_tts()
-            log(f"tts engine=off reason=replyMode={self.reply_mode()} vram_free={free_vram_mib()} vram_usable=n/a")
+            log(f"tts engine=off reason=replyMode={mode} vram_free={free_vram_mib()} vram_usable=n/a")
+            self._announce_tts("off", "off")
             return
         kind = str(self.cfg.get("tts") or "auto").strip().lower()
         if kind in ("off", "none", "false"):
             self._want_tts = False
             self._drop_tts()
             log(f"tts engine=off reason=tts=off vram_free={free_vram_mib()} vram_usable=n/a")
+            self._announce_tts("off", "off")
             return
         self._want_tts = True
+        if kind == "kokoro":
+            with self._tts_lock:
+                if self._tts is None:
+                    self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+            log(f"tts engine=kokoro reason=tts=kokoro vram_free={free_vram_mib()} vram_usable=n/a")
+            if isinstance(self._tts, NullTTS):
+                self._announce_tts("off", "off")
+            else:
+                self._announce_tts("kokoro", "ready")
+            return
         with self._tts_lock:
-            if self._tts is None:
-                speed = self.cfg.get("ttsSpeed")
-                self._tts = load_kokoro(MODELS, log, speed)
-                reason = "omnivoice_loading" if kind in ("auto", "omnivoice") else "tts=kokoro"
-                log(f"tts engine=kokoro reason={reason} vram_free={free_vram_mib()} vram_usable=n/a")
-            want_omni = kind in ("auto", "omnivoice")
-            if want_omni and self._omni is None and not self._omni_loading:
-                self._omni_loading = True
-                threading.Thread(target=self._load_omni_bg, name="capri-omni", daemon=True).start()
+            omni_ready = self._omni is not None
+            loading = self._omni_loading
+        if omni_ready:
+            self._announce_tts("omnivoice", "ready")
+            return
+        if loading:
+            self._announce_tts("omnivoice", "loading")
+            return
+        with self._tts_lock:
+            self._omni_loading = True
+        log(f"tts engine=omnivoice reason=loading vram_free={free_vram_mib()} vram_usable=n/a")
+        self._announce_tts("omnivoice", "loading")
+        threading.Thread(target=self._load_omni_bg, name="capri-omni", daemon=True).start()
 
     def _load_omni_bg(self) -> None:
         free, usable, _loaded = self._vram_budget()
@@ -878,23 +904,38 @@ class Engine:
         except Exception as err:
             omni.close()
             log(f"omnivoice unavailable: {err}")
-            log(f"tts engine=kokoro reason=omnivoice-failed:{err} vram_free={free} vram_usable={usable}")
             with self._tts_lock:
                 self._omni_loading = False
+            if not self._want_tts:
+                self._announce_tts("off", "off")
+                return
+            kokoro = self._tts
+            if kokoro is None:
+                kokoro = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+            with self._tts_lock:
+                self._tts = kokoro
+            log(f"tts engine=kokoro reason=omnivoice-failed:{err} vram_free={free} vram_usable={usable}")
+            self._announce_tts("kokoro", "fallback")
             return
         if not self._want_tts:
             omni.close()
             with self._tts_lock:
                 self._omni_loading = False
             log(f"tts engine=off reason=replyMode={self.reply_mode()} vram_free={free_vram_mib()} vram_usable=n/a")
+            self._announce_tts("off", "off")
             return
         with self._tts_lock:
             self._omni = omni
             self._omni_loading = False
+            self._session_tts = omni
         log(f"tts engine=omnivoice reason=ready vram_free={free_vram_mib()} vram_usable={usable}")
+        self._announce_tts("omnivoice", "ready")
         self._warn_low_vram()
 
     def _synth(self, text: str) -> tuple[np.ndarray, int]:
+        if self._omni_loading and self._omni is None:
+            # OmniVoice is on its way: stay silent here, the UI answers with blips.
+            return np.zeros(0, dtype=np.float32), 24000
         engine = self._session_tts or self._omni or self._tts
         if engine is None:
             self.start_tts()

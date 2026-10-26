@@ -178,7 +178,7 @@ class OmniVoiceTTS(TTSEngine):
         os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         os.environ.setdefault("HF_HOME", str(self.models_dir / "hf"))
         os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
-        torch, OmniVoice, VoiceClonePrompt = import_omnivoice()
+        torch, OmniVoice, VoiceClonePrompt = import_omnivoice(self.log)
 
         if not self.wav.is_file():
             raise FileNotFoundError(f"tts ref missing: {self.wav}")

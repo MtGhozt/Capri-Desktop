@@ -491,6 +491,10 @@ async function boot() {
       }
       return;
     }
+    if (type === 'tts_state') {
+      bubble.setVoiceLoading(evt.state === 'loading');
+      return;
+    }
     if (type === 'notice') {
       bubble.holdVoice = false;
       bumpIdle();

@@ -502,6 +502,14 @@ body {
   border-top: 1px solid color-mix(in oklch, var(--cyan) 35%, black);
 }
 
+.bubble__voice {
+  margin-left: 8px;
+  color: color-mix(in oklch, var(--cyan) 55%, black);
+  letter-spacing: 0.08em;
+  text-transform: none;
+  animation: blink 1100ms steps(2, jump-none) infinite;
+}
+
 .bubble__meter {
   flex: none;
   width: 52px;
@@ -838,6 +846,7 @@ body {
   .bubble[data-state='TALKING'] .bubble__state,
   .bubble[data-state='BOOTING'] .bubble__state,
   .bubble[data-state='LISTENING'] .bubble__state,
+  .bubble__voice,
   .dormant__label::after,
   .vhs {
     animation: none;

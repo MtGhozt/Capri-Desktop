@@ -19,6 +19,7 @@ export class Bubble {
     this.logEl = el.querySelector('.bubble__log');
     this.field = el.querySelector('.bubble__field');
     this.stateEl = el.querySelector('.bubble__state');
+    this.voiceEl = el.querySelector('.bubble__voice');
     this.meterEl = el.querySelector('.bubble__meter');
     this.meterBar = this.meterEl?.querySelector('i');
     this.anchor = { x: 0, y: 0 };
@@ -34,6 +35,7 @@ export class Bubble {
     this.boot = 'ready';
     this.holdVoice = false;
     this.replyMode = 'voice';
+    this.voiceLoading = false;
     this.onBlip = null;
     this.voicePlaying = false;
     this.voiceTimer = 0;
@@ -187,6 +189,12 @@ export class Bubble {
     if (!on && this.meterBar) this.meterBar.style.width = '0%';
   }
 
+  // OmniVoice is booting: show the tiny notice and answer with blips (never Kokoro).
+  setVoiceLoading(on) {
+    this.voiceLoading = Boolean(on);
+    if (this.voiceEl) this.voiceEl.hidden = !this.voiceLoading;
+  }
+
   setLevel(rms) {
     if (!this.meterBar) return;
     this.setMeter(true);
@@ -262,7 +270,7 @@ export class Bubble {
       return;
     }
     const chars = [...text];
-    const blips = this.replyMode === 'blips';
+    const blips = this.replyMode === 'blips' || this.voiceLoading;
     let done = 0;
     this.onTalk?.(true);
     if (blips) this.setState('TALKING');
