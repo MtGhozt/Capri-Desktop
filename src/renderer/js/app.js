@@ -463,6 +463,8 @@ async function boot() {
     }
     if (type === 'talking') {
       bumpIdle();
+      clearTimeout(bubble.voiceTimer);
+      bubble.voiceTimer = 0;
       bubble.stopThink();
       bubble.voicePlaying = true;
       machine.set('TALKING');
@@ -470,10 +472,11 @@ async function boot() {
       return;
     }
     if (type === 'talking_done') {
+      clearTimeout(bubble.voiceTimer);
+      bubble.voiceTimer = 0;
       bubble.voicePlaying = false;
       bubble.onTalk?.(false);
       bumpIdle();
-      if (evt?.skipped) bubble.holdVoice = false;
       if (evt?.interrupted) {
         bubble.abortForListen();
         if (machine.get() === 'TALKING' || machine.get() === 'THINKING') machine.set('ONLINE');

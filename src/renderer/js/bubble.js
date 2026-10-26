@@ -34,6 +34,7 @@ export class Bubble {
     this.boot = 'ready';
     this.holdVoice = false;
     this.voicePlaying = false;
+    this.voiceTimer = 0;
     machine.onChange(() => this.paint());
 
     this.field.addEventListener('keydown', (e) => {
@@ -134,6 +135,8 @@ export class Bubble {
     if (!this.open) return;
     this.open = false;
     this.stopThink();
+    clearTimeout(this.voiceTimer);
+    this.voiceTimer = 0;
     clearInterval(this.decodeTimer);
     if (this.busy) {
       window.host.cancelChat();
@@ -191,10 +194,7 @@ export class Bubble {
 
   onToken(piece) {
     if (!this.busy) return;
-    if (!this.holdVoice) {
-      this.stopThink();
-      this.setState('TALKING');
-    }
+    this.stopThink();
     this.replyText += piece;
     if (this.replyEl) this.replyEl.textContent = this.replyText;
     this.scrollLog();
@@ -205,6 +205,7 @@ export class Bubble {
     this.stopThink();
     this.replyText = text || this.replyText;
     this.busy = false;
+    this.armVoiceWatch();
     this.decode(this.replyEl, this.replyText);
   }
 
@@ -238,21 +239,20 @@ export class Bubble {
 
   decode(el, text) {
     clearInterval(this.decodeTimer);
-    if (!el) {
-      if (!this.holdVoice && !this.voicePlaying) this.setState('ONLINE');
-      return;
-    }
-    if (reducedMotion.matches || !text) {
-      el.textContent = text;
-      if (!this.holdVoice && !this.voicePlaying) {
+    this.decodeTimer = null;
+    const finish = () => {
+      if (el) el.textContent = text;
+      if (!this.voicePlaying) {
         this.setState('ONLINE');
         this.onTalk?.(false);
       }
+    };
+    if (!el || reducedMotion.matches || !text) {
+      finish();
       return;
     }
     const chars = [...text];
     let done = 0;
-    if (!this.holdVoice) this.setState('TALKING');
     this.onTalk?.(true);
     const step = () => {
       done = Math.min(chars.length, done + 2);
@@ -266,15 +266,28 @@ export class Bubble {
       if (done >= chars.length) {
         clearInterval(this.decodeTimer);
         this.decodeTimer = null;
-        el.textContent = text;
-        if (!this.holdVoice && !this.voicePlaying) {
-          this.setState('ONLINE');
-          this.onTalk?.(false);
-        }
+        finish();
       }
     };
     step();
     this.decodeTimer = setInterval(step, DECODE_STEP_MS);
+  }
+
+  armVoiceWatch() {
+    clearTimeout(this.voiceTimer);
+    this.voiceTimer = setTimeout(() => {
+      this.voiceTimer = 0;
+      if (this.voicePlaying) return;
+      if (this.decodeTimer) {
+        clearInterval(this.decodeTimer);
+        this.decodeTimer = null;
+        if (this.replyEl) this.replyEl.textContent = this.replyText;
+      }
+      if (this.machine.get() === 'THINKING' || this.machine.get() === 'TALKING') {
+        this.setState('ONLINE');
+        this.onTalk?.(false);
+      }
+    }, 1500);
   }
 
   startThink() {
@@ -303,6 +316,8 @@ export class Bubble {
   abortForListen() {
     const cutting = this.busy || this.voicePlaying || Boolean(this.decodeTimer);
     this.stopThink();
+    clearTimeout(this.voiceTimer);
+    this.voiceTimer = 0;
     clearInterval(this.decodeTimer);
     this.decodeTimer = null;
     this.voicePlaying = false;
