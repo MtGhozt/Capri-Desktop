@@ -2,6 +2,7 @@
 
 const BREAK = /(?<!\d)[.!?…]+(?:["»”')\]]+)?(?:\s+|$)|[\n\r]+/g;
 const LONG = 180;
+const SHORT = 20;
 
 function pullSentences(buf) {
   const sentences = [];
@@ -25,15 +26,40 @@ function pullSentences(buf) {
   return { sentences, rest };
 }
 
+function packPhrases(lines, flush = false) {
+  const out = [];
+  let hold = '';
+  for (const raw of lines) {
+    const line = String(raw || '').trim();
+    if (!line) continue;
+    if (line.length < SHORT) {
+      hold = hold ? `${hold} ${line}` : line;
+      continue;
+    }
+    out.push(hold ? `${hold} ${line}` : line);
+    hold = '';
+  }
+  if (flush && hold) out.push(hold);
+  else if (!flush) out.hold = hold;
+  return out;
+}
+
 function createSpeakQueue({ send }) {
   let buf = '';
   let live = 0;
   let nextId = 0;
+  let held = '';
 
   function emit(text) {
     const line = String(text || '').trim();
     if (!line || !live) return;
-    send({ type: 'speak', text: line, id: live });
+    if (line.length < SHORT) {
+      held = held ? `${held} ${line}` : line;
+      return;
+    }
+    const out = held ? `${held} ${line}` : line;
+    held = '';
+    send({ type: 'speak', text: out, id: live });
   }
 
   function feed(piece) {
@@ -48,6 +74,7 @@ function createSpeakQueue({ send }) {
     nextId += 1;
     live = nextId;
     buf = '';
+    held = '';
     send({ type: 'speak_start', id: live });
     return live;
   }
@@ -57,8 +84,10 @@ function createSpeakQueue({ send }) {
     if (live && (!target || live === target)) {
       const rest = buf.trim();
       buf = '';
+      const out = [held, rest].filter(Boolean).join(' ');
+      held = '';
+      if (out) send({ type: 'speak', text: out, id: target });
       live = 0;
-      if (rest) send({ type: 'speak', text: rest, id: target });
     }
     send({ type: 'speak_flush', id: target || 0 });
   }
@@ -68,6 +97,7 @@ function createSpeakQueue({ send }) {
     if (live && (!target || live === target)) {
       live = 0;
       buf = '';
+      held = '';
     }
     send({ type: 'stop_speak', id: target || 0 });
   }
@@ -75,4 +105,4 @@ function createSpeakQueue({ send }) {
   return { start, feed, flush, stop };
 }
 
-module.exports = { createSpeakQueue, pullSentences };
+module.exports = { createSpeakQueue, pullSentences, packPhrases, SHORT };

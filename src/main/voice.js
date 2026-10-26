@@ -179,6 +179,7 @@ function createVoice({ root, loadConfig, onEvent }) {
           CAPRI_DEV: process.argv.includes('--dev') ? '1' : '',
           CAPRI_VOICE_LOG: logFile,
           PYTORCH_CUDA_ALLOC_CONF: process.env.PYTORCH_CUDA_ALLOC_CONF || 'expandable_segments:True',
+          HF_HUB_DISABLE_SYMLINKS_WARNING: '1',
         },
       });
     } catch (err) {

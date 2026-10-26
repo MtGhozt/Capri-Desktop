@@ -16,8 +16,15 @@ import numpy as np
 import sounddevice as sd
 import websockets
 
-from tts import load_engine
-from vram import GEMMA_RESERVE_MIB, llm_has_model, usable_vram_mib
+from tts import (
+    NullTTS,
+    OmniVoiceTTS,
+    load_kokoro,
+    normalize_pcm,
+    resolve_ref,
+    tts_steps,
+)
+from vram import GEMMA_RESERVE_MIB, VRAM_WARN_MIB, llm_has_model, usable_vram_mib
 
 ROOT = Path(__file__).resolve().parent
 MODELS = ROOT / "models"
@@ -28,6 +35,8 @@ MIC_QUEUE = 48
 WAKE_FRAME = 1280
 MEDIUM_VRAM_MIB = 2800
 LISTEN_TIMEOUT_S = 10.0
+PREFETCH = 2
+SHORT_PHRASE = 20
 MAX_SECONDS = 15
 SILENCE_MS = 700
 MIN_SPEECH_MS = 250
@@ -47,6 +56,7 @@ VK_MENU = 0x12
 VK_V = 0x56
 
 
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 DEV = os.environ.get("CAPRI_DEV") == "1"
 LOG_FILE = os.environ.get("CAPRI_VOICE_LOG") or ""
 
@@ -198,6 +208,8 @@ class Engine:
             "tts": "auto",
             "ttsRef": None,
             "ttsSpeed": 1.0,
+            "ttsSteps": 16,
+            "replyMode": "voice",
             "llmBaseUrl": "http://localhost:1235/v1",
             "muted": False,
             "volume": 0.7,
@@ -216,6 +228,7 @@ class Engine:
         self._wake = None
         self._vad = None
         self._lock = threading.Lock()
+        self._stt_lock = threading.Lock()
         self._models_lock = threading.Lock()
         self._cfg_ready = False
         self._level_t = 0.0
@@ -226,8 +239,13 @@ class Engine:
         self._audio_thread = None
         self._audio_run = False
         self._tts = None
+        self._omni = None
+        self._omni_loading = False
+        self._want_tts = False
+        self._session_tts = None
         self._tts_lock = threading.Lock()
         self._speak_q: Queue = Queue()
+        self._prep_q: Queue = Queue()
         self._speak_stop = threading.Event()
         self._speaking = False
         self._synth_busy = False
@@ -235,9 +253,12 @@ class Engine:
         self._accept_speak = True
         self._speak_gen = 0
         self._live_id = 0
+        self._held_phrase = ""
         self._out = None
-        self._speak_thread = threading.Thread(target=self._speak_loop, name="capri-tts", daemon=True)
-        self._speak_thread.start()
+        self._synth_thread = threading.Thread(target=self._synth_loop, name="capri-tts-synth", daemon=True)
+        self._synth_thread.start()
+        self._play_thread = threading.Thread(target=self._play_loop, name="capri-tts-play", daemon=True)
+        self._play_thread.start()
         self._idle_thread = threading.Thread(target=self._idle_watch, name="capri-tts-idle", daemon=True)
         self._idle_thread.start()
 
@@ -252,6 +273,8 @@ class Engine:
             self.restart_stream()
         if bool(self.cfg.get("muted")) and not was_muted:
             self.stop_speak()
+        if self._omni is not None:
+            self._omni.steps = tts_steps(self.cfg.get("ttsSteps"))
         self._cfg_ready = True
 
     def list_devices(self) -> list[dict]:
@@ -292,8 +315,8 @@ class Engine:
     def _tts_wants_gpu(self) -> bool:
         return str(self.cfg.get("tts") or "auto").lower() in ("auto", "omnivoice")
 
-    def ensure_models(self) -> None:
-        with self._models_lock:
+    def ensure_stt(self) -> None:
+        with self._stt_lock:
             MODELS.mkdir(parents=True, exist_ok=True)
             if self._vad is None:
                 path = MODELS / "silero_vad.onnx"
@@ -317,12 +340,13 @@ class Engine:
                 except Exception as err:
                     log(f"wake word unavailable: {err}")
                     self._wake = False
-            if self._cfg_ready:
-                self.ensure_tts()
-            elif self._tts is None:
-                log("tts waits for config")
             if self._whisper is None:
                 self._whisper = self._load_whisper()
+
+    def ensure_models(self) -> None:
+        self.ensure_stt()
+        if self._cfg_ready:
+            self.start_tts()
 
     def _load_whisper(self):
         from faster_whisper import WhisperModel
@@ -381,7 +405,7 @@ class Engine:
             return
         if self._synth_busy or self._out is not None:
             return
-        if not self._speak_q.empty():
+        if not self._speak_q.empty() or not self._prep_q.empty():
             return
         if self._last_audio and time.monotonic() - self._last_audio < IDLE_TALK_S:
             return
@@ -523,16 +547,29 @@ class Engine:
             elif self.wake_live():
                 self._wake_chunk(chunk)
 
+    def reply_mode(self) -> str:
+        mode = str(self.cfg.get("replyMode") or "voice").strip().lower()
+        if mode in ("blips", "silent", "silence"):
+            return "silent" if mode == "silence" else mode
+        return "voice"
+
     def tts_enabled(self) -> bool:
+        if self.reply_mode() != "voice":
+            return False
         kind = str(self.cfg.get("tts") or "auto").lower()
         return kind not in ("off", "none", "false") and not bool(self.cfg.get("muted"))
 
-    def _drain_speak_q(self) -> None:
+    def _drain_q(self, q: Queue) -> None:
         while True:
             try:
-                self._speak_q.get_nowait()
+                q.get_nowait()
             except Empty:
                 break
+
+    def _drain_speak_q(self) -> None:
+        self._drain_q(self._speak_q)
+        self._drain_q(self._prep_q)
+        self._held_phrase = ""
 
     def _abort_out(self) -> None:
         out = self._out
@@ -563,6 +600,8 @@ class Engine:
         self._drain_speak_q()
         self._speak_stop.clear()
         self._accept_speak = True
+        self._session_tts = None
+        self._bind_session_tts()
 
     def arm_speak(self, reply_id=None) -> None:
         rid = self._as_id(reply_id)
@@ -588,6 +627,13 @@ class Engine:
         elif not self._accept_speak:
             log(f"speak drop cut id={rid} {line[:48]!r}")
             return
+        if len(line) < SHORT_PHRASE:
+            self._held_phrase = f"{self._held_phrase} {line}".strip() if self._held_phrase else line
+            log(f"speak hold short id={rid} n={len(self._held_phrase)}")
+            return
+        if self._held_phrase:
+            line = f"{self._held_phrase} {line}".strip()
+            self._held_phrase = ""
         log(f"speak queued id={rid} n={len(line)} {line[:48]!r}")
         self._speak_q.put(("speak", rid, line))
 
@@ -601,6 +647,11 @@ class Engine:
             log(f"speak_flush skipped id={rid} live={self._live_id}")
             self.broadcast({"type": "talking_done", "skipped": True})
             return
+        if self._held_phrase:
+            held = self._held_phrase
+            self._held_phrase = ""
+            log(f"speak queued id={rid} n={len(held)} {held[:48]!r}")
+            self._speak_q.put(("speak", rid, held))
         log(f"speak_flush id={rid}")
         self._speak_q.put(("flush", rid, None))
 
@@ -618,15 +669,47 @@ class Engine:
             self._drain_speak_q()
             self._speak_q.put(("stop", rid, None))
 
-    def _speak_loop(self) -> None:
-        session = False
-        session_id = 0
+    def _synth_loop(self) -> None:
         while True:
             try:
                 item = self._speak_q.get()
             except Exception:
                 continue
             kind, rid, text = item if isinstance(item, tuple) else ("speak", self._live_id, item)
+            if kind in ("stop", "flush"):
+                self._prep_q.put((kind, rid, None, 0, self._speak_gen))
+                continue
+            if rid != self._live_id or not self._accept_speak:
+                log(f"speak skip stale id={rid} live={self._live_id}")
+                continue
+            gen = self._speak_gen
+            while self._prep_q.qsize() >= PREFETCH and not self._speak_stop.is_set() and gen == self._speak_gen:
+                time.sleep(0.03)
+            if gen != self._speak_gen or rid != self._live_id or not self._accept_speak:
+                log("speak drop before synth")
+                continue
+            self._synth_busy = True
+            t0 = time.perf_counter()
+            pcm, sr = self._synth(str(text))
+            self._synth_busy = False
+            ms = (time.perf_counter() - t0) * 1000
+            log(f"synth id={rid} {ms:.0f}ms samples={pcm.size} sr={sr}")
+            if pcm.size == 0:
+                continue
+            if gen != self._speak_gen or rid != self._live_id or not self._accept_speak:
+                log("speak drop after synth")
+                continue
+            self._prep_q.put(("audio", rid, pcm, sr, gen))
+
+    def _play_loop(self) -> None:
+        session = False
+        session_id = 0
+        while True:
+            try:
+                item = self._prep_q.get()
+            except Exception:
+                continue
+            kind, rid, pcm, sr, gen = item if isinstance(item, tuple) and len(item) == 5 else ("audio", self._live_id, None, 0, 0)
             if kind == "stop":
                 was = session or self._speaking
                 session = False
@@ -650,20 +733,10 @@ class Engine:
                     log(f"talking_done skipped id={rid}")
                     self.broadcast({"type": "talking_done", "skipped": True})
                 continue
-            if rid != self._live_id or not self._accept_speak:
-                log(f"speak skip stale id={rid} live={self._live_id}")
+            if rid != self._live_id or not self._accept_speak or gen != self._speak_gen:
+                log("play skip stale")
                 continue
-            gen = self._speak_gen
-            self._synth_busy = True
-            t0 = time.perf_counter()
-            pcm, sr = self._synth(str(text))
-            self._synth_busy = False
-            ms = (time.perf_counter() - t0) * 1000
-            log(f"synth id={rid} {ms:.0f}ms samples={pcm.size} sr={sr}")
-            if pcm.size == 0:
-                continue
-            if gen != self._speak_gen or rid != self._live_id or not self._accept_speak:
-                log("speak drop after synth")
+            if pcm is None or getattr(pcm, "size", 0) == 0:
                 continue
             if not session or session_id != rid:
                 session = True
@@ -678,42 +751,126 @@ class Engine:
                 self._set_speaking(False)
                 continue
             self._note_audio()
-            if self._speak_q.empty():
+            if self._speak_q.empty() and self._prep_q.empty() and not self._synth_busy:
                 session = False
                 session_id = 0
                 self._set_speaking(False)
                 log(f"talking_done queue-empty id={rid}")
                 self.broadcast({"type": "talking_done", "interrupted": False})
 
-    def ensure_tts(self) -> None:
+    def _bind_session_tts(self) -> None:
+        with self._tts_lock:
+            if self._omni is not None:
+                self._session_tts = self._omni
+                reason = "omnivoice"
+            elif self._omni_loading:
+                self._session_tts = self._tts
+                reason = "omnivoice_loading"
+            else:
+                self._session_tts = self._tts
+                reason = "kokoro" if self._tts and not isinstance(self._tts, NullTTS) else "off"
+        free, usable, _loaded = self._vram_budget()
+        engine = "omnivoice" if self._session_tts is self._omni and self._omni is not None else (
+            "kokoro" if reason in ("kokoro", "omnivoice_loading") else "off"
+        )
+        log(f"tts engine={engine} reason={reason} vram_free={free} vram_usable={usable}")
+
+    def _warn_low_vram(self) -> None:
+        free = free_vram_mib()
+        log(f"vram_free after tts {free} MiB")
+        if free < VRAM_WARN_MIB:
+            msg = f"VRAM baja (~{free} MiB). Gemma y OmniVoice están al límite."
+            log(msg)
+            self.broadcast({"type": "notice", "message": msg})
+
+    def _drop_tts(self) -> None:
+        with self._tts_lock:
+            omni = self._omni
+            self._omni = None
+            self._omni_loading = False
+            self._tts = None
+            self._session_tts = None
+        if omni is not None:
+            try:
+                omni.close()
+            except Exception:
+                pass
+
+    def start_tts(self) -> None:
+        if self.reply_mode() != "voice":
+            self._want_tts = False
+            self._drop_tts()
+            log(f"tts engine=off reason=replyMode={self.reply_mode()} vram_free={free_vram_mib()} vram_usable=n/a")
+            return
+        kind = str(self.cfg.get("tts") or "auto").strip().lower()
+        if kind in ("off", "none", "false"):
+            self._want_tts = False
+            self._drop_tts()
+            log(f"tts engine=off reason=tts=off vram_free={free_vram_mib()} vram_usable=n/a")
+            return
+        self._want_tts = True
         with self._tts_lock:
             if self._tts is None:
-                free, usable, _loaded = self._vram_budget()
-                self._tts = load_engine(
-                    str(self.cfg.get("tts") or "auto"),
-                    MODELS,
-                    log,
-                    voice_dir=ROOT,
-                    tts_ref=self.cfg.get("ttsRef"),
-                    tts_speed=self.cfg.get("ttsSpeed"),
-                    free_vram=free,
-                    usable_vram=usable,
-                    notice=lambda m: self.broadcast({"type": "notice", "message": m}),
-                )
+                speed = self.cfg.get("ttsSpeed")
+                self._tts = load_kokoro(MODELS, log, speed)
+                reason = "omnivoice_loading" if kind in ("auto", "omnivoice") else "tts=kokoro"
+                log(f"tts engine=kokoro reason={reason} vram_free={free_vram_mib()} vram_usable=n/a")
+            want_omni = kind in ("auto", "omnivoice")
+            if want_omni and self._omni is None and not self._omni_loading:
+                self._omni_loading = True
+                threading.Thread(target=self._load_omni_bg, name="capri-omni", daemon=True).start()
+
+    def _load_omni_bg(self) -> None:
+        free, usable, _loaded = self._vram_budget()
+        wav, txt = resolve_ref(ROOT, self.cfg.get("ttsRef"))
+        omni = OmniVoiceTTS(
+            MODELS,
+            log,
+            wav,
+            txt,
+            self.cfg.get("ttsSpeed"),
+            tts_steps(self.cfg.get("ttsSteps")),
+        )
+        try:
+            omni.load(allow_cpu=str(self.cfg.get("tts") or "").lower() == "omnivoice", free_vram=usable)
+        except Exception as err:
+            omni.close()
+            log(f"omnivoice unavailable: {err}")
+            log(f"tts engine=kokoro reason=omnivoice-failed:{err} vram_free={free} vram_usable={usable}")
+            with self._tts_lock:
+                self._omni_loading = False
+            return
+        if not self._want_tts:
+            omni.close()
+            with self._tts_lock:
+                self._omni_loading = False
+            log(f"tts engine=off reason=replyMode={self.reply_mode()} vram_free={free_vram_mib()} vram_usable=n/a")
+            return
+        with self._tts_lock:
+            self._omni = omni
+            self._omni_loading = False
+        log(f"tts engine=omnivoice reason=ready vram_free={free_vram_mib()} vram_usable={usable}")
+        self._warn_low_vram()
 
     def _synth(self, text: str) -> tuple[np.ndarray, int]:
-        self.ensure_tts()
+        engine = self._session_tts or self._omni or self._tts
+        if engine is None:
+            self.start_tts()
+            engine = self._session_tts or self._omni or self._tts
+        if engine is None:
+            return np.zeros(0, dtype=np.float32), 24000
         try:
-            pcm, sr = self._tts.speak(text)
+            pcm, sr = engine.speak(text)
         except Exception as err:
             log(f"tts failed: {err}")
             return np.zeros(0, dtype=np.float32), 24000
+        pcm = normalize_pcm(pcm)
         try:
             gain = float(self.cfg.get("volume") if self.cfg.get("volume") is not None else 0.7)
         except (TypeError, ValueError):
             gain = 0.7
         gain = max(0.0, min(1.0, gain))
-        pcm = np.clip(np.asarray(pcm, dtype=np.float32) * gain, -1.0, 1.0)
+        pcm = np.clip(pcm * gain, -1.0, 1.0)
         return pcm, int(sr or 24000)
 
     def _play(self, pcm: np.ndarray, sr: int, gen: int) -> bool:
@@ -849,7 +1006,7 @@ class Engine:
             log("stt empty")
 
     def transcribe(self, audio: np.ndarray) -> str:
-        self.ensure_models()
+        self.ensure_stt()
         segments, _info = self._whisper.transcribe(
             audio,
             language="es",
@@ -905,8 +1062,11 @@ async def session(ws, engine: Engine) -> None:
             kind = msg.get("type")
             if kind == "config":
                 engine.apply_cfg(msg)
-                if engine.cfg.get("enabled") and engine._whisper is None:
-                    await asyncio.to_thread(engine.ensure_models)
+                if engine.cfg.get("enabled"):
+                    await asyncio.gather(
+                        asyncio.to_thread(engine.ensure_stt),
+                        asyncio.to_thread(engine.start_tts),
+                    )
             elif kind == "ptt_start":
                 await asyncio.to_thread(engine.request_ptt)
             elif kind == "ptt_stop":
@@ -936,7 +1096,7 @@ async def amain() -> None:
     loop = asyncio.get_running_loop()
     engine = Engine(loop, token)
     engine.restart_stream()
-    loop.run_in_executor(None, engine.ensure_models)
+    loop.run_in_executor(None, engine.ensure_stt)
 
     async def handler(ws, *_args):
         await session(ws, engine)

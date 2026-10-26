@@ -24,6 +24,7 @@ KOKORO_LANG = "es"
 OMNI_MODEL = "k2-fsa/OmniVoice"
 OMNI_MIN_GPU_MIB = 2000
 OMNI_CPU_MAX_MS = 3000
+DEFAULT_TTS_STEPS = 16
 DEFAULT_REF = Path("ref") / "capri_ref_short.wav"
 
 
@@ -69,6 +70,23 @@ def resolve_ref(voice_dir: Path, tts_ref) -> tuple[Path, Path]:
     if not wav.is_absolute():
         wav = root / wav
     return wav, wav.with_suffix(".txt")
+
+
+def tts_steps(value, default: int = DEFAULT_TTS_STEPS) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        n = default
+    return min(32, max(8, n))
+
+
+def normalize_pcm(pcm, peak_db: float = -1.0) -> np.ndarray:
+    samples = np.asarray(pcm, dtype=np.float32).reshape(-1)
+    peak = float(np.max(np.abs(samples))) if samples.size else 0.0
+    if peak < 1e-6:
+        return samples
+    target = float(10 ** (peak_db / 20.0))
+    return samples * (target / peak)
 
 
 def _speed(value) -> float:
@@ -138,12 +156,13 @@ class KokoroTTS(TTSEngine):
 
 
 class OmniVoiceTTS(TTSEngine):
-    def __init__(self, models_dir: Path, log, wav: Path, txt: Path, speed: float = 1.0):
+    def __init__(self, models_dir: Path, log, wav: Path, txt: Path, speed: float = 1.0, steps: int = DEFAULT_TTS_STEPS):
         self.models_dir = models_dir
         self.log = log
         self.wav = wav
         self.txt = txt
         self.speed = _speed(speed)
+        self.steps = tts_steps(steps)
         self.device = "cpu"
         self._model = None
         self._prompt = None
@@ -157,6 +176,7 @@ class OmniVoiceTTS(TTSEngine):
     def load(self, *, allow_cpu: bool, free_vram: int) -> None:
         os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         os.environ.setdefault("HF_HOME", str(self.models_dir / "hf"))
+        os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
         import torch
         from omnivoice import OmniVoice, VoiceClonePrompt
 
@@ -240,20 +260,32 @@ class OmniVoiceTTS(TTSEngine):
         if not cleaned or self._model is None or self._prompt is None:
             return np.zeros(0, dtype=np.float32), 24000
         t0 = time.perf_counter()
-        audio = self._model.generate(
-            text=cleaned,
-            voice_clone_prompt=self._prompt,
-            speed=self.speed,
-        )
+        kwargs = {
+            "text": cleaned,
+            "voice_clone_prompt": self._prompt,
+            "speed": self.speed,
+            "num_step": self.steps,
+        }
+        try:
+            from omnivoice.models.omnivoice import OmniVoiceGenerationConfig
+            kwargs["generation_config"] = OmniVoiceGenerationConfig(num_step=self.steps)
+        except Exception:
+            pass
+        try:
+            audio = self._model.generate(**kwargs)
+        except TypeError:
+            kwargs.pop("generation_config", None)
+            kwargs.pop("num_step", None)
+            audio = self._model.generate(**kwargs)
         pcm = np.asarray(audio[0] if isinstance(audio, (list, tuple)) else audio, dtype=np.float32).reshape(-1)
         ms = (time.perf_counter() - t0) * 1000
         tag = "first phrase" if self._first else "phrase"
         self._first = False
-        self.log(f"omnivoice {tag} {ms:.0f}ms device={self.device} chars={len(cleaned)}")
+        self.log(f"omnivoice {tag} {ms:.0f}ms device={self.device} chars={len(cleaned)} steps={self.steps}")
         return pcm, 24000
 
 
-def _load_kokoro(models_dir: Path, log, speed: float) -> TTSEngine:
+def load_kokoro(models_dir: Path, log, speed: float = 1.0) -> TTSEngine:
     engine = KokoroTTS(models_dir, log, speed)
     try:
         engine.load()
@@ -271,6 +303,7 @@ def load_engine(
     voice_dir: Path | None = None,
     tts_ref=None,
     tts_speed=1.0,
+    tts_steps_n=DEFAULT_TTS_STEPS,
     free_vram: int = 0,
     usable_vram: int | None = None,
     notice=None,
@@ -292,7 +325,7 @@ def load_engine(
     allow_cpu = name == "omnivoice"
     if want_omni:
         wav, txt = resolve_ref(Path(voice_dir or models_dir.parent), tts_ref)
-        omni = OmniVoiceTTS(models_dir, log, wav, txt, speed)
+        omni = OmniVoiceTTS(models_dir, log, wav, txt, speed, tts_steps(tts_steps_n))
         try:
             omni.load(allow_cpu=allow_cpu, free_vram=usable)
             return decided("omnivoice", f"gpu device={omni.device}", omni)
@@ -301,12 +334,12 @@ def load_engine(
             msg = f"{err}; falling back to Kokoro"
             log(msg)
             warn(msg)
-            return decided("kokoro", "omnivoice-cpu-slow", _load_kokoro(models_dir, log, speed))
+            return decided("kokoro", "omnivoice-cpu-slow", load_kokoro(models_dir, log, speed))
         except Exception as err:
             omni.close()
             log(f"omnivoice unavailable: {err}")
             if name == "omnivoice":
                 warn(f"OmniVoice failed ({err}); using Kokoro")
-            return decided("kokoro", f"omnivoice-failed:{err}", _load_kokoro(models_dir, log, speed))
+            return decided("kokoro", f"omnivoice-failed:{err}", load_kokoro(models_dir, log, speed))
 
-    return decided("kokoro", f"tts={name}", _load_kokoro(models_dir, log, speed))
+    return decided("kokoro", f"tts={name}", load_kokoro(models_dir, log, speed))

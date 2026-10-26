@@ -45,3 +45,23 @@ test('ref cache key changes when the wav or transcript changes', () => {
   assert.notEqual(a, c);
   assert.notEqual(b, c);
 });
+
+test('clamps OmniVoice diffusion steps', () => {
+  const out = py(
+    'from tts import tts_steps; print(tts_steps(None)); print(tts_steps(12)); print(tts_steps(3)); print(tts_steps(99))',
+  );
+  const [fallback, twelve, low, high] = out.split(/\s+/).map(Number);
+  assert.equal(fallback, 16);
+  assert.equal(twelve, 12);
+  assert.equal(low, 8);
+  assert.equal(high, 32);
+});
+
+test('normalizes PCM peak to about -1 dBFS', () => {
+  const out = py(
+    'import numpy as np; from tts import normalize_pcm; '
+    + 'x=normalize_pcm(np.array([0.1,-0.2,0.05], dtype=np.float32)); '
+    + 'print(round(float(np.max(np.abs(x))), 4))',
+  );
+  assert.equal(Number(out), 0.8913);
+});
