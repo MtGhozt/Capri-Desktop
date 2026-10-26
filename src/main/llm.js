@@ -9,6 +9,32 @@ const LOCAL_TZ = 'America/Costa_Rica';
 function createLlm({ loadConfig, personaPath }) {
   let history = [];
   let abort = null;
+  let persona = null;
+
+  function readPersona() {
+    try {
+      return fs.readFileSync(personaPath, 'utf8').trim();
+    } catch {
+      return 'You are Capri. Short, sarcastic, loyal. 1–3 sentences.';
+    }
+  }
+
+  // Cached so "reload persona" is a real action: the menu re-reads persona.md without a restart.
+  function personaText() {
+    if (persona == null) persona = readPersona();
+    return persona;
+  }
+
+  function reloadPersona() {
+    persona = readPersona();
+    return { ok: fs.existsSync(personaPath), chars: persona.length };
+  }
+
+  function reset() {
+    cancel();
+    history = [];
+    return { ok: true };
+  }
 
   function localClock() {
     const parts = new Intl.DateTimeFormat('es-CR', {
@@ -26,12 +52,7 @@ function createLlm({ loadConfig, personaPath }) {
   }
 
   function systemPrompt() {
-    let base;
-    try {
-      base = fs.readFileSync(personaPath, 'utf8').trim();
-    } catch {
-      base = 'You are Capri. Short, sarcastic, loyal. 1–3 sentences.';
-    }
+    const base = personaText();
     const lang = String(loadConfig().lang || 'es');
     return `${base}\n\nLanguage setting: ${lang}. Always speak Spanish. Local date and time for Matias right now: ${localClock()}. If he asks the time or date, use that.`;
   }
@@ -142,7 +163,7 @@ function createLlm({ loadConfig, personaPath }) {
     onDone({ text: full });
   }
 
-  return { chat, cancel };
+  return { chat, cancel, reset, reloadPersona, personaText };
 }
 
 module.exports = { createLlm };
