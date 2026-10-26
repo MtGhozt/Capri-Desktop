@@ -1,9 +1,10 @@
 // Overlay context menu. Same actions as the tray, drawn like the chat bubble.
 
 export class AppMenu {
-  constructor({ el, host }) {
+  constructor({ el, host, folded }) {
     this.el = el;
     this.host = host;
+    this.folded = typeof folded === 'function' ? folded : () => false;
     this.open = false;
     this.opening = false;
     this.openedAt = 0;
@@ -41,7 +42,7 @@ export class AppMenu {
     this.openedAt = performance.now();
     this.onOpenChange?.(true);
     try {
-      const state = await this.host.getMenu();
+      const state = await this.host.getMenu({ folded: this.folded() });
       this.expanded = null;
       this.at = { x, y };
       this.render(state);
@@ -114,14 +115,17 @@ export class AppMenu {
       return hr;
     };
 
+    const folded = Boolean(state.folded);
     rows.push(item(state.online, { disabled: true }));
     rows.push(sep());
     rows.push(item(t.teleport, { action: () => this.act('teleport') }));
-    rows.push(item(t.satellite, { action: () => this.act('satellite') }));
-    rows.push(item(t.demo, { action: () => this.act('demo') }));
+    if (!folded) {
+      rows.push(item(t.satellite, { action: () => this.act('satellite') }));
+      rows.push(item(t.demo, { action: () => this.act('demo') }));
+    }
     rows.push(item(t.help, { action: () => this.act('help') }));
-    rows.push(item(cfg.visible ? t.hide : t.show, { action: () => this.act('visible') }));
-    rows.push(item(t.sleep, { action: () => this.act('sleep') }));
+    if (!folded) rows.push(item(cfg.visible ? t.hide : t.show, { action: () => this.act('visible') }));
+    rows.push(item(folded ? t.wake : t.sleep, { action: () => this.act(folded ? 'wake' : 'sleep') }));
     rows.push(sep());
 
     rows.push(item(t.size, { expander: true, action: () => this.toggle('size', state) }));
@@ -156,7 +160,7 @@ export class AppMenu {
       }
     }
 
-    rows.push(item(t.wander, { checked: cfg.wander, action: () => this.act('wander', !cfg.wander) }));
+    if (!folded) rows.push(item(t.wander, { checked: cfg.wander, action: () => this.act('wander', !cfg.wander) }));
     rows.push(item(t.possess, { checked: cfg.possess, action: () => this.act('possess', !cfg.possess) }));
     rows.push(item(t.lang, { expander: true, action: () => this.toggle('lang', state) }));
     if (this.expanded === 'lang') {
@@ -174,14 +178,6 @@ export class AppMenu {
       action: () => this.act('startup', !state.login),
     }));
     rows.push(sep());
-
-    if (state.hooks.installed) {
-      rows.push(item(t.hooksOn, { disabled: true }));
-      rows.push(item(t.hooksRemove, { action: () => this.act('hooks-remove') }));
-    } else {
-      rows.push(item(t.hooksOff, { action: () => this.act('hooks-install') }));
-    }
-    rows.push(sep());
     rows.push(item(t.quit, { action: () => this.act('quit') }));
 
     this.el.replaceChildren(...rows);
@@ -195,15 +191,14 @@ export class AppMenu {
 
   async act(id, value) {
     const keep = id === 'scale' || id === 'muted' || id === 'display' || id === 'wander'
-      || id === 'possess' || id === 'lang' || id === 'startup' || id === 'sounds-dir'
-      || id === 'hooks-install' || id === 'hooks-remove';
+      || id === 'possess' || id === 'lang' || id === 'startup' || id === 'sounds-dir';
     await this.host.menuAction({ id, value });
-    if (id === 'quit' || id === 'teleport' || id === 'satellite' || id === 'demo' || id === 'help' || id === 'visible' || id === 'sleep') {
+    if (id === 'quit' || id === 'teleport' || id === 'satellite' || id === 'demo' || id === 'help' || id === 'visible' || id === 'sleep' || id === 'wake') {
       this.hide();
       return;
     }
     if (keep && this.open) {
-      const state = await this.host.getMenu();
+      const state = await this.host.getMenu({ folded: this.folded() });
       this.render(state);
     } else {
       this.hide();

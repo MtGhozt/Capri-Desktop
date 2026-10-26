@@ -238,6 +238,7 @@ function applyMenuAction(id, value) {
     case 'help': sendCommand('welcome'); break;
     case 'visible': toggleVisible(); break;
     case 'sleep': sendCommand('sleep'); break;
+    case 'wake': sendCommand('wake'); break;
     case 'scale': updateConfig({ scale: Number(value) }); break;
     case 'muted': updateConfig({ muted: Boolean(value) }); break;
     case 'sounds-dir':
@@ -263,7 +264,9 @@ function applyMenuAction(id, value) {
   }
 }
 
-function menuState() {
+let overlayFolded = false;
+
+function menuState(extra = {}) {
   const cfg = config.load();
   const lang = resolveLang(cfg.lang);
   const t = TRAY[lang];
@@ -278,6 +281,7 @@ function menuState() {
     langs: [['auto', t.auto], ...LANGS.map((code) => [code, TRAY[code].name])],
     lang,
     langSetting: cfg.lang,
+    folded: Boolean(extra.folded ?? overlayFolded),
     cfg: {
       visible: cfg.visible,
       scale: cfg.scale,
@@ -290,7 +294,6 @@ function menuState() {
       label: `${i + 1} — ${d.size.width}×${d.size.height}`,
       current: d.id === current,
     })),
-    hooks: hooks.status(),
     login: app.getLoginItemSettings(loginItemOptions()).openAtLogin,
     online: t.online(PORT),
   };
@@ -305,11 +308,15 @@ function rebuildTray() {
     { label: s.online, enabled: false },
     { type: 'separator' },
     { label: t.teleport, click: () => applyMenuAction('teleport') },
-    { label: t.satellite, click: () => applyMenuAction('satellite') },
-    { label: t.demo, click: () => applyMenuAction('demo') },
+    ...(!s.folded ? [
+      { label: t.satellite, click: () => applyMenuAction('satellite') },
+      { label: t.demo, click: () => applyMenuAction('demo') },
+    ] : []),
     { label: t.help, click: () => applyMenuAction('help') },
-    { label: s.cfg.visible ? t.hide : t.show, accelerator: 'Ctrl+Alt+C', click: () => applyMenuAction('visible') },
-    { label: t.sleep, click: () => applyMenuAction('sleep') },
+    ...(!s.folded ? [{ label: s.cfg.visible ? t.hide : t.show, accelerator: 'Ctrl+Alt+C', click: () => applyMenuAction('visible') }] : []),
+    s.folded
+      ? { label: t.wake, click: () => applyMenuAction('wake') }
+      : { label: t.sleep, click: () => applyMenuAction('sleep') },
     { type: 'separator' },
     {
       label: t.size,
@@ -335,7 +342,7 @@ function rebuildTray() {
         click: () => applyMenuAction('display', d.id),
       })),
     },
-    { label: t.wander, type: 'checkbox', checked: s.cfg.wander, click: (item) => applyMenuAction('wander', item.checked) },
+    ...(!s.folded ? [{ label: t.wander, type: 'checkbox', checked: s.cfg.wander, click: (item) => applyMenuAction('wander', item.checked) }] : []),
     { label: t.possess, type: 'checkbox', checked: s.cfg.possess, click: (item) => applyMenuAction('possess', item.checked) },
     {
       label: t.lang,
@@ -349,11 +356,6 @@ function rebuildTray() {
       checked: s.login,
       click: (item) => applyMenuAction('startup', item.checked),
     },
-    { type: 'separator' },
-    s.hooks.installed
-      ? { label: t.hooksOn, enabled: false }
-      : { label: t.hooksOff, click: () => applyMenuAction('hooks-install') },
-    ...(s.hooks.installed ? [{ label: t.hooksRemove, click: () => applyMenuAction('hooks-remove') }] : []),
     { type: 'separator' },
     { label: t.quit, click: () => applyMenuAction('quit') },
   ]);
@@ -394,6 +396,10 @@ function registerIpc() {
   ipcMain.on('overlay:interactive', (_e, on) => {
     overlay?.setIgnoreMouseEvents(!on, { forward: true });
   });
+  ipcMain.on('overlay:folded', (_e, on) => {
+    overlayFolded = Boolean(on);
+    rebuildTray();
+  });
   ipcMain.handle('overlay:cursor', () => {
     const p = screen.getCursorScreenPoint();
     const b = overlay.getBounds();
@@ -429,8 +435,8 @@ function registerIpc() {
     else shell.openPath(dir);
     return { found: true, dir, file: fs.existsSync(file) };
   });
-  ipcMain.handle('menu:get', () => {
-    const state = menuState();
+  ipcMain.handle('menu:get', (_e, extra = {}) => {
+    const state = menuState(extra);
     structuredClone(state);
     return state;
   });

@@ -58,7 +58,11 @@ async function boot() {
   const machine = new Machine('ONLINE');
   machine.dev = Boolean(config.dev);
   const bubble = new Bubble({ el: document.getElementById('bubble'), machine });
-  const appMenu = new AppMenu({ el: document.getElementById('app-menu'), host });
+  const appMenu = new AppMenu({
+    el: document.getElementById('app-menu'),
+    host,
+    folded: () => machine.get() === 'DORMANT',
+  });
   const dormant = new DormantWidget({ el: document.getElementById('dormant'), host });
   const vhs = document.getElementById('vhs');
   dormant.loadPos(config.idle?.widget, innerWidth, innerHeight);
@@ -235,6 +239,7 @@ async function boot() {
     capri.setHidden(true);
     Object.assign(capri.p, { glitch: 0, split: 0, collapse: 0, alpha: 1 });
     machine.set('DORMANT');
+    host.setFolded(true);
     dormant.setLabel('DORMANT');
     dormant.show();
     folding = false;
@@ -262,6 +267,7 @@ async function boot() {
       }
       const boot = bubble.boot;
       machine.set(boot === 'booting' ? 'BOOTING' : boot === 'failed' ? 'OFFLINE' : 'ONLINE');
+      host.setFolded(false);
       folding = false;
     }
     bumpIdle();
@@ -475,6 +481,7 @@ async function boot() {
           bubble.hide({ fromHost: true });
           dormant.hide();
           if (machine.get() === 'DORMANT') machine.set('ONLINE');
+          host.setFolded(false);
           capri.stow();
         } else capri.unstow();
         break;
@@ -487,6 +494,9 @@ async function boot() {
         break;
       case 'sleep':
         await fold({ force: true });
+        break;
+      case 'wake':
+        await unfold();
         break;
       case 'satellite': // the whole sequence, on demand (tray)
         await unfold();
