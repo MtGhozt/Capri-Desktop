@@ -160,6 +160,8 @@ function createVoice({ root, loadConfig, onEvent }) {
           CAPRI_DEV: process.argv.includes('--dev') ? '1' : '',
           PYTORCH_CUDA_ALLOC_CONF: process.env.PYTORCH_CUDA_ALLOC_CONF || 'expandable_segments:True',
           HF_HUB_DISABLE_SYMLINKS_WARNING: '1',
+          // download and weight-loading bars would fill the log with a line per percent
+          HF_HUB_DISABLE_PROGRESS_BARS: '1',
         },
       });
     } catch (err) {
