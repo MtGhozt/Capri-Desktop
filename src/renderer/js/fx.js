@@ -33,11 +33,16 @@ const GRAB = {
   tag: { x: 1110, y: 175 }, // where "hi" pops, by her face
   hands: [{ x: 0, y: 610 }, { x: 1672, y: 520 }], // where her hands hold the edges of the screen
 };
-const INTRO_T = { hands: 6, right: 8, reach: 10, grab: 16, hold: 21, blink: 29, hi: 34, wave: 46, regrab: 64, slip: 70, antic: 76, shrink: 78, land: 88, end: 91 };
-// her close-up's drawings (assets/capri/intro-<name>.webp), the same picture with only her mouth or
-// her right arm changed: at rest, her mouth ajar, half open and wide open, and waving (her hand
-// tilted one way, then the other)
-export const GRAB_FRAMES = ['grab', 'mouth1', 'mouth2', 'mouth3', 'wave1', 'wave2'];
+const INTRO_T = { hands: 6, right: 8, reach: 10, grab: 16, hold: 21, blink: 29, hi: 34, wave: 46, regrab: 63, happy: 65, glance: 75, slip: 80, antic: 86, shrink: 88, land: 98, end: 101 };
+// her close-up's drawings (assets/capri/intro-<name>.webp), the same picture with only her mouth,
+// her eyes or her right arm changed: at rest, her mouth ajar, half open and wide open, waving (her
+// hand tilted left, right, straight up), her arm a smear between the edge and her face, and her
+// eyes shut with joy
+export const GRAB_FRAMES = ['grab', 'mouth1', 'mouth2', 'mouth3', 'wave1', 'wave2', 'wave3', 'smear', 'happy'];
+// the wave, after the smear of her arm leaving the edge: three drawings each
+const WAVE = ['wave1', 'wave3', 'wave2', 'wave3', 'wave1'];
+// drawings whose eyes are their own (not redrawn over: they don't look around)
+const OWN_EYES = new Set(['happy']);
 // "hi", from her mouth starting to open (in drawings at 24 fps, two each)
 const SAY_HI = ['mouth1', 'mouth1', 'mouth3', 'mouth3', 'mouth3', 'mouth3', 'mouth2', 'mouth2', 'mouth1', 'mouth1'];
 
@@ -589,7 +594,7 @@ export class FxLayer {
       ctx.globalCompositeOperation = 'source-over';
     } else {
       ctx.drawImage(this.grabFrames[cel] || this.grab, 0, 0);
-      GRAB.eyes.forEach((e) => this.grabEye(e, look, open));
+      if (!OWN_EYES.has(cel) || !this.grabFrames[cel]) GRAB.eyes.forEach((e) => this.grabEye(e, look, open));
     }
     ctx.restore();
   }
@@ -1446,8 +1451,8 @@ export class FxLayer {
           }
           if (f === T.hi + 2) it.onCue('hi'); // her mouth wide open
           if (f === T.wave) it.onCue('wave');
-          if (f === T.regrab) {
-            it.onCue('hand');
+          if (f === T.happy) {
+            it.onCue('hand'); // her hand back on the edge
             if (!it.still) this.crackle(hands[1], { life: 220, radius: 50 });
           }
           if (f === T.slip) it.onCue('slip');
@@ -1472,7 +1477,7 @@ export class FxLayer {
         if (since < 3) look = { x: 0, y: 0 };
         else if (since < 7) look = { x: -10, y: -3 };
         else if (since < 11) look = { x: 10, y: -4 };
-        else if (frame >= T.regrab) look = { x: toward.x * 10, y: toward.y * 7 };
+        else if (frame >= T.glance) look = { x: toward.x * 10, y: toward.y * 7 };
         const b = frame - T.blink;
         const open = b === 0 || b === 3 ? 0.5 : b === 1 || b === 2 ? 0 : 1;
         // the line boiling: a new drawing every other frame, a pixel or two off the last
@@ -1537,17 +1542,22 @@ export class FxLayer {
         if (frame < T.slip) {
           // holding on: she breathes and boils, the camera creeping in on her, shards of her mane
           // drifting off. She says "hi" (her mouth opening over three drawings, wide on the tag
-          // popping, her head bobbing), then lets go of the right edge and waves, her hand tilting
-          // one way then the other on threes, and grabs it again. Now and then her colours slip.
+          // popping, her head bobbing), then her arm leaves the right edge in a smear and she waves,
+          // her hand tilting left, up, right, up, left on threes; a smear back onto the edge, and
+          // she shuts her eyes with joy. Now and then her colours slip.
           const h0 = frame - T.hi - 2;
-          const w0 = frame - T.wave;
           let cel = SAY_HI[frame - T.hi] ?? 'grab';
-          let snap = 0, shake = 0;
-          if (w0 >= 0 && frame < T.regrab) {
-            cel = w0 === 0 ? 'wave1' : Math.floor((w0 - 1) / 3) % 2 ? 'wave2' : 'wave1';
-            if (w0 === 0) [snap, shake] = [10, 6]; // her hand snapping off the edge
-          } else if (frame >= T.regrab && frame < T.regrab + 2) {
-            [snap, shake] = [[6, 8], [3, -4]][frame - T.regrab]; // and slamming back onto it
+          let shake = 0;
+          if (frame >= T.wave && frame < T.wave + 2) {
+            cel = 'smear'; // her arm off the edge
+            if (frame === T.wave) shake = 6;
+          } else if (frame >= T.wave + 2 && frame < T.regrab) {
+            cel = WAVE[Math.floor((frame - T.wave - 2) / 3)] ?? 'wave1';
+          } else if (frame >= T.regrab && frame < T.happy) {
+            cel = 'smear'; // and back onto it
+          } else if (frame >= T.happy && frame < T.glance) {
+            cel = 'happy';
+            if (frame < T.happy + 2) shake = [8, -4][frame - T.happy]; // her hand slamming onto it
           }
           if (frame % 5 === 0 && it.drifted !== frame) {
             it.drifted = frame; // once per frame, however often it's drawn
@@ -1559,8 +1569,8 @@ export class FxLayer {
           const bob = h0 >= 0 && h0 < 8 ? [0.024, 0.024, -0.017, -0.017, 0.009, 0.009, 0, 0][h0] : 0;
           const pop = h0 === 0 || h0 === 1 ? [0.025, 0.012][h0] : 0;
           const k = 1.025 + pop + creep + 0.006 * Math.sin(t / 7);
-          const glitch = frame % 24 === 19 ? 6 : 0;
-          this.grabbed(it, at.x + noise(1) * 1.5 + shake, at.y + noise(2) * 1.5, k, { rot: noise(3) * 0.003 + bob, look, open, cel, split: snap || glitch });
+          const glitch = frame % 24 === 19 && cel === 'grab' ? 6 : 0; // (the split is of her at rest)
+          this.grabbed(it, at.x + noise(1) * 1.5 + shake, at.y + noise(2) * 1.5, k, { rot: noise(3) * 0.003 + bob, look, open, cel, split: glitch });
           if (h0 >= 0) hi([0.35, 1.22, 0.94][h0] ?? 1);
           break;
         }

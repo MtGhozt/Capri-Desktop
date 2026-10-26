@@ -3,11 +3,14 @@ their red background. What stays: her figure (everything that isn't the mane's h
 what's joined to her) and a jagged burst of mane around her head; the rest is see-through, so
 your desktop shows around her. Every drawing is cut the same way, so they can be swapped like
 cels: `grab` is her at rest (both hands on the edges, mouth shut), the others are the same picture
-with only her mouth or her right arm changed (fx.js GRAB_FRAMES). fx.js knows where her face, eyes
-and hands are on them (GRAB): keep the framing (1672x941, her eyes in the same place) or update it.
+with only her mouth, her eyes or her right arm changed (fx.js GRAB_FRAMES), and only that change is taken
+from them (CHANGES), so nothing else shimmers when they're swapped. fx.js knows where her face,
+eyes and hands are on them (GRAB): keep the framing (1672x941, her eyes in the same place) or
+update it. Give `grab` along with the others.
 
     python tools/build-intro.py grab=rest.webp mouth1=ajar.webp mouth2=half.webp mouth3=wide.webp \\
-        wave1=wave-left.webp wave2=wave-right.webp
+        wave1=wave-left.webp wave2=wave-right.webp wave3=wave-up.webp smear=arm-blur.webp \\
+        happy=eyes-shut.webp
 
 writes assets/capri/intro-<name>.webp for each. Needs Pillow.
 """
@@ -24,6 +27,14 @@ HEAD = (830, 330)   # the middle of her mane burst
 BODY = (836, 600)   # a point on her, to keep only what's joined to her
 BELLY = (980, 760)  # a point on her belly: red like the mane, but hers (see belly)
 BELLY_MAX = 330     # wider than this, a run of red isn't her belly any more (it's the background)
+# where each kind of drawing changes her (by the start of its name): only that is taken from it,
+# the rest from `grab` (see settled). A kind not listed is taken whole.
+CHANGES = {
+    'mouth': (690, 360, 1020, 650),  # her mouth
+    'wave': (930, 120, 1672, 941),   # her right arm, off the edge and up by her face
+    'smear': (930, 120, 1672, 941),  # the same arm, a blur between the edge and her face
+    'happy': (600, 180, 1060, 470),  # her eyes, shut with joy
+}
 
 
 def belly(fig):
@@ -161,13 +172,35 @@ def cut(im):
     return unfringe(out)
 
 
+def settled(base, im, box):
+    """`im` with only what really changed in it, inside `box`, kept; everything else is `base`'s.
+    An AI edit redraws the whole picture, the grain of her mane and her belly a little differently
+    each time: swapped like cels, that would shimmer. Its changes (a mouth, an arm) are found by
+    how far they are from `base` (the grain's small differences don't count), grown a little to
+    take their edges, and blended in over a soft edge so no seam shows."""
+    r, g, b = (ImageChops.difference(x, y) for x, y in zip(base.split(), im.split()))
+    diff = ImageChops.lighter(ImageChops.lighter(r, g), b)  # the most any of its channels moved
+    changed = diff.filter(ImageFilter.GaussianBlur(2)).point(lambda v: 255 if v > 48 else 0)
+    inside = Image.new('L', base.size, 0)
+    ImageDraw.Draw(inside).rectangle(box, fill=255)
+    changed = ImageChops.multiply(changed, inside)
+    # specks of grain out, then grown over the change's own edges, then a soft border
+    changed = changed.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(17)).filter(ImageFilter.GaussianBlur(5))
+    return Image.composite(im, base, changed)
+
+
 def main():
     pairs = [arg.split('=', 1) for arg in sys.argv[1:]]
     if not pairs or any(len(p) != 2 for p in pairs):
         sys.exit(__doc__)
-    for name, path in pairs:
+    sources = {name: framed(path) for name, path in pairs}
+    base = sources.get('grab')
+    for name, im in sources.items():
+        box = next((b for kind, b in CHANGES.items() if name.startswith(kind)), None)
+        if base is not None and name != 'grab' and box:
+            im = settled(base, im, box)
         target = OUT / f'intro-{name}.webp'
-        cut(framed(path)).save(target, 'WEBP', quality=95, method=6)
+        cut(im).save(target, 'WEBP', quality=95, method=6)
         print('written', target)
 
 
