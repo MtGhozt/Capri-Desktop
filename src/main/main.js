@@ -15,6 +15,7 @@ const { createLlm } = require('./llm');
 const { createLms } = require('./lms');
 const { createVoice } = require('./voice');
 const { createSpeakQueue } = require('./speak');
+const { isSleepCommand } = require('./sleep-command');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
 
@@ -238,13 +239,6 @@ const SLEEP_LINES = [
   'A mimir. Despertame si hay quilombo.',
   'Ok, me duermo. Chau.',
 ];
-
-function isSleepCommand(text) {
-  const n = String(text || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-  const body = n.replace(/^(hey\s+)?(jarvis|capri)[,:\s]+/, '').trim();
-  return /^(anda a dormir|andate a dormir|vete a dormir|dormite|a mimir|a dormir|go to sleep|sleep)\b/.test(body)
-    || /\b(anda a dormir|andate a dormir|dormite|a mimir|go to sleep)\b/.test(n);
-}
 
 function requestSleep() {
   if (sleepTimer) {
