@@ -1,19 +1,24 @@
 // Compact CAPRI // DORMANT capsule. Separate from the biochip (chip.js).
 
-import { clamp, reducedMotion } from './util.js';
+import { clamp, reducedMotion, sleep, tween } from './util.js';
 import { statusText } from './state.js';
 
-const RED = '#ff2152';
-const GREEN = '#36ff7a';
-const BLUE = '#3d6bff';
-const WHITE = '#f4f7ff';
-const FRAME = 1000 / 12;
+const RED = '#FF004D';
+const CYAN = '#00FFCC';
+const EYE = '#000011';
+const GOLD = '#FFD700';
+const PUPIL = '#00FFFF';
+const PIXELS = ['#FFD700', '#FF004D', '#00FFCC'];
+const FRAME = 1000 / 30;
+const CSS = 88;
+const TURN_MS = 7000;
 
 export class DormantWidget {
   constructor({ el, host }) {
     this.el = el;
     this.host = host;
     this.open = false;
+    this.fx = true;
     this.x = 0;
     this.y = 0;
     this.view = { w: innerWidth, h: innerHeight };
@@ -24,8 +29,13 @@ export class DormantWidget {
     this.ctx = this.canvas.getContext('2d');
     this.born = 0;
     this.lastDraw = 0;
+    this.starAlpha = 1;
     this.glitchUntil = 0;
     this.nextGlitch = 0;
+    this.nextBlink = 0;
+    this.blinkUntil = 0;
+    this.swap = false;
+    this.particles = [];
     this.loop = this.loop.bind(this);
 
     this.el.addEventListener('click', (e) => {
@@ -40,16 +50,24 @@ export class DormantWidget {
     return this.open;
   }
 
+  setFx(on) {
+    this.fx = on !== false;
+  }
+
   setLabel(state, pct) {
     if (this.labelEl) this.labelEl.textContent = statusText(state, pct);
   }
 
   show() {
     this.open = true;
+    this.starAlpha = 1;
+    this.el.classList.remove('is-line');
     this.el.hidden = false;
     this.place();
     this.born = performance.now();
-    this.nextGlitch = this.born + 2500;
+    this.nextGlitch = this.born + 400;
+    this.nextBlink = this.born + 3000 + Math.random() * 2000;
+    this.particles.length = 0;
     this.onOpenChange?.(true);
     requestAnimationFrame(this.loop);
   }
@@ -57,8 +75,27 @@ export class DormantWidget {
   hide() {
     if (!this.open) return;
     this.open = false;
+    this.el.classList.remove('is-line');
     this.el.hidden = true;
+    this.particles.length = 0;
     this.onOpenChange?.(false);
+  }
+
+  async burst() {
+    if (!this.open) return;
+    const live = this.liveFx();
+    this.swap = live;
+    this.glitchUntil = performance.now() + 240;
+    this.nextGlitch = this.glitchUntil + 2000;
+    if (!live) {
+      this.el.classList.add('is-line');
+      this.starAlpha = 0;
+      return;
+    }
+    await sleep(200);
+    await tween(this, { starAlpha: 0 }, 80);
+    this.el.classList.add('is-line');
+    await sleep(50);
   }
 
   setView(w, h) {
@@ -74,8 +111,8 @@ export class DormantWidget {
       this.x = widget.x;
       this.y = widget.y;
     } else {
-      this.x = Math.max(8, w - 220);
-      this.y = Math.max(8, h - 52);
+      this.x = Math.max(8, w - 260);
+      this.y = Math.max(8, h - 72);
     }
     this.place();
   }
@@ -95,6 +132,10 @@ export class DormantWidget {
     this.el.style.transform = `translate3d(${Math.round(this.x)}px, ${Math.round(this.y)}px, 0)`;
   }
 
+  liveFx() {
+    return this.fx && !reducedMotion.matches;
+  }
+
   loop(now) {
     if (!this.open) return;
     requestAnimationFrame(this.loop);
@@ -107,89 +148,165 @@ export class DormantWidget {
     const canvas = this.canvas;
     const ctx = this.ctx;
     const dpr = window.devicePixelRatio || 1;
-    const css = 18;
-    if (canvas.width !== Math.round(css * dpr)) {
-      canvas.width = Math.round(css * dpr);
-      canvas.height = Math.round(css * dpr);
+    const px = Math.round(CSS * dpr);
+    if (canvas.width !== px) {
+      canvas.width = px;
+      canvas.height = px;
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, css, css);
+    ctx.clearRect(0, 0, CSS, CSS);
 
-    const calm = reducedMotion.matches;
-    if (!calm && now > this.nextGlitch) {
-      this.glitchUntil = now + 140;
-      this.nextGlitch = now + 4000 + Math.random() * 5000;
+    const live = this.liveFx();
+    if (live && now > this.nextBlink) {
+      this.blinkUntil = now + 120;
+      this.nextBlink = now + 3000 + Math.random() * 2000;
     }
-    const glitch = !calm && now < this.glitchUntil;
-    const spin = calm ? 0 : ((now - this.born) / 1000) * 0.35;
-    const blink = calm ? 1 : (Math.floor(now / 80) % 70 < 3 ? 0.12 : 1);
-    const jx = glitch ? (Math.random() < 0.5 ? -1.2 : 1.2) : 0;
-    const jy = glitch ? (Math.random() - 0.5) * 1.4 : 0;
+    if (live && now > this.nextGlitch) {
+      const peak = Math.random() < 0.35;
+      this.glitchUntil = now + (peak ? 180 : 70);
+      this.swap = peak;
+      this.nextGlitch = now + 1800 + Math.random() * 2200;
+    }
+    const peak = live && now < this.glitchUntil;
+    if (!peak) this.swap = false;
+    const t = (now - this.born) / 1000;
+    const spin = live ? -((now - this.born) / TURN_MS) * Math.PI * 2 : 0;
+    const breath = live ? 1 + 0.04 * Math.sin(t * 1.4) : 1;
+    const blink = (!live || now >= this.blinkUntil) ? 1 : 0.08;
+    const cx = CSS / 2;
+    const cy = CSS / 2;
+
+    if (live) this.tickParticles(now, cx, cy);
 
     ctx.save();
-    ctx.translate(css / 2 + jx, css / 2 + jy);
+    ctx.globalAlpha = this.starAlpha;
+    ctx.translate(cx, cy);
+    ctx.scale(breath, breath);
     ctx.rotate(spin);
-    if (glitch) {
+
+    if (peak) {
+      ctx.save();
       ctx.globalCompositeOperation = 'screen';
-      this.star(ctx, -1.4, 0, '#00e5ff', 1);
-      this.star(ctx, 1.4, 0, '#ff2a7a', 1);
-      ctx.globalCompositeOperation = 'source-over';
+      this.petals(ctx, -1.8, 0, true);
+      this.petals(ctx, 1.8, 0, true);
+      ctx.restore();
     }
-    this.star(ctx, 0, 0, null, blink);
+    this.petals(ctx, 0, 0, this.swap);
+    ctx.rotate(-spin);
+    this.eye(ctx, blink);
+    ctx.restore();
+
+    if (live && this.starAlpha > 0.05) {
+      this.paintParticles(ctx);
+      if (peak || Math.random() < 0.45) this.slices(ctx, canvas, dpr, peak);
+    }
+  }
+
+  petals(ctx, dx, dy, swap) {
+    ctx.save();
+    ctx.translate(dx, dy);
+    const a = swap ? CYAN : RED;
+    const b = swap ? RED : CYAN;
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.rotate(i * Math.PI / 2);
+      this.petal(ctx, i % 2 === 0 ? 26 : 21);
+      ctx.fillStyle = i % 2 === 0 ? a : b;
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
   }
 
-  star(ctx, dx, dy, flat, blink) {
-    ctx.save();
-    ctx.translate(dx, dy);
-    const outer = 8.2;
-    const inner = 3.1;
-    const path = () => {
+  petal(ctx, outer) {
+    const half = outer * 0.22;
+    const waist = outer * 0.42;
+    const notch = outer * 0.14;
+    ctx.beginPath();
+    ctx.moveTo(0, -outer);
+    ctx.lineTo(half, -waist);
+    ctx.quadraticCurveTo(outer * 0.08, -notch * 0.35, 0, -notch);
+    ctx.quadraticCurveTo(-outer * 0.08, -notch * 0.35, -half, -waist);
+    ctx.closePath();
+  }
+
+  eye(ctx, blink) {
+    const diamond = () => {
       ctx.beginPath();
-      for (let i = 0; i < 8; i++) {
-        const r = i % 2 === 0 ? outer : inner;
-        const a = -Math.PI / 2 + i * Math.PI / 4;
-        const x = Math.cos(a) * r;
-        const y = Math.sin(a) * r;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
+      ctx.moveTo(0, -7.2);
+      ctx.lineTo(6.4, 0);
+      ctx.lineTo(0, 7.2);
+      ctx.lineTo(-6.4, 0);
       ctx.closePath();
     };
-    if (flat) {
-      path();
-      ctx.fillStyle = flat;
-      ctx.fill();
-      ctx.restore();
-      return;
-    }
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(-outer, -outer, outer, outer * 2);
-    ctx.clip();
-    path();
-    ctx.fillStyle = RED;
+    ctx.scale(1, blink);
+    diamond();
+    ctx.fillStyle = EYE;
     ctx.fill();
-    ctx.restore();
-    ctx.save();
     ctx.beginPath();
-    ctx.rect(0, -outer, outer, outer * 2);
-    ctx.clip();
-    path();
-    ctx.fillStyle = GREEN;
-    ctx.fill();
-    ctx.restore();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 2.1, 2.1 * blink, 0, 0, Math.PI * 2);
-    ctx.fillStyle = BLUE;
+    ctx.arc(0, 0, 3.1, 0, Math.PI * 2);
+    ctx.fillStyle = PUPIL;
     ctx.fill();
     if (blink > 0.4) {
       ctx.beginPath();
-      ctx.arc(0.5, -0.4, 0.7, 0, Math.PI * 2);
-      ctx.fillStyle = WHITE;
+      ctx.arc(1.1, -1.05, 1.05, 0, Math.PI * 2);
+      ctx.fillStyle = '#e8ffff';
       ctx.fill();
     }
     ctx.restore();
+    diamond();
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 1.05;
+    ctx.stroke();
+  }
+
+  tickParticles(now, cx, cy) {
+    const dt = FRAME / 1000;
+    this.particles = this.particles.filter((p) => {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      return p.life > 0;
+    });
+    while (this.particles.length < 10 && Math.random() < 0.28) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 18 + Math.random() * 28;
+      this.particles.push({
+        x: cx + Math.cos(a) * 6,
+        y: cy + Math.sin(a) * 6,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life: 0.45 + Math.random() * 0.55,
+        max: 1,
+        size: 1 + Math.floor(Math.random() * 2),
+        color: PIXELS[Math.floor(Math.random() * PIXELS.length)],
+      });
+      this.particles[this.particles.length - 1].max = this.particles[this.particles.length - 1].life;
+    }
+  }
+
+  paintParticles(ctx) {
+    for (const p of this.particles) {
+      ctx.globalAlpha = this.starAlpha * (p.life / p.max);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  slices(ctx, canvas, dpr, peak) {
+    const n = peak ? 3 : 1;
+    for (let i = 0; i < n; i++) {
+      const h = (peak ? 3 : 2) + Math.random() * (peak ? 7 : 3);
+      const y = 12 + Math.random() * (CSS - 28);
+      const dx = (Math.random() < 0.5 ? -1 : 1) * (peak ? 4 + Math.random() * 8 : 2 + Math.random() * 3);
+      ctx.drawImage(
+        canvas,
+        0, y * dpr, CSS * dpr, h * dpr,
+        dx, y, CSS, h,
+      );
+    }
   }
 
   bindDrag() {
