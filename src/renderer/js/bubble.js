@@ -287,7 +287,7 @@ export class Bubble {
         this.setState('ONLINE');
         this.onTalk?.(false);
       }
-    }, 1500);
+    }, 2000);
   }
 
   startThink() {

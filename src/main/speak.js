@@ -52,17 +52,15 @@ function createSpeakQueue({ send }) {
     return live;
   }
 
-  function flush() {
-    const id = live;
-    if (!id) {
-      send({ type: 'speak_flush', id: 0 });
-      return;
+  function flush(id) {
+    const target = Number(id) || live;
+    if (live && (!target || live === target)) {
+      const rest = buf.trim();
+      buf = '';
+      live = 0;
+      if (rest) send({ type: 'speak', text: rest, id: target });
     }
-    const rest = buf.trim();
-    buf = '';
-    live = 0;
-    if (rest) send({ type: 'speak', text: rest, id });
-    send({ type: 'speak_flush', id });
+    send({ type: 'speak_flush', id: target || 0 });
   }
 
   function stop(id) {

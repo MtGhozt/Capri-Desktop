@@ -31,6 +31,7 @@ SILENCE_MS = 700
 MIN_SPEECH_MS = 250
 WAKE_THRESHOLD = 0.2
 WAKE_WHILE_TALKING = 0.5
+IDLE_TALK_S = 2.0
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
 STT_PROMPT = "Capri, choom, Matias"
@@ -222,12 +223,16 @@ class Engine:
         self._speak_q: Queue = Queue()
         self._speak_stop = threading.Event()
         self._speaking = False
+        self._synth_busy = False
+        self._last_audio = 0.0
         self._accept_speak = True
         self._speak_gen = 0
         self._live_id = 0
         self._out = None
         self._speak_thread = threading.Thread(target=self._speak_loop, name="capri-tts", daemon=True)
         self._speak_thread.start()
+        self._idle_thread = threading.Thread(target=self._idle_watch, name="capri-tts-idle", daemon=True)
+        self._idle_thread.start()
 
     def apply_cfg(self, patch: dict) -> None:
         before = (self.cfg.get("enabled"), self.cfg.get("inputDevice"))
@@ -327,6 +332,38 @@ class Engine:
         if self._speaking:
             return max(value, WAKE_WHILE_TALKING)
         return value
+
+    def _set_speaking(self, on: bool) -> None:
+        on = bool(on)
+        if on == bool(self._speaking):
+            self._speaking = on
+            return
+        self._speaking = on
+        log(f"wake threshold -> {self.wake_threshold():.2f}")
+
+    def _note_audio(self) -> None:
+        self._last_audio = time.monotonic()
+
+    def _maybe_idle_talk(self) -> None:
+        if not self._speaking:
+            return
+        if self._synth_busy or self._out is not None:
+            return
+        if not self._speak_q.empty():
+            return
+        if self._last_audio and time.monotonic() - self._last_audio < IDLE_TALK_S:
+            return
+        log("talking_done idle-timeout")
+        self._set_speaking(False)
+        self.broadcast({"type": "talking_done", "skipped": False})
+
+    def _idle_watch(self) -> None:
+        while True:
+            time.sleep(0.25)
+            try:
+                self._maybe_idle_talk()
+            except Exception:
+                pass
 
     def restart_stream(self) -> None:
         self.stop_stream()
@@ -512,6 +549,8 @@ class Engine:
 
     def flush_speak(self, reply_id=None) -> None:
         rid = self._as_id(reply_id)
+        if rid <= 0:
+            rid = self._live_id
         if rid > self._live_id:
             self._accept_reply(rid, "flush")
         if not self.tts_enabled() or rid < self._live_id or (rid == self._live_id and not self._accept_speak):
@@ -548,19 +587,19 @@ class Engine:
                 was = session or self._speaking
                 session = False
                 session_id = 0
-                self._speaking = False
+                self._set_speaking(False)
                 self._speak_stop.clear()
                 log(f"talking_done interrupted={was} id={rid}")
                 if was:
                     self.broadcast({"type": "talking_done", "interrupted": True})
                 continue
             if kind == "flush":
-                if rid != self._live_id:
+                if rid and rid != self._live_id:
                     log(f"speak_flush stale id={rid} live={self._live_id}")
                     continue
                 if session:
                     session = False
-                    self._speaking = False
+                    self._set_speaking(False)
                     log(f"talking_done id={rid}")
                     self.broadcast({"type": "talking_done", "interrupted": False})
                 else:
@@ -571,8 +610,10 @@ class Engine:
                 log(f"speak skip stale id={rid} live={self._live_id}")
                 continue
             gen = self._speak_gen
+            self._synth_busy = True
             t0 = time.perf_counter()
             pcm, sr = self._synth(str(text))
+            self._synth_busy = False
             ms = (time.perf_counter() - t0) * 1000
             log(f"synth id={rid} {ms:.0f}ms samples={pcm.size} sr={sr}")
             if pcm.size == 0:
@@ -583,14 +624,22 @@ class Engine:
             if not session or session_id != rid:
                 session = True
                 session_id = rid
-                self._speaking = True
+                self._set_speaking(True)
                 log(f"talking id={rid}")
                 self.broadcast({"type": "talking"})
+            self._note_audio()
             if not self._play(pcm, sr, gen):
                 session = False
                 session_id = 0
-                self._speaking = False
+                self._set_speaking(False)
                 continue
+            self._note_audio()
+            if self._speak_q.empty():
+                session = False
+                session_id = 0
+                self._set_speaking(False)
+                log(f"talking_done queue-empty id={rid}")
+                self.broadcast({"type": "talking_done", "interrupted": False})
 
     def ensure_tts(self) -> None:
         with self._tts_lock:

@@ -41,6 +41,8 @@ let voice = null;
 let speakQueue = null;
 let voiceQueue = [];
 let chatOpen = false;
+let pendingSleep = false;
+let sleepTimer = null;
 let previousForeground = null;
 
 const userSoundsDir = () => path.join(app.getPath('userData'), 'sounds');
@@ -229,6 +231,42 @@ function rendererConfig() {
   // --dev only: 10 s idle for testing. Never written to config.json.
   if (DEV) idle.dormantAfterMs = 10_000;
   return { ...cfg, idle, lang: resolveLang(cfg.lang), langSetting: cfg.lang, dev: DEV };
+}
+
+const SLEEP_LINES = [
+  'Dale, me apago un toque. No hagas lío, choom.',
+  'A mimir. Despertame si hay quilombo.',
+  'Ok, me duermo. Chau.',
+];
+
+function isSleepCommand(text) {
+  const n = String(text || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const body = n.replace(/^(hey\s+)?(jarvis|capri)[,:\s]+/, '').trim();
+  return /^(anda a dormir|andate a dormir|vete a dormir|dormite|a mimir|a dormir|go to sleep|sleep)\b/.test(body)
+    || /\b(anda a dormir|andate a dormir|dormite|a mimir|go to sleep)\b/.test(n);
+}
+
+function requestSleep() {
+  if (sleepTimer) {
+    clearTimeout(sleepTimer);
+    sleepTimer = null;
+  }
+  pendingSleep = false;
+  sendCommand('sleep');
+}
+
+function goSleepReply() {
+  const bye = SLEEP_LINES[Math.floor(Math.random() * SLEEP_LINES.length)];
+  overlay?.webContents.send('chat:token', bye);
+  overlay?.webContents.send('chat:done', { text: bye });
+  const speakId = ttsOn() ? speakQueue?.start() : 0;
+  if (speakId) {
+    speakQueue.feed(bye);
+    speakQueue.flush(speakId);
+  }
+  pendingSleep = true;
+  sleepTimer = setTimeout(requestSleep, 2200);
+  return { ok: true };
 }
 
 function ttsOn() {
@@ -494,6 +532,7 @@ function registerIpc() {
   ipcMain.handle('chat:send', async (_e, text) => {
     const line = String(text || '').trim();
     if (!line || !overlay) return { ok: false };
+    if (isSleepCommand(line)) return goSleepReply();
     const boot = await lms.whenReady();
     if (boot === 'failed') {
       overlay.webContents.send('chat:error', { kind: 'offline' });
@@ -508,7 +547,7 @@ function registerIpc() {
         if (speakId) speakQueue?.feed(piece);
       },
       onDone: (payload) => {
-        if (speakId) speakQueue?.flush();
+        if (speakId) speakQueue?.flush(speakId);
         overlay?.webContents.send('chat:done', payload);
       },
       onError: (payload) => {
@@ -629,6 +668,7 @@ function main() {
       onEvent: (payload) => {
         if (payload?.type === 'listening') openChat();
         if (payload?.type === 'devices') rebuildTray();
+        if (pendingSleep && payload?.type === 'talking_done') requestSleep();
         if (overlay?.webContents && !overlay.webContents.isDestroyed()) {
           overlay.webContents.send('voice:event', payload);
         } else {
@@ -638,12 +678,7 @@ function main() {
     });
     createOverlay();
     speakQueue = createSpeakQueue({
-      send: (msg) => {
-        if (!voice) return;
-        if (msg.type === 'speak') voice.speak(msg.text);
-        else if (msg.type === 'speak_flush') voice.speakFlush();
-        else if (msg.type === 'stop_speak') voice.stopSpeak();
-      },
+      send: (msg) => voice?.push?.(msg),
     });
     voice.start();
     createTray();
