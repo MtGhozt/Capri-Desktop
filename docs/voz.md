@@ -49,7 +49,8 @@ Cuando el LLM responde, el sidecar sintetiza **por frase** con Kokoro ONNX en CP
 
 - Estado `TALKING` cuando empieza el audio; `ONLINE` cuando termina (el idle de 5 min cuenta desde ahí).
 - Mientras habla no corre STT (no se transcribe a sí misma). El wake word sigue activo con umbral **0.5** (vuelve a `wakeThreshold` al terminar).
-- Cortar: `Ctrl+Alt+V`, clic en Capri, o “Hey Jarvis”. Pasa a `LISTENING`.
+- Cortar: `Ctrl+Alt+V`, clic en Capri, o “Hey Jarvis”. Corta el audio al instante (`sd.stop()`), tira la cola y el LLM de esa respuesta, y la burbuja cierra el texto (completo o con `…`). Pasa a `LISTENING`.
+- Kokoro se carga y hace un calentamiento al arrancar el sidecar para que la primera frase no pague el freeze de ONNX.
 - `"tts": "off"` o mute: solo texto en la burbuja.
 
 La voz clonada (OmniVoice) es el paso 2.

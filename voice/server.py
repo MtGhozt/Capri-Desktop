@@ -33,7 +33,6 @@ WAKE_THRESHOLD = 0.2
 WAKE_WHILE_TALKING = 0.5
 SPEAK_FLUSH = object()
 SPEAK_STOP = object()
-PLAY_BLOCK = 2048
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
 STT_PROMPT = "Capri, choom, Matias"
@@ -225,6 +224,8 @@ class Engine:
         self._speak_q: Queue = Queue()
         self._speak_stop = threading.Event()
         self._speaking = False
+        self._accept_speak = True
+        self._speak_gen = 0
         self._speak_thread = threading.Thread(target=self._speak_loop, name="capri-tts", daemon=True)
         self._speak_thread.start()
 
@@ -445,8 +446,11 @@ class Engine:
         kind = str(self.cfg.get("tts") or "kokoro").lower()
         return kind not in ("off", "none", "false") and not bool(self.cfg.get("muted"))
 
+    def arm_speak(self) -> None:
+        self._accept_speak = True
+
     def enqueue_speak(self, text: str) -> None:
-        if not self.tts_enabled() or self.capturing:
+        if not self._accept_speak or not self.tts_enabled() or self.capturing:
             return
         line = str(text or "").strip()
         if not line:
@@ -457,10 +461,18 @@ class Engine:
         if not self.tts_enabled():
             self.broadcast({"type": "talking_done", "skipped": True})
             return
+        if not self._accept_speak:
+            return
         self._speak_q.put(SPEAK_FLUSH)
 
     def stop_speak(self) -> None:
+        self._accept_speak = False
+        self._speak_gen += 1
         self._speak_stop.set()
+        try:
+            sd.stop()
+        except Exception:
+            pass
         while True:
             try:
                 self._speak_q.get_nowait()
@@ -491,10 +503,13 @@ class Engine:
                 else:
                     self.broadcast({"type": "talking_done", "skipped": True})
                 continue
-            if self._speak_stop.is_set() or bool(self.cfg.get("muted")) or self.capturing:
+            if self._speak_stop.is_set() or bool(self.cfg.get("muted")) or self.capturing or not self._accept_speak:
                 continue
+            gen = self._speak_gen
             pcm, sr = self._synth(str(item))
             if pcm.size == 0:
+                continue
+            if gen != self._speak_gen or self._speak_stop.is_set() or not self._accept_speak:
                 continue
             if not session:
                 session = True
@@ -526,26 +541,27 @@ class Engine:
         return pcm, int(sr or 24000)
 
     def _play(self, pcm: np.ndarray, sr: int) -> bool:
-        stream = None
         try:
-            stream = sd.OutputStream(samplerate=sr, channels=1, dtype="float32")
-            stream.start()
-            for i in range(0, pcm.size, PLAY_BLOCK):
+            sd.play(pcm, samplerate=int(sr), blocking=False)
+            while True:
                 if self._speak_stop.is_set():
+                    sd.stop()
                     return False
-                block = pcm[i : i + PLAY_BLOCK].reshape(-1, 1)
-                stream.write(block)
-            return True
+                try:
+                    stream = sd.get_stream()
+                    active = bool(stream and stream.active)
+                except Exception:
+                    active = False
+                if not active:
+                    return not self._speak_stop.is_set()
+                time.sleep(0.01)
         except Exception as err:
             log(f"playback failed: {err}")
+            try:
+                sd.stop()
+            except Exception:
+                pass
             return True
-        finally:
-            if stream is not None:
-                try:
-                    stream.stop()
-                    stream.close()
-                except Exception:
-                    pass
 
     def wake_live(self) -> bool:
         return bool(self.cfg.get("wakeWord")) and self._wake not in (None, False)
@@ -701,6 +717,8 @@ async def session(ws, engine: Engine) -> None:
                     await engine.finish()
             elif kind == "list_devices":
                 await ws.send(json.dumps({"type": "devices", "devices": engine.list_devices()}))
+            elif kind == "speak_start":
+                engine.arm_speak()
             elif kind == "speak":
                 engine.enqueue_speak(str(msg.get("text") or ""))
             elif kind == "speak_flush":

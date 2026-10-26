@@ -46,6 +46,7 @@ function createSpeakQueue({ send }) {
   function start() {
     live = true;
     buf = '';
+    send({ type: 'speak_start' });
   }
 
   function flush() {
