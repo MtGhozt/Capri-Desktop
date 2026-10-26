@@ -18,6 +18,26 @@ function py(code) {
   return String(result.stdout || '').trim();
 }
 
+test('LM Studio origin strips the OpenAI /v1 suffix', () => {
+  const out = py(
+    "from vram import origin_from_base_url; print(origin_from_base_url('http://localhost:1235/v1'))",
+  );
+  assert.equal(out, 'http://localhost:1235');
+});
+
+test('only counts LM Studio models whose state is loaded', () => {
+  const out = py(
+    "from vram import model_is_loaded; "
+    + "print(int(model_is_loaded({'data':[{'id':'gemma','state':'not-loaded'}]}))); "
+    + "print(int(model_is_loaded({'data':[{'id':'gemma','state':'loaded'}]}))); "
+    + "print(int(model_is_loaded({'data':[{'id':'gemma'}]})))",
+  );
+  const [listed, loaded, missing] = out.split(/\s+/).map(Number);
+  assert.equal(listed, 0);
+  assert.equal(loaded, 1);
+  assert.equal(missing, 0);
+});
+
 test('reserves Gemma VRAM when the LLM is not loaded yet', () => {
   const out = py(
     'from vram import usable_vram_mib; print(usable_vram_mib(6530, False)); print(usable_vram_mib(1081, True)); print(usable_vram_mib(6530, True))',
