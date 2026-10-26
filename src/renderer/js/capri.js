@@ -1400,8 +1400,8 @@ export class Capri {
     this.busy = false;
   }
 
-  // Her intro, when she starts: her face big in the top right corner of the screen says hi,
-  // then dives down to where she stands and her body unfolds from it (fx.intro).
+  // Her intro, when she starts: she grabs the screen, says hi, then dives down to where she
+  // stands and her body unfolds from it (fx.intro).
   // `still`: no motion, it comes and goes where it is (Windows' animations off).
   async intro(at, { label = 'hi', caption = 'PROJECT CAPRICORN', still = reducedMotion.matches } = {}) {
     const p = this.p;
@@ -1421,10 +1421,14 @@ export class Capri {
       caption,
       still,
       onCue: (cue) => {
-        if (cue === 'open') this.voice.play('charge'); // her pieces coming in
-        else if (cue === 'tear') this.voice.play('teleport-in');
-        else if (cue === 'hi') this.voice.play('hello');
-        else if (cue === 'dive') this.voice.play('teleport-out');
+        if (cue === 'open') this.voice.play('charge'); // the edges of the screen crackling
+        else if (cue === 'hand') this.voice.play('land'); // a hand on the edge
+        else if (cue === 'wave') this.voice.play('rise'); // a hand off it, to wave
+        else if (cue === 'grab') {
+          this.voice.play('land'); // she slams into it
+          this.voice.play('bolt');
+        } else if (cue === 'hi') this.voice.play('hello');
+        else if (cue === 'slip') this.voice.play('teleport-out');
       },
     });
     await this.arrive(at, { face: this.facing, beam: false });

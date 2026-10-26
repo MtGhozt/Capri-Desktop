@@ -1,5 +1,5 @@
 import { Capri } from './capri.js';
-import { FxLayer } from './fx.js';
+import { FxLayer, GRAB_FRAMES } from './fx.js';
 import { Chip, Mask } from './chip.js';
 import { Panel } from './panel.js';
 import { Bubble } from './bubble.js';
@@ -30,7 +30,8 @@ async function boot() {
   const [config, image, intro, ...cutins] = await Promise.all([
     host.getConfig(),
     loadImage('../../assets/capri/capri-full.png'),
-    loadImage('../../assets/capri/intro-face.webp').catch(() => null), // her intro, frames of the show
+    Promise.all(GRAB_FRAMES.map((name) => loadImage(`../../assets/capri/intro-${name}.webp`).catch(() => null)))
+      .then((cels) => (cels[0] ? Object.fromEntries(GRAB_FRAMES.map((name, i) => [name, cels[i]])) : null)),
     ...CUTINS.map((name) => loadImage(`../../assets/capri/cutin-${name}.png`)),
     document.fonts.load('600 16px "Chakra Petch"'),
     document.fonts.load('400 11px "JetBrains Mono"'),
@@ -657,10 +658,10 @@ async function boot() {
     }
   });
 
-  // entrance: her face big in the corner says hi, then she dives down to her spot
-  // (put away last time: she starts in her biochip)
+  // entrance: she grabs the screen, says hi, then dives down to her spot
+  // (put away last time: she starts in her biochip; fx.intro false: skip the grab)
   if (config.visible === false) capri.stowNow();
-  else if (intro) await capri.intro(capri.spot('post'));
+  else if (config.fx?.intro !== false && intro) await capri.intro(capri.spot('post'));
   else await capri.materialize(capri.spot('post'));
   bumpIdle();
   if (config.guide?.welcome) {

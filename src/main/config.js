@@ -33,6 +33,7 @@ const DEFAULTS = {
   },
   fx: {
     glitch: true,
+    intro: true,           // boot grab-the-screen intro; false skips to materialize
   },
   voice: {
     enabled: true,
