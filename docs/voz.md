@@ -37,6 +37,8 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
 
 `sttModel`: `base`, `small` (default) o `medium`. Whisper corre en **CPU int8**; la GPU queda para el LLM (y el TTS de 3B).
 
+Idioma: no hay autodetección libre. Whisper elige solo **es** o **en** (`task=transcribe`, nunca translate). Si detecta otro idioma, usa **es**. Prompt fijo `Capri, choom, Matias` para los nombres. Wake word: umbral `0.25` (hey_jarvis suele puntuar ~0.3–0.4; 0.5 se lo come). En `pnpm dev` el sidecar loguea `wake score=...`.
+
 ## Uso
 
 - **Push-to-talk:** `Ctrl+Alt+V`. Mantener: graba hasta soltar (o silencio). Tocar una vez: corta sola tras ~700 ms de silencio (máximo ~15 s).

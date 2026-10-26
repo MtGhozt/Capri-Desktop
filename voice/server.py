@@ -22,9 +22,11 @@ WAKE_FRAME = 1280
 MAX_SECONDS = 15
 SILENCE_MS = 700
 MIN_SPEECH_MS = 250
-WAKE_THRESHOLD = 0.5
+WAKE_THRESHOLD = 0.25
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
+STT_PROMPT = "Capri, choom, Matias"
+STT_LANGS = ("es", "en")
 SILERO_URL = (
     "https://github.com/snakers4/silero-vad/raw/v5.1.2/"
     "src/silero_vad/data/silero_vad.onnx"
@@ -35,8 +37,24 @@ VK_MENU = 0x12
 VK_V = 0x56
 
 
+DEV = os.environ.get("CAPRI_DEV") == "1"
+
+
 def log(msg: str) -> None:
     print(f"[capri-voice] {msg}", flush=True)
+
+
+def as_pcm16(frame: np.ndarray) -> np.ndarray:
+    return np.ascontiguousarray(np.clip(frame * 32767.0, -32768, 32767).astype(np.int16))
+
+
+def wake_score_max(scores) -> tuple[float, dict]:
+    if not isinstance(scores, dict):
+        scores = {"score": scores}
+    out = {}
+    for key, raw in scores.items():
+        out[str(key)] = float(np.max(np.asarray(raw, dtype=np.float64)))
+    return (max(out.values()) if out else 0.0), out
 
 
 def ptt_held() -> bool:
@@ -141,6 +159,8 @@ class Engine:
         self._vad = None
         self._lock = threading.Lock()
         self._level_t = 0.0
+        self._wake_log_t = 0.0
+        self._wake_logged_shape = False
 
     def apply_cfg(self, patch: dict) -> None:
         before = (self.cfg.get("enabled"), self.cfg.get("inputDevice"))
@@ -210,7 +230,7 @@ class Engine:
                 custom = sorted(MODELS.glob(f"*{model}*.onnx"))
                 names = [str(custom[0])] if custom else [model]
                 self._wake = Model(wakeword_models=names, inference_framework="onnx")
-                log(f"wake word {model} ready")
+                log(f"wake word {model} ready threshold={WAKE_THRESHOLD} onnx={names}")
             except Exception as err:
                 log(f"wake word unavailable: {err}")
                 self._wake = False
@@ -237,7 +257,10 @@ class Engine:
                 callback=self._on_audio,
             )
             self.stream.start()
-            log(f"mic stream on device {device if device is not None else 'default'}")
+            log(
+                f"mic stream device={device if device is not None else 'default'} "
+                f"sr={self.stream.samplerate} ch={self.stream.channels} dtype=float32"
+            )
         except Exception as err:
             log(f"mic failed: {err}")
             self.broadcast({"type": "error", "message": str(err)})
@@ -287,21 +310,46 @@ class Engine:
         if self.capturing:
             self._capture_chunk(chunk, now)
             return
-        if self.cfg.get("wakeWord") and self._wake:
+        if self.wake_live():
             self._wake_chunk(chunk)
+
+    def wake_live(self) -> bool:
+        return bool(self.cfg.get("wakeWord")) and self._wake not in (None, False)
+
+    def arm_wake(self) -> None:
+        self.wake_buf = np.zeros(0, dtype=np.float32)
+        if self._wake not in (None, False):
+            try:
+                self._wake.reset()
+            except Exception as err:
+                log(f"wake reset failed: {err}")
+        if DEV:
+            log("wake armed")
 
     def _wake_chunk(self, chunk: np.ndarray) -> None:
         self.wake_buf = np.concatenate([self.wake_buf, chunk])
         while self.wake_buf.size >= WAKE_FRAME:
             frame = self.wake_buf[:WAKE_FRAME]
             self.wake_buf = self.wake_buf[WAKE_FRAME:]
-            pcm = np.clip(frame * 32767.0, -32768, 32767).astype(np.int16)
+            pcm = as_pcm16(frame)
+            if not self._wake_logged_shape:
+                self._wake_logged_shape = True
+                log(
+                    f"wake frame n={pcm.size} sr={SAMPLE_RATE} dtype={pcm.dtype} "
+                    f"rms={float(np.sqrt(np.mean(frame * frame))):.4f} mono=1"
+                )
             try:
                 scores = self._wake.predict(pcm)
-            except Exception:
-                return
-            vals = scores.values() if isinstance(scores, dict) else [scores]
-            if max((float(v) for v in vals), default=0.0) >= WAKE_THRESHOLD:
+            except Exception as err:
+                log(f"wake predict failed: {err}")
+                continue
+            peak, named = wake_score_max(scores)
+            now = time.monotonic()
+            if DEV and now - self._wake_log_t > 0.4:
+                self._wake_log_t = now
+                log(f"wake score={peak:.3f} {named}")
+            if peak >= WAKE_THRESHOLD:
+                log(f"wake hit score={peak:.3f} {named}")
                 self.begin_capture(hold=False)
 
     def _capture_chunk(self, chunk: np.ndarray, now: float) -> None:
@@ -342,6 +390,7 @@ class Engine:
             self.capturing = False
             audio = self.buffer.copy()
             self.buffer = np.zeros(0, dtype=np.float32)
+        self.arm_wake()
         self.broadcast({"type": "stopped"})
         if audio.size < SAMPLE_RATE * 0.2:
             return
@@ -352,13 +401,29 @@ class Engine:
         if text:
             self.broadcast({"type": "transcript", "text": text})
 
+    def pick_language(self, audio: np.ndarray) -> str:
+        forced = self.cfg.get("language") or "auto"
+        if forced in STT_LANGS:
+            return forced
+        try:
+            detected, prob, _rest = self._whisper.detect_language(audio)
+        except Exception as err:
+            log(f"stt language detect failed: {err}")
+            return "es"
+        if detected in STT_LANGS:
+            log(f"stt language {detected} p={float(prob):.2f}")
+            return detected
+        log(f"stt language {detected} not es/en, using es")
+        return "es"
+
     def transcribe(self, audio: np.ndarray) -> str:
         self.ensure_models()
-        lang = self.cfg.get("language") or "auto"
-        language = None if lang == "auto" else lang
+        language = self.pick_language(audio)
         segments, _info = self._whisper.transcribe(
             audio,
             language=language,
+            task="transcribe",
+            initial_prompt=STT_PROMPT,
             vad_filter=False,
             beam_size=1,
         )

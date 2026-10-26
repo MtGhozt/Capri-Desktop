@@ -136,6 +136,7 @@ function createVoice({ root, loadConfig, onEvent }) {
           PYTHONUTF8: '1',
           CAPRI_VOICE_TOKEN: token,
           CAPRI_VOICE_PORT: String(PORT),
+          CAPRI_DEV: process.argv.includes('--dev') ? '1' : '',
         },
       });
     } catch (err) {
