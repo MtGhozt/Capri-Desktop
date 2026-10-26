@@ -195,6 +195,10 @@ async function boot() {
   };
   capri.onClick = () => {
     if (appMenu.visible) return;
+    if (machine.get() === 'TALKING' || machine.get() === 'THINKING') {
+      host.interruptVoice();
+      return;
+    }
     if (bubble.visible) return;
     if (panel.visible) panel.hide();
     else brain.status();
@@ -434,8 +438,7 @@ async function boot() {
   host.onVoice(async (evt) => {
     const type = evt?.type;
     if (type === 'listening') {
-      const now = machine.get();
-      if (now === 'THINKING' || now === 'TALKING') return;
+      bubble.abortForListen();
       bumpIdle();
       await unfold({ chat: true });
       machine.set('LISTENING');
@@ -458,7 +461,28 @@ async function boot() {
       bubble.submitFromVoice(evt.text);
       return;
     }
+    if (type === 'talking') {
+      bumpIdle();
+      bubble.stopThink();
+      bubble.voicePlaying = true;
+      machine.set('TALKING');
+      bubble.onTalk?.(true);
+      return;
+    }
+    if (type === 'talking_done') {
+      bubble.voicePlaying = false;
+      bubble.onTalk?.(false);
+      bumpIdle();
+      if (evt?.skipped) bubble.holdVoice = false;
+      if (evt?.interrupted && bubble.busy) return;
+      if (machine.get() === 'LISTENING') return;
+      if ((machine.get() === 'TALKING' || machine.get() === 'THINKING') && !bubble.busy) {
+        machine.set('ONLINE');
+      }
+      return;
+    }
     if (type === 'notice') {
+      bubble.holdVoice = false;
       bumpIdle();
       await unfold();
       panel.say({
@@ -498,8 +522,15 @@ async function boot() {
     capri.setView(innerWidth, innerHeight);
   });
 
+  const applyVoiceHold = (cfg) => {
+    const kind = String(cfg.voice?.tts || 'kokoro').toLowerCase();
+    bubble.holdVoice = cfg.voice?.enabled !== false && !cfg.muted && kind !== 'off' && kind !== 'none' && kind !== 'false';
+  };
+  applyVoiceHold(config);
+
   host.onConfig((cfg) => {
     voice.configure(cfg);
+    applyVoiceHold(cfg);
     capri.wander = cfg.wander;
     capri.possessWindows = cfg.possess;
     idleMs = Number(cfg.idle?.dormantAfterMs);

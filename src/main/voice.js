@@ -72,6 +72,15 @@ function createVoice({ root, loadConfig, onEvent }) {
     return loadConfig().voice || {};
   }
 
+  function speakCfg() {
+    const cfg = loadConfig();
+    return {
+      ...voiceCfg(),
+      muted: Boolean(cfg.muted),
+      volume: cfg.volume,
+    };
+  }
+
   function send(payload) {
     if (!ws || ws.readyState !== 1) return;
     try { ws.send(JSON.stringify(payload)); } catch { /* sidecar gone */ }
@@ -111,7 +120,7 @@ function createVoice({ root, loadConfig, onEvent }) {
       try { msg = JSON.parse(String(ev.data || '')); } catch { return; }
       if (!msg || typeof msg !== 'object') return;
       emit(msg);
-      if (msg.type === 'ready') send({ type: 'config', ...voiceCfg() });
+      if (msg.type === 'ready') send({ type: 'config', ...speakCfg() });
     });
     sock.addEventListener('close', () => {
       connecting = false;
@@ -200,11 +209,11 @@ function createVoice({ root, loadConfig, onEvent }) {
   function applyConfig() {
     const cfg = loadConfig();
     if (cfg.voice && cfg.voice.enabled === false) {
-      send({ type: 'config', ...cfg.voice });
+      send({ type: 'config', ...speakCfg() });
       return;
     }
     if (!child) start();
-    else send({ type: 'config', ...voiceCfg() });
+    else send({ type: 'config', ...speakCfg() });
   }
 
   return {
@@ -213,8 +222,12 @@ function createVoice({ root, loadConfig, onEvent }) {
     applyConfig,
     pttStart: () => send({ type: 'ptt_start' }),
     pttStop: () => send({ type: 'ptt_stop' }),
+    speak: (text) => send({ type: 'speak', text }),
+    speakFlush: () => send({ type: 'speak_flush' }),
+    stopSpeak: () => send({ type: 'stop_speak' }),
     listDevices: () => send({ type: 'list_devices' }),
     devices: () => devices,
+    connected: () => Boolean(ws && ws.readyState === 1),
     resolveDir: () => resolveVoiceDir(root, loadConfig()),
   };
 }

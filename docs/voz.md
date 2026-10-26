@@ -1,6 +1,6 @@
-# Voz (fase 3A) — micrófono a texto
+# Voz — micrófono a texto y TTS (Kokoro)
 
-Capri escucha en local. El audio no sale de la PC. La respuesta sigue siendo texto en la burbuja; TTS es la fase 3B.
+Capri escucha y habla en local. El audio no sale de la PC.
 
 ## Setup
 
@@ -11,7 +11,9 @@ cd C:\Programacion\Capri\Capri-Desktop\voice
 .\setup.ps1
 ```
 
-Crea `voice/.venv` e instala las dependencias. Los modelos (faster-whisper, Silero VAD, openWakeWord) se bajan **la primera vez** que arranca el sidecar, a `voice/models/` (está en `.gitignore`).
+Crea `voice/.venv` e instala las dependencias. Los modelos (faster-whisper, Silero VAD, openWakeWord, Kokoro) se bajan **la primera vez** que arranca el sidecar, a `voice/models/` (está en `.gitignore`).
+
+Kokoro trae **espeak-ng** vía `espeakng-loader` (no hace falta instalarlo a mano). Si el loader falla, queda el fallback del espeak-ng de sistema.
 
 El instalador NSIS **no** incluye Python, el venv ni los modelos. Después de `pnpm dist`, seguí usando este `voice/` del checkout.
 
@@ -29,7 +31,8 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
   "wakeModel": "hey_jarvis",
   "sttModel": "auto",
   "language": "es",
-  "inputDevice": null
+  "inputDevice": null,
+  "tts": "kokoro"
 }
 ```
 
@@ -37,6 +40,19 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
 - **exe instalado**: poné una ruta absoluta al sidecar, por ejemplo `"dir": "C:\\Programacion\\Capri\\Capri-Desktop\\voice"`. Si falta `dir` o el `.venv`, Capri avisa en el panel (badge `VOICE`) y sigue con chat de texto. Logs: `%APPDATA%\capri-desktop\logs\voice.log`.
 
 `sttModel`: `auto` (default) intenta **medium en CUDA float16** si hay ≥ ~2.8 GB de VRAM libre; si no, **small en CPU int8**. Siempre `language=es`, `task=transcribe`, `beam_size=5`. Prompt fijo `Capri, choom, Matias`. Wake word: `voice.wakeThreshold` (default **0.2**). En `pnpm dev` el sidecar loguea `wake score=...`.
+
+`tts`: `"kokoro"` (default) o `"off"`. Mute y volumen del menú (`muted`, `volume` en la raíz del JSON) aplican al parlante del sidecar.
+
+## Hablar (TTS, fase 3B paso 1)
+
+Cuando el LLM responde, el sidecar sintetiza **por frase** con Kokoro ONNX en CPU, voz `ef_dora` (español), y reproduce con `sounddevice`. La primera frase no espera a que termine toda la respuesta.
+
+- Estado `TALKING` cuando empieza el audio; `ONLINE` cuando termina (el idle de 5 min cuenta desde ahí).
+- Mientras habla no corre STT (no se transcribe a sí misma). El wake word sigue activo con umbral **0.5** (vuelve a `wakeThreshold` al terminar).
+- Cortar: `Ctrl+Alt+V`, clic en Capri, o “Hey Jarvis”. Pasa a `LISTENING`.
+- `"tts": "off"` o mute: solo texto en la burbuja.
+
+La voz clonada (OmniVoice) es el paso 2.
 
 ## Uso
 

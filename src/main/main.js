@@ -14,6 +14,7 @@ const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
 const { createLms } = require('./lms');
 const { createVoice } = require('./voice');
+const { createSpeakQueue } = require('./speak');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
 
@@ -37,6 +38,7 @@ let lastWindows = null;
 let llm = null;
 let lms = null;
 let voice = null;
+let speakQueue = null;
 let voiceQueue = [];
 let chatOpen = false;
 let previousForeground = null;
@@ -227,6 +229,14 @@ function rendererConfig() {
   // --dev only: 10 s idle for testing. Never written to config.json.
   if (DEV) idle.dormantAfterMs = 10_000;
   return { ...cfg, idle, lang: resolveLang(cfg.lang), langSetting: cfg.lang, dev: DEV };
+}
+
+function ttsOn() {
+  const cfg = config.load();
+  if (cfg.muted) return false;
+  const kind = String(cfg.voice?.tts || 'kokoro').toLowerCase();
+  if (kind === 'off' || kind === 'none' || kind === 'false') return false;
+  return Boolean(voice?.connected?.());
 }
 
 function updateConfig(patch) {
@@ -490,15 +500,34 @@ function registerIpc() {
       overlay.webContents.send('chat:error', { kind: 'offline' });
       return { ok: false };
     }
+    speakQueue?.stop();
+    if (ttsOn()) speakQueue?.start();
     await llm.chat({
       user: line,
-      onToken: (piece) => overlay?.webContents.send('chat:token', piece),
-      onDone: (payload) => overlay?.webContents.send('chat:done', payload),
-      onError: (payload) => overlay?.webContents.send('chat:error', payload),
+      onToken: (piece) => {
+        overlay?.webContents.send('chat:token', piece);
+        if (ttsOn()) speakQueue?.feed(piece);
+      },
+      onDone: (payload) => {
+        if (ttsOn()) speakQueue?.flush();
+        overlay?.webContents.send('chat:done', payload);
+      },
+      onError: (payload) => {
+        speakQueue?.stop();
+        overlay?.webContents.send('chat:error', payload);
+      },
     });
     return { ok: true };
   });
-  ipcMain.on('chat:cancel', () => llm?.cancel());
+  ipcMain.on('chat:cancel', () => {
+    llm?.cancel();
+    speakQueue?.stop();
+  });
+  ipcMain.on('voice:interrupt', () => {
+    llm?.cancel();
+    speakQueue?.stop();
+    voice?.pttStart();
+  });
   ipcMain.on('chat:close', () => closeChat());
   ipcMain.handle('sounds:list', () => {
     try {
@@ -609,6 +638,14 @@ function main() {
       },
     });
     createOverlay();
+    speakQueue = createSpeakQueue({
+      send: (msg) => {
+        if (!voice) return;
+        if (msg.type === 'speak') voice.speak(msg.text);
+        else if (msg.type === 'speak_flush') voice.speakFlush();
+        else if (msg.type === 'stop_speak') voice.stopSpeak();
+      },
+    });
     voice.start();
     createTray();
     windowWatch = startWindowWatch({
@@ -625,7 +662,11 @@ function main() {
     });
     globalShortcut.register('Control+Alt+C', () => toggleVisible());
     globalShortcut.register('Control+Alt+T', () => toggleChat());
-    globalShortcut.register('Control+Alt+V', () => voice?.pttStart());
+    globalShortcut.register('Control+Alt+V', () => {
+      llm?.cancel();
+      speakQueue?.stop();
+      voice?.pttStart();
+    });
     screen.on('display-metrics-changed', fitOverlay);
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });

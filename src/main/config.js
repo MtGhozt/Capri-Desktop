@@ -45,6 +45,7 @@ const DEFAULTS = {
     language: 'es',
     inputDevice: null,
     debugSave: false,
+    tts: 'kokoro',           // 'kokoro' | 'off' (fase 3B paso 2 adds auto/omnivoice)
   },
 };
 

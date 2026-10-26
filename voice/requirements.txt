@@ -5,3 +5,5 @@ openwakeword>=0.6.0
 onnxruntime>=1.19.0
 websockets>=13.1
 urllib3>=2.2.0
+kokoro-onnx>=0.4.9
+espeakng-loader>=0.2.0

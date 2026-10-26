@@ -1,4 +1,4 @@
-"""Capri voice sidecar: mic -> VAD -> STT, local WebSocket on 127.0.0.1."""
+"""Capri voice sidecar: mic -> VAD -> STT, TTS playback, local WebSocket on 127.0.0.1."""
 from __future__ import annotations
 
 import asyncio
@@ -16,6 +16,8 @@ import numpy as np
 import sounddevice as sd
 import websockets
 
+from tts import load_engine
+
 ROOT = Path(__file__).resolve().parent
 MODELS = ROOT / "models"
 SAMPLE_RATE = 16000
@@ -28,6 +30,10 @@ MAX_SECONDS = 15
 SILENCE_MS = 700
 MIN_SPEECH_MS = 250
 WAKE_THRESHOLD = 0.2
+WAKE_WHILE_TALKING = 0.5
+SPEAK_FLUSH = object()
+SPEAK_STOP = object()
+PLAY_BLOCK = 2048
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
 STT_PROMPT = "Capri, choom, Matias"
@@ -189,6 +195,9 @@ class Engine:
             "language": "es",
             "inputDevice": None,
             "debugSave": False,
+            "tts": "kokoro",
+            "muted": False,
+            "volume": 0.7,
         }
         self.stream = None
         self.capturing = False
@@ -211,15 +220,25 @@ class Engine:
         self._audio_q = Queue(maxsize=MIC_QUEUE)
         self._audio_thread = None
         self._audio_run = False
+        self._tts = None
+        self._tts_lock = threading.Lock()
+        self._speak_q: Queue = Queue()
+        self._speak_stop = threading.Event()
+        self._speaking = False
+        self._speak_thread = threading.Thread(target=self._speak_loop, name="capri-tts", daemon=True)
+        self._speak_thread.start()
 
     def apply_cfg(self, patch: dict) -> None:
         before = (self.cfg.get("enabled"), self.cfg.get("inputDevice"))
+        was_muted = bool(self.cfg.get("muted"))
         for key in self.cfg:
             if key in patch:
                 self.cfg[key] = patch[key]
         after = (self.cfg.get("enabled"), self.cfg.get("inputDevice"))
         if after != before:
             self.restart_stream()
+        if bool(self.cfg.get("muted")) and not was_muted:
+            self.stop_speak()
 
     def list_devices(self) -> list[dict]:
         devices = []
@@ -260,6 +279,7 @@ class Engine:
                 self._vad = EnergyVAD()
         if self._whisper is None:
             self._whisper = self._load_whisper()
+        self.ensure_tts()
         if self._wake is None and self.cfg.get("wakeWord"):
             try:
                 Model, download_models = load_openwakeword()
@@ -302,7 +322,9 @@ class Engine:
         except (TypeError, ValueError):
             value = WAKE_THRESHOLD
         if value <= 0 or value >= 1:
-            return WAKE_THRESHOLD
+            value = WAKE_THRESHOLD
+        if self._speaking:
+            return max(value, WAKE_WHILE_TALKING)
         return value
 
     def restart_stream(self) -> None:
@@ -363,6 +385,8 @@ class Engine:
     def begin_capture(self, hold: bool) -> None:
         if not self.cfg.get("enabled") or self.stream is None:
             return
+        if self._speaking:
+            self.stop_speak()
         with self._lock:
             if self.capturing:
                 return
@@ -416,6 +440,112 @@ class Engine:
                 self._capture_chunk(chunk, now)
             elif self.wake_live():
                 self._wake_chunk(chunk)
+
+    def tts_enabled(self) -> bool:
+        kind = str(self.cfg.get("tts") or "kokoro").lower()
+        return kind not in ("off", "none", "false") and not bool(self.cfg.get("muted"))
+
+    def enqueue_speak(self, text: str) -> None:
+        if not self.tts_enabled() or self.capturing:
+            return
+        line = str(text or "").strip()
+        if not line:
+            return
+        self._speak_q.put(line)
+
+    def flush_speak(self) -> None:
+        if not self.tts_enabled():
+            self.broadcast({"type": "talking_done", "skipped": True})
+            return
+        self._speak_q.put(SPEAK_FLUSH)
+
+    def stop_speak(self) -> None:
+        self._speak_stop.set()
+        while True:
+            try:
+                self._speak_q.get_nowait()
+            except Empty:
+                break
+        self._speak_q.put(SPEAK_STOP)
+
+    def _speak_loop(self) -> None:
+        session = False
+        while True:
+            try:
+                item = self._speak_q.get()
+            except Exception:
+                continue
+            if item is SPEAK_STOP:
+                was = session or self._speaking
+                session = False
+                self._speaking = False
+                self._speak_stop.clear()
+                if was:
+                    self.broadcast({"type": "talking_done", "interrupted": True})
+                continue
+            if item is SPEAK_FLUSH:
+                if session:
+                    session = False
+                    self._speaking = False
+                    self.broadcast({"type": "talking_done", "interrupted": False})
+                else:
+                    self.broadcast({"type": "talking_done", "skipped": True})
+                continue
+            if self._speak_stop.is_set() or bool(self.cfg.get("muted")) or self.capturing:
+                continue
+            pcm, sr = self._synth(str(item))
+            if pcm.size == 0:
+                continue
+            if not session:
+                session = True
+                self._speaking = True
+                self.broadcast({"type": "talking"})
+            if not self._play(pcm, sr):
+                session = False
+                self._speaking = False
+                continue
+
+    def ensure_tts(self) -> None:
+        with self._tts_lock:
+            if self._tts is None:
+                self._tts = load_engine(str(self.cfg.get("tts") or "kokoro"), MODELS, log)
+
+    def _synth(self, text: str) -> tuple[np.ndarray, int]:
+        self.ensure_tts()
+        try:
+            pcm, sr = self._tts.speak(text)
+        except Exception as err:
+            log(f"tts failed: {err}")
+            return np.zeros(0, dtype=np.float32), 24000
+        try:
+            gain = float(self.cfg.get("volume") if self.cfg.get("volume") is not None else 0.7)
+        except (TypeError, ValueError):
+            gain = 0.7
+        gain = max(0.0, min(1.0, gain))
+        pcm = np.clip(np.asarray(pcm, dtype=np.float32) * gain, -1.0, 1.0)
+        return pcm, int(sr or 24000)
+
+    def _play(self, pcm: np.ndarray, sr: int) -> bool:
+        stream = None
+        try:
+            stream = sd.OutputStream(samplerate=sr, channels=1, dtype="float32")
+            stream.start()
+            for i in range(0, pcm.size, PLAY_BLOCK):
+                if self._speak_stop.is_set():
+                    return False
+                block = pcm[i : i + PLAY_BLOCK].reshape(-1, 1)
+                stream.write(block)
+            return True
+        except Exception as err:
+            log(f"playback failed: {err}")
+            return True
+        finally:
+            if stream is not None:
+                try:
+                    stream.stop()
+                    stream.close()
+                except Exception:
+                    pass
 
     def wake_live(self) -> bool:
         return bool(self.cfg.get("wakeWord")) and self._wake not in (None, False)
@@ -531,6 +661,7 @@ class Engine:
         log(f"debug wav {path}")
 
     def close(self) -> None:
+        self.stop_speak()
         self.stop_stream()
 
 
@@ -570,6 +701,12 @@ async def session(ws, engine: Engine) -> None:
                     await engine.finish()
             elif kind == "list_devices":
                 await ws.send(json.dumps({"type": "devices", "devices": engine.list_devices()}))
+            elif kind == "speak":
+                engine.enqueue_speak(str(msg.get("text") or ""))
+            elif kind == "speak_flush":
+                engine.flush_speak()
+            elif kind == "stop_speak":
+                engine.stop_speak()
     finally:
         engine.clients.discard(ws)
 

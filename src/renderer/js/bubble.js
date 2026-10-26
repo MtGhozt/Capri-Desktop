@@ -32,6 +32,8 @@ export class Bubble {
     this.onTalk = null;
     this.onOpenChange = null;
     this.boot = 'ready';
+    this.holdVoice = false;
+    this.voicePlaying = false;
     machine.onChange(() => this.paint());
 
     this.field.addEventListener('keydown', (e) => {
@@ -189,8 +191,10 @@ export class Bubble {
 
   onToken(piece) {
     if (!this.busy) return;
-    this.stopThink();
-    this.setState('TALKING');
+    if (!this.holdVoice) {
+      this.stopThink();
+      this.setState('TALKING');
+    }
     this.replyText += piece;
     if (this.replyEl) this.replyEl.textContent = this.replyText;
     this.scrollLog();
@@ -235,18 +239,20 @@ export class Bubble {
   decode(el, text) {
     clearInterval(this.decodeTimer);
     if (!el) {
-      this.setState('ONLINE');
+      if (!this.holdVoice && !this.voicePlaying) this.setState('ONLINE');
       return;
     }
     if (reducedMotion.matches || !text) {
       el.textContent = text;
-      this.setState('ONLINE');
-      this.onTalk?.(false);
+      if (!this.holdVoice && !this.voicePlaying) {
+        this.setState('ONLINE');
+        this.onTalk?.(false);
+      }
       return;
     }
     const chars = [...text];
     let done = 0;
-    this.setState('TALKING');
+    if (!this.holdVoice) this.setState('TALKING');
     this.onTalk?.(true);
     const step = () => {
       done = Math.min(chars.length, done + 2);
@@ -260,8 +266,10 @@ export class Bubble {
       if (done >= chars.length) {
         clearInterval(this.decodeTimer);
         el.textContent = text;
-        this.setState('ONLINE');
-        this.onTalk?.(false);
+        if (!this.holdVoice && !this.voicePlaying) {
+          this.setState('ONLINE');
+          this.onTalk?.(false);
+        }
       }
     };
     step();
@@ -289,6 +297,14 @@ export class Bubble {
     if (state === 'booting') this.machine.set('BOOTING');
     else if (state === 'failed') this.machine.set('OFFLINE');
     else if (!this.busy) this.machine.set('ONLINE');
+  }
+
+  abortForListen() {
+    this.stopThink();
+    clearInterval(this.decodeTimer);
+    this.busy = false;
+    this.voicePlaying = false;
+    this.onTalk?.(false);
   }
 
   setState(name, pct) {

@@ -28,4 +28,4 @@ if (-not (Test-Path $venvPy)) {
 & $venvPy -m pip install -U pip
 & $venvPy -m pip install -r (Join-Path $Root 'requirements.txt')
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'models') | Out-Null
-Write-Host 'Voice sidecar ready. Models download on first run into voice/models/.'
+Write-Host 'Voice sidecar ready. Models (Whisper, wake word, Kokoro) download on first run into voice/models/.'
