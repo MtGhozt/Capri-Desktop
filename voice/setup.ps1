@@ -32,9 +32,10 @@ if (-not (Test-Path $venvPy)) {
 & $venvPy -m pip install -U pip
 & $venvPy -m pip install -r (Join-Path $Root 'requirements.txt')
 if ($OmniVoice) {
-  Write-Host 'Installing PyTorch CUDA + OmniVoice (cloned voice). First run downloads k2-fsa/OmniVoice.'
-  & $venvPy -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+  Write-Host 'Installing pinned PyTorch CUDA (torch/torchaudio 2.11.0+cu130) + OmniVoice. First run downloads k2-fsa/OmniVoice.'
+  & $venvPy -m pip install --upgrade -r (Join-Path $Root 'requirements-torch.txt')
   & $venvPy -m pip install -r (Join-Path $Root 'requirements-omnivoice.txt')
+  & $venvPy -m pip check
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'models') | Out-Null
 Write-Host 'Voice sidecar ready. Models (Whisper, wake word, Kokoro) download on first run into voice/models/.'

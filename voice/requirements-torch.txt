@@ -1,0 +1,6 @@
+# PyTorch for Capri's voice sidecar, pinned: torch and torchaudio must be the same
+# version and the same CUDA build. OmniVoice 0.2.1 needs torch>=2.4; 2.11.0+cu130 is the
+# newest pair both projects share (torchaudio stops at 2.11.0), and it runs on the RTX 4060.
+--index-url https://download.pytorch.org/whl/cu130
+torch==2.11.0+cu130
+torchaudio==2.11.0+cu130
