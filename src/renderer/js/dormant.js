@@ -4,14 +4,18 @@ import { clamp, reducedMotion, sleep, tween } from './util.js';
 import { statusText } from './state.js';
 
 const RED = '#FF004D';
-const CYAN = '#00FFCC';
+const GREEN = '#33FF88';
 const EYE = '#000011';
+const IRIS = '#3D8CFF';
+const PUPIL = '#07070f';
 const GOLD = '#FFD700';
-const PUPIL = '#00FFFF';
-const PIXELS = ['#FFD700', '#FF004D', '#00FFCC'];
+const PURPLE = '#C44DFF';
+const PIXELS = ['#FFD700', '#FF004D', '#33FF88'];
 const FRAME = 1000 / 30;
-const CSS = 88;
-const TURN_MS = 7000;
+const BOIL = 1000 / 10;
+const CSS = 104;
+const TURN_MS = 8000;
+const SHARDS = 9;
 
 export class DormantWidget {
   constructor({ el, host }) {
@@ -19,6 +23,7 @@ export class DormantWidget {
     this.host = host;
     this.open = false;
     this.fx = true;
+    this.mode = 'DORMANT';
     this.x = 0;
     this.y = 0;
     this.view = { w: innerWidth, h: innerHeight };
@@ -29,6 +34,7 @@ export class DormantWidget {
     this.ctx = this.canvas.getContext('2d');
     this.born = 0;
     this.lastDraw = 0;
+    this.lastBoil = 0;
     this.starAlpha = 1;
     this.glitchUntil = 0;
     this.nextGlitch = 0;
@@ -36,7 +42,9 @@ export class DormantWidget {
     this.blinkUntil = 0;
     this.swap = false;
     this.particles = [];
+    this.shards = [];
     this.loop = this.loop.bind(this);
+    this.seedShards();
 
     this.el.addEventListener('click', (e) => {
       if (this.dragged) return;
@@ -55,7 +63,33 @@ export class DormantWidget {
   }
 
   setLabel(state, pct) {
+    this.mode = state || 'DORMANT';
     if (this.labelEl) this.labelEl.textContent = statusText(state, pct);
+  }
+
+  seedShards() {
+    this.shards = [];
+    for (let i = 0; i < SHARDS; i++) {
+      this.shards.push({
+        home: (i / SHARDS) * Math.PI * 2 - Math.PI / 2 + (Math.random() - 0.5) * 0.2,
+        color: i % 2 === 0 ? RED : GREEN,
+        fork: i === 1 || i === 4 || i === 7,
+        a: 0,
+        len: 22,
+        inner: 14,
+        w: 1.8,
+      });
+    }
+    this.boil();
+  }
+
+  boil() {
+    for (const s of this.shards) {
+      s.a = s.home + (Math.random() - 0.5) * 0.55;
+      s.len = 16 + Math.random() * 16;
+      s.inner = 12 + Math.random() * 5;
+      s.w = 1.2 + Math.random() * 1.5;
+    }
   }
 
   show() {
@@ -65,9 +99,11 @@ export class DormantWidget {
     this.el.hidden = false;
     this.place();
     this.born = performance.now();
+    this.lastBoil = this.born;
     this.nextGlitch = this.born + 400;
     this.nextBlink = this.born + 3000 + Math.random() * 2000;
     this.particles.length = 0;
+    this.boil();
     this.onOpenChange?.(true);
     requestAnimationFrame(this.loop);
   }
@@ -111,8 +147,8 @@ export class DormantWidget {
       this.x = widget.x;
       this.y = widget.y;
     } else {
-      this.x = Math.max(8, w - 260);
-      this.y = Math.max(8, h - 72);
+      this.x = Math.max(8, w - 140);
+      this.y = Math.max(8, h - 150);
     }
     this.place();
   }
@@ -157,6 +193,10 @@ export class DormantWidget {
     ctx.clearRect(0, 0, CSS, CSS);
 
     const live = this.liveFx();
+    if (live && now - this.lastBoil >= BOIL) {
+      this.lastBoil = now;
+      this.boil();
+    }
     if (live && now > this.nextBlink) {
       this.blinkUntil = now + 120;
       this.nextBlink = now + 3000 + Math.random() * 2000;
@@ -169,31 +209,29 @@ export class DormantWidget {
     }
     const peak = live && now < this.glitchUntil;
     if (!peak) this.swap = false;
-    const t = (now - this.born) / 1000;
     const spin = live ? -((now - this.born) / TURN_MS) * Math.PI * 2 : 0;
-    const breath = live ? 1 + 0.04 * Math.sin(t * 1.4) : 1;
     const blink = (!live || now >= this.blinkUntil) ? 1 : 0.08;
     const cx = CSS / 2;
     const cy = CSS / 2;
+    const rim = (this.mode === 'LISTENING' || this.mode === 'THINKING') ? GOLD : PURPLE;
 
-    if (live) this.tickParticles(now, cx, cy);
+    if (live) this.tickParticles(cx, cy);
 
     ctx.save();
     ctx.globalAlpha = this.starAlpha;
     ctx.translate(cx, cy);
-    ctx.scale(breath, breath);
     ctx.rotate(spin);
 
-    if (peak) {
+    if (peak || (live && Math.random() < 0.55)) {
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
-      this.petals(ctx, -1.8, 0, true);
-      this.petals(ctx, 1.8, 0, true);
+      this.drawShards(ctx, -1.6, 0);
+      this.drawShards(ctx, 1.6, 0);
       ctx.restore();
     }
-    this.petals(ctx, 0, 0, this.swap);
+    this.drawShards(ctx, 0, 0);
     ctx.rotate(-spin);
-    this.eye(ctx, blink);
+    this.eye(ctx, blink, rim);
     ctx.restore();
 
     if (live && this.starAlpha > 0.05) {
@@ -202,41 +240,55 @@ export class DormantWidget {
     }
   }
 
-  petals(ctx, dx, dy, swap) {
+  drawShards(ctx, dx, dy) {
     ctx.save();
     ctx.translate(dx, dy);
-    const a = swap ? CYAN : RED;
-    const b = swap ? RED : CYAN;
-    for (let i = 0; i < 4; i++) {
+    for (const s of this.shards) {
+      let fill = s.color;
+      if (this.swap) fill = fill === RED ? GREEN : RED;
       ctx.save();
-      ctx.rotate(i * Math.PI / 2);
-      this.petal(ctx, i % 2 === 0 ? 26 : 21);
-      ctx.fillStyle = i % 2 === 0 ? a : b;
+      ctx.rotate(s.a);
+      this.shardPath(ctx, s);
+      ctx.fillStyle = fill;
       ctx.fill();
+      ctx.strokeStyle = '#0a0010';
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
       ctx.restore();
     }
     ctx.restore();
   }
 
-  petal(ctx, outer) {
-    const half = outer * 0.22;
-    const waist = outer * 0.42;
-    const notch = outer * 0.14;
+  shardPath(ctx, s) {
+    const inner = s.inner;
+    const tip = inner + s.len;
+    const w = s.w;
     ctx.beginPath();
-    ctx.moveTo(0, -outer);
-    ctx.lineTo(half, -waist);
-    ctx.quadraticCurveTo(outer * 0.08, -notch * 0.35, 0, -notch);
-    ctx.quadraticCurveTo(-outer * 0.08, -notch * 0.35, -half, -waist);
-    ctx.closePath();
+    if (s.fork) {
+      const spread = w * 1.8;
+      ctx.moveTo(-w, -inner);
+      ctx.lineTo(0, -inner - s.len * 0.28);
+      ctx.lineTo(-spread, -tip);
+      ctx.closePath();
+      ctx.moveTo(w, -inner);
+      ctx.lineTo(0, -inner - s.len * 0.28);
+      ctx.lineTo(spread, -tip);
+      ctx.closePath();
+    } else {
+      ctx.moveTo(-w, -inner);
+      ctx.lineTo(w, -inner);
+      ctx.lineTo(0, -tip);
+      ctx.closePath();
+    }
   }
 
-  eye(ctx, blink) {
+  eye(ctx, blink, rim) {
     const diamond = () => {
       ctx.beginPath();
-      ctx.moveTo(0, -7.2);
-      ctx.lineTo(6.4, 0);
-      ctx.lineTo(0, 7.2);
-      ctx.lineTo(-6.4, 0);
+      ctx.moveTo(0, -8.2);
+      ctx.lineTo(7.4, 0);
+      ctx.lineTo(0, 8.2);
+      ctx.lineTo(-7.4, 0);
       ctx.closePath();
     };
     ctx.save();
@@ -245,23 +297,27 @@ export class DormantWidget {
     ctx.fillStyle = EYE;
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(0, 0, 3.1, 0, Math.PI * 2);
+    ctx.arc(0, 0, 4.1, 0, Math.PI * 2);
+    ctx.fillStyle = IRIS;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0.15, 1.85, 0, Math.PI * 2);
     ctx.fillStyle = PUPIL;
     ctx.fill();
     if (blink > 0.4) {
       ctx.beginPath();
-      ctx.arc(1.1, -1.05, 1.05, 0, Math.PI * 2);
-      ctx.fillStyle = '#e8ffff';
+      ctx.arc(1.15, -1.2, 1.05, 0, Math.PI * 2);
+      ctx.fillStyle = '#d6eeff';
       ctx.fill();
     }
     ctx.restore();
     diamond();
-    ctx.strokeStyle = GOLD;
-    ctx.lineWidth = 1.05;
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = 1.15;
     ctx.stroke();
   }
 
-  tickParticles(now, cx, cy) {
+  tickParticles(cx, cy) {
     const dt = FRAME / 1000;
     this.particles = this.particles.filter((p) => {
       p.x += p.vx * dt;
@@ -269,20 +325,20 @@ export class DormantWidget {
       p.life -= dt;
       return p.life > 0;
     });
-    while (this.particles.length < 10 && Math.random() < 0.28) {
+    while (this.particles.length < 8 && Math.random() < 0.28) {
       const a = Math.random() * Math.PI * 2;
       const sp = 18 + Math.random() * 28;
+      const life = 0.45 + Math.random() * 0.55;
       this.particles.push({
-        x: cx + Math.cos(a) * 6,
-        y: cy + Math.sin(a) * 6,
+        x: cx + Math.cos(a) * 8,
+        y: cy + Math.sin(a) * 8,
         vx: Math.cos(a) * sp,
         vy: Math.sin(a) * sp,
-        life: 0.45 + Math.random() * 0.55,
-        max: 1,
+        life,
+        max: life,
         size: 1 + Math.floor(Math.random() * 2),
         color: PIXELS[Math.floor(Math.random() * PIXELS.length)],
       });
-      this.particles[this.particles.length - 1].max = this.particles[this.particles.length - 1].life;
     }
   }
 
