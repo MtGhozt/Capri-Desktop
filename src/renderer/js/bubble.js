@@ -265,6 +265,7 @@ export class Bubble {
       this.scrollLog();
       if (done >= chars.length) {
         clearInterval(this.decodeTimer);
+        this.decodeTimer = null;
         el.textContent = text;
         if (!this.holdVoice && !this.voicePlaying) {
           this.setState('ONLINE');
@@ -300,11 +301,26 @@ export class Bubble {
   }
 
   abortForListen() {
+    const cutting = this.busy || this.voicePlaying || Boolean(this.decodeTimer);
     this.stopThink();
     clearInterval(this.decodeTimer);
-    this.busy = false;
+    this.decodeTimer = null;
     this.voicePlaying = false;
     this.onTalk?.(false);
+    if (cutting) this.settleInterrupted();
+    this.busy = false;
+  }
+
+  settleInterrupted() {
+    if (!this.replyEl) return;
+    let text = String(this.replyText || '').trim();
+    if (!text) text = '…';
+    else if (this.busy && !/[.!?…]$/.test(text)) text = `${text} …`;
+    this.replyText = text;
+    this.replyEl.textContent = text;
+    this.replyEl.classList.add('is-cut');
+    this.replyEl.parentElement?.classList.add('is-cut');
+    this.scrollLog();
   }
 
   setState(name, pct) {

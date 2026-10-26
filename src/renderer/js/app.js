@@ -474,7 +474,11 @@ async function boot() {
       bubble.onTalk?.(false);
       bumpIdle();
       if (evt?.skipped) bubble.holdVoice = false;
-      if (evt?.interrupted && bubble.busy) return;
+      if (evt?.interrupted) {
+        bubble.abortForListen();
+        if (machine.get() === 'TALKING' || machine.get() === 'THINKING') machine.set('ONLINE');
+        return;
+      }
       if (machine.get() === 'LISTENING') return;
       if ((machine.get() === 'TALKING' || machine.get() === 'THINKING') && !bubble.busy) {
         machine.set('ONLINE');

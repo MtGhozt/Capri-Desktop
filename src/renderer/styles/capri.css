@@ -544,6 +544,10 @@ body {
   overflow-wrap: anywhere;
 }
 
+.bubble__row.is-cut .bubble__text {
+  opacity: 0.78;
+}
+
 .bubble__prefix {
   color: var(--cyan);
   font-weight: 600;
