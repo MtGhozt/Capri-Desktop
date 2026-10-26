@@ -17,6 +17,7 @@ from server import (  # noqa: E402
     WAKE_FRAME,
     WAKE_THRESHOLD,
     as_pcm16,
+    load_openwakeword,
     wake_score_max,
 )
 
@@ -60,9 +61,7 @@ def tts_hey_jarvis(dest: Path) -> None:
 
 
 def load_model():
-    from openwakeword.model import Model
-    from openwakeword.utils import download_models
-
+    Model, download_models = load_openwakeword()
     download_models(model_names=["hey_jarvis"])
     return Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
 

@@ -22,7 +22,7 @@ WAKE_FRAME = 1280
 MAX_SECONDS = 15
 SILENCE_MS = 700
 MIN_SPEECH_MS = 250
-WAKE_THRESHOLD = 0.25
+WAKE_THRESHOLD = 0.2
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
 STT_PROMPT = "Capri, choom, Matias"
@@ -38,10 +38,38 @@ VK_V = 0x56
 
 
 DEV = os.environ.get("CAPRI_DEV") == "1"
+LOG_FILE = os.environ.get("CAPRI_VOICE_LOG") or ""
 
 
 def log(msg: str) -> None:
-    print(f"[capri-voice] {msg}", flush=True)
+    line = f"[capri-voice] {msg}"
+    print(line, flush=True)
+    if not LOG_FILE:
+        return
+    try:
+        path = Path(LOG_FILE)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(time.strftime("%Y-%m-%dT%H:%M:%S") + " " + line + "\n")
+    except OSError:
+        pass
+
+
+def load_openwakeword():
+    """Import the pip package, not a local file/folder named openwakeword."""
+    import sys
+    blocked = {os.path.abspath(p) for p in (os.getcwd(), str(ROOT), str(MODELS))}
+    saved = sys.path[:]
+    sys.path[:] = [p for p in saved if p not in ("", ".") and os.path.abspath(p) not in blocked]
+    try:
+        import openwakeword  # noqa: F401
+        from openwakeword.utils import download_models
+        from openwakeword.model import Model
+        if not hasattr(openwakeword, "FEATURE_MODELS"):
+            raise RuntimeError("openwakeword import was shadowed (no FEATURE_MODELS)")
+        return Model, download_models
+    finally:
+        sys.path[:] = saved
 
 
 def as_pcm16(frame: np.ndarray) -> np.ndarray:
@@ -138,6 +166,7 @@ class Engine:
         self.cfg = {
             "enabled": True,
             "wakeWord": True,
+            "wakeThreshold": WAKE_THRESHOLD,
             "wakeModel": "hey_jarvis",
             "sttModel": "small",
             "language": "auto",
@@ -222,18 +251,26 @@ class Engine:
             )
         if self._wake is None and self.cfg.get("wakeWord"):
             try:
-                from openwakeword.model import Model
-                from openwakeword.utils import download_models
+                Model, download_models = load_openwakeword()
                 model = self.cfg.get("wakeModel") or "hey_jarvis"
                 download_models(model_names=[model], target_directory=str(MODELS))
                 download_models(model_names=[model])
                 custom = sorted(MODELS.glob(f"*{model}*.onnx"))
                 names = [str(custom[0])] if custom else [model]
                 self._wake = Model(wakeword_models=names, inference_framework="onnx")
-                log(f"wake word {model} ready threshold={WAKE_THRESHOLD} onnx={names}")
+                log(f"wake word {model} ready threshold={self.wake_threshold()} onnx={names}")
             except Exception as err:
                 log(f"wake word unavailable: {err}")
                 self._wake = False
+
+    def wake_threshold(self) -> float:
+        try:
+            value = float(self.cfg.get("wakeThreshold"))
+        except (TypeError, ValueError):
+            value = WAKE_THRESHOLD
+        if value <= 0 or value >= 1:
+            return WAKE_THRESHOLD
+        return value
 
     def restart_stream(self) -> None:
         self.stop_stream()
@@ -348,8 +385,8 @@ class Engine:
             if DEV and now - self._wake_log_t > 0.4:
                 self._wake_log_t = now
                 log(f"wake score={peak:.3f} {named}")
-            if peak >= WAKE_THRESHOLD:
-                log(f"wake hit score={peak:.3f} {named}")
+            if peak >= self.wake_threshold():
+                log(f"wake hit score={peak:.3f} threshold={self.wake_threshold():.2f} {named}")
                 self.begin_capture(hold=False)
 
     def _capture_chunk(self, chunk: np.ndarray, now: float) -> None:

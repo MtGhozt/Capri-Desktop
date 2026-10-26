@@ -39,6 +39,7 @@ const DEFAULTS = {
     dir: null,               // null → repo voice/ in dev; set an absolute path for the installed exe
     pushToTalk: 'Ctrl+Alt+V',
     wakeWord: true,
+    wakeThreshold: 0.2,
     wakeModel: 'hey_jarvis',
     sttModel: 'small',
     language: 'auto',
