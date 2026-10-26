@@ -4,17 +4,35 @@ const fs = require('node:fs');
 
 const HISTORY_LIMIT = 16;
 const TIMEOUT_MS = 45000;
+const LOCAL_TZ = 'America/Costa_Rica';
 
 function createLlm({ loadConfig, personaPath }) {
   let history = [];
   let abort = null;
 
+  function localClock() {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: LOCAL_TZ,
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date());
+    const get = (type) => parts.find((p) => p.type === type)?.value || '';
+    return `${get('weekday')}, ${get('month')} ${get('day')}, ${get('year')} ${get('hour')}:${get('minute')} (${LOCAL_TZ})`;
+  }
+
   function systemPrompt() {
+    let base;
     try {
-      return fs.readFileSync(personaPath, 'utf8').trim();
+      base = fs.readFileSync(personaPath, 'utf8').trim();
     } catch {
-      return 'You are Capri. Short, sarcastic, loyal. 1–3 sentences.';
+      base = 'You are Capri. Short, sarcastic, loyal. 1–3 sentences.';
     }
+    return `${base}\n\nLocal date and time for Matias right now: ${localClock()}. If he asks the time or date, use that.`;
   }
 
   function cancel() {
