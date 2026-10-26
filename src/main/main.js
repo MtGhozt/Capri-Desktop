@@ -266,8 +266,12 @@ function menuState() {
   const t = TRAY[lang];
   const displays = screen.getAllDisplays();
   const current = targetDisplay().id;
+  const labels = {};
+  for (const [key, value] of Object.entries(t)) {
+    if (typeof value !== 'function') labels[key] = value;
+  }
   return {
-    labels: t,
+    labels,
     langs: [['auto', t.auto], ...LANGS.map((code) => [code, TRAY[code].name])],
     lang,
     langSetting: cfg.lang,
@@ -421,7 +425,11 @@ function registerIpc() {
     else shell.openPath(dir);
     return { found: true, dir, file: fs.existsSync(file) };
   });
-  ipcMain.handle('menu:get', () => menuState());
+  ipcMain.handle('menu:get', () => {
+    const state = menuState();
+    structuredClone(state);
+    return state;
+  });
   ipcMain.handle('menu:action', (_e, payload = {}) => {
     applyMenuAction(payload.id, payload.value);
     return { ok: true };

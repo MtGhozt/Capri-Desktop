@@ -29,14 +29,18 @@ export class AppMenu {
   }
 
   async show(x, y) {
-    const state = await this.host.getMenu();
-    this.expanded = null;
-    this.at = { x, y };
-    this.render(state);
-    this.open = true;
-    this.el.hidden = false;
-    this.place(x, y);
-    this.onOpenChange?.(true);
+    try {
+      const state = await this.host.getMenu();
+      this.expanded = null;
+      this.at = { x, y };
+      this.render(state);
+      this.open = true;
+      this.el.hidden = false;
+      this.place(x, y);
+      this.onOpenChange?.(true);
+    } catch (err) {
+      console.error('[capri] menu show failed', err);
+    }
   }
 
   hide() {

@@ -128,7 +128,8 @@ async function boot() {
   };
   window.addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    if (chip.visible && chip.contains(e.clientX, e.clientY, 0)) openAppMenu(e.clientX, e.clientY);
+    const onChip = chip.visible && chip.contains(e.clientX, e.clientY, 0);
+    if (onChip || capri.hit(e.clientX, e.clientY)) openAppMenu(e.clientX, e.clientY);
   });
   window.addEventListener('click', (e) => {
     if (chip.visible && chip.contains(e.clientX, e.clientY, 0)) comeOut();
