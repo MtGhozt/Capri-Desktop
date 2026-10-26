@@ -531,7 +531,7 @@ async function boot() {
   });
 
   const applyVoiceHold = (cfg) => {
-    const kind = String(cfg.voice?.tts || 'kokoro').toLowerCase();
+    const kind = String(cfg.voice?.tts || 'auto').toLowerCase();
     bubble.holdVoice = cfg.voice?.enabled !== false && !cfg.muted && kind !== 'off' && kind !== 'none' && kind !== 'false';
   };
   applyVoiceHold(config);

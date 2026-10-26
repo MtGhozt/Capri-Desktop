@@ -193,7 +193,9 @@ class Engine:
             "language": "es",
             "inputDevice": None,
             "debugSave": False,
-            "tts": "kokoro",
+            "tts": "auto",
+            "ttsRef": None,
+            "ttsSpeed": 1.0,
             "muted": False,
             "volume": 0.7,
         }
@@ -480,7 +482,7 @@ class Engine:
                 self._wake_chunk(chunk)
 
     def tts_enabled(self) -> bool:
-        kind = str(self.cfg.get("tts") or "kokoro").lower()
+        kind = str(self.cfg.get("tts") or "auto").lower()
         return kind not in ("off", "none", "false") and not bool(self.cfg.get("muted"))
 
     def _drain_speak_q(self) -> None:
@@ -644,7 +646,16 @@ class Engine:
     def ensure_tts(self) -> None:
         with self._tts_lock:
             if self._tts is None:
-                self._tts = load_engine(str(self.cfg.get("tts") or "kokoro"), MODELS, log)
+                self._tts = load_engine(
+                    str(self.cfg.get("tts") or "auto"),
+                    MODELS,
+                    log,
+                    voice_dir=ROOT,
+                    tts_ref=self.cfg.get("ttsRef"),
+                    tts_speed=self.cfg.get("ttsSpeed"),
+                    free_vram=free_vram_mib(),
+                    notice=lambda m: self.broadcast({"type": "notice", "message": m}),
+                )
 
     def _synth(self, text: str) -> tuple[np.ndarray, int]:
         self.ensure_tts()

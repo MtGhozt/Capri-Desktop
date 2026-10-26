@@ -266,7 +266,7 @@ function goSleepReply() {
 function ttsOn() {
   const cfg = config.load();
   if (cfg.muted) return false;
-  const kind = String(cfg.voice?.tts || 'kokoro').toLowerCase();
+  const kind = String(cfg.voice?.tts || 'auto').toLowerCase();
   return kind !== 'off' && kind !== 'none' && kind !== 'false';
 }
 
