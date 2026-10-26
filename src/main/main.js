@@ -235,8 +235,7 @@ function ttsOn() {
   const cfg = config.load();
   if (cfg.muted) return false;
   const kind = String(cfg.voice?.tts || 'kokoro').toLowerCase();
-  if (kind === 'off' || kind === 'none' || kind === 'false') return false;
-  return Boolean(voice?.connected?.());
+  return kind !== 'off' && kind !== 'none' && kind !== 'false';
 }
 
 function updateConfig(patch) {
@@ -500,8 +499,8 @@ function registerIpc() {
       overlay.webContents.send('chat:error', { kind: 'offline' });
       return { ok: false };
     }
-    speakQueue?.stop();
     if (ttsOn()) speakQueue?.start();
+    else speakQueue?.stop();
     await llm.chat({
       user: line,
       onToken: (piece) => {

@@ -226,6 +226,7 @@ class Engine:
         self._speaking = False
         self._accept_speak = True
         self._speak_gen = 0
+        self._out = None
         self._speak_thread = threading.Thread(target=self._speak_loop, name="capri-tts", daemon=True)
         self._speak_thread.start()
 
@@ -446,38 +447,64 @@ class Engine:
         kind = str(self.cfg.get("tts") or "kokoro").lower()
         return kind not in ("off", "none", "false") and not bool(self.cfg.get("muted"))
 
-    def arm_speak(self) -> None:
-        self._accept_speak = True
-
-    def enqueue_speak(self, text: str) -> None:
-        if not self._accept_speak or not self.tts_enabled() or self.capturing:
-            return
-        line = str(text or "").strip()
-        if not line:
-            return
-        self._speak_q.put(line)
-
-    def flush_speak(self) -> None:
-        if not self.tts_enabled():
-            self.broadcast({"type": "talking_done", "skipped": True})
-            return
-        if not self._accept_speak:
-            return
-        self._speak_q.put(SPEAK_FLUSH)
-
-    def stop_speak(self) -> None:
-        self._accept_speak = False
-        self._speak_gen += 1
-        self._speak_stop.set()
-        try:
-            sd.stop()
-        except Exception:
-            pass
+    def _drain_speak_q(self) -> None:
         while True:
             try:
                 self._speak_q.get_nowait()
             except Empty:
                 break
+
+    def _abort_out(self) -> None:
+        out = self._out
+        self._out = None
+        if out is None:
+            return
+        try:
+            out.abort()
+        except Exception:
+            pass
+        try:
+            out.close()
+        except Exception:
+            pass
+
+    def arm_speak(self) -> None:
+        log("speak_start")
+        self._speak_gen += 1
+        self._speak_stop.set()
+        self._abort_out()
+        self._drain_speak_q()
+        self._speak_stop.clear()
+        self._accept_speak = True
+
+    def enqueue_speak(self, text: str) -> None:
+        line = str(text or "").strip()
+        if not line:
+            return
+        if not self.tts_enabled():
+            log("speak drop tts=off/muted")
+            return
+        if not self._accept_speak:
+            log(f"speak drop accept=0 {line[:48]!r}")
+            return
+        log(f"speak queued n={len(line)} {line[:48]!r}")
+        self._speak_q.put(line)
+
+    def flush_speak(self) -> None:
+        if not self.tts_enabled() or not self._accept_speak:
+            log("speak_flush skipped")
+            self.broadcast({"type": "talking_done", "skipped": True})
+            return
+        log("speak_flush")
+        self._speak_q.put(SPEAK_FLUSH)
+
+    def stop_speak(self) -> None:
+        log("stop_speak")
+        self._accept_speak = False
+        self._speak_gen += 1
+        self._speak_stop.set()
+        self._abort_out()
+        self._drain_speak_q()
         self._speak_q.put(SPEAK_STOP)
 
     def _speak_loop(self) -> None:
@@ -492,6 +519,7 @@ class Engine:
                 session = False
                 self._speaking = False
                 self._speak_stop.clear()
+                log(f"talking_done interrupted={was}")
                 if was:
                     self.broadcast({"type": "talking_done", "interrupted": True})
                 continue
@@ -499,23 +527,31 @@ class Engine:
                 if session:
                     session = False
                     self._speaking = False
+                    log("talking_done")
                     self.broadcast({"type": "talking_done", "interrupted": False})
                 else:
+                    log("talking_done skipped")
                     self.broadcast({"type": "talking_done", "skipped": True})
                 continue
-            if self._speak_stop.is_set() or bool(self.cfg.get("muted")) or self.capturing or not self._accept_speak:
+            if self._speak_stop.is_set() or not self._accept_speak:
+                log("speak skip stale")
                 continue
             gen = self._speak_gen
+            t0 = time.perf_counter()
             pcm, sr = self._synth(str(item))
+            ms = (time.perf_counter() - t0) * 1000
+            log(f"synth {ms:.0f}ms samples={pcm.size} sr={sr}")
             if pcm.size == 0:
                 continue
             if gen != self._speak_gen or self._speak_stop.is_set() or not self._accept_speak:
+                log("speak drop after synth")
                 continue
             if not session:
                 session = True
                 self._speaking = True
+                log("talking")
                 self.broadcast({"type": "talking"})
-            if not self._play(pcm, sr):
+            if not self._play(pcm, sr, gen):
                 session = False
                 self._speaking = False
                 continue
@@ -540,28 +576,31 @@ class Engine:
         pcm = np.clip(np.asarray(pcm, dtype=np.float32) * gain, -1.0, 1.0)
         return pcm, int(sr or 24000)
 
-    def _play(self, pcm: np.ndarray, sr: int) -> bool:
+    def _play(self, pcm: np.ndarray, sr: int, gen: int) -> bool:
+        stream = None
+        block = 2048
         try:
-            sd.play(pcm, samplerate=int(sr), blocking=False)
-            while True:
-                if self._speak_stop.is_set():
-                    sd.stop()
+            stream = sd.OutputStream(samplerate=int(sr), channels=1, dtype="float32")
+            self._out = stream
+            stream.start()
+            for i in range(0, pcm.size, block):
+                if self._speak_stop.is_set() or gen != self._speak_gen:
+                    self._abort_out()
                     return False
-                try:
-                    stream = sd.get_stream()
-                    active = bool(stream and stream.active)
-                except Exception:
-                    active = False
-                if not active:
-                    return not self._speak_stop.is_set()
-                time.sleep(0.01)
+                chunk = pcm[i : i + block].reshape(-1, 1)
+                stream.write(chunk)
+            return True
         except Exception as err:
             log(f"playback failed: {err}")
-            try:
-                sd.stop()
-            except Exception:
-                pass
             return True
+        finally:
+            if self._out is stream and stream is not None:
+                try:
+                    stream.stop()
+                    stream.close()
+                except Exception:
+                    pass
+                self._out = None
 
     def wake_live(self) -> bool:
         return bool(self.cfg.get("wakeWord")) and self._wake not in (None, False)

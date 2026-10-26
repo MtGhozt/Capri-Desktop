@@ -82,6 +82,15 @@ function createVoice({ root, loadConfig, onEvent }) {
   }
 
   function send(payload) {
+    const kind = payload?.type;
+    if (kind === 'speak' || kind === 'speak_start' || kind === 'speak_flush' || kind === 'stop_speak') {
+      const extra = kind === 'speak' ? ` ${String(payload.text || '').length}c` : '';
+      if (!ws || ws.readyState !== 1) {
+        appendVoiceLog(logFile, `[capri] ws skip ${kind}${extra}`);
+        return;
+      }
+      appendVoiceLog(logFile, `[capri] ws ${kind}${extra}`);
+    }
     if (!ws || ws.readyState !== 1) return;
     try { ws.send(JSON.stringify(payload)); } catch { /* sidecar gone */ }
   }
