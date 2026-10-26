@@ -197,6 +197,25 @@ export class Capri {
     return false;
   }
 
+  // Axis-aligned box around the cut-out, for placing the overlay menu beside her.
+  bounds() {
+    const s = this.scale;
+    const fy = this.pos.y + this.bob;
+    const head = this.head();
+    const left = this.facing === 1
+      ? this.pos.x - SPRITE.feet.x * s
+      : this.pos.x - (SPRITE.width - SPRITE.feet.x) * s;
+    const right = this.facing === 1
+      ? this.pos.x + (SPRITE.width - SPRITE.feet.x) * s
+      : this.pos.x + SPRITE.feet.x * s;
+    return {
+      left,
+      right,
+      top: head.top,
+      bottom: fy + (SPRITE.height - SPRITE.feet.y) * s,
+    };
+  }
+
   faceCenter() {
     this.facing = this.pos.x > this.view.w / 2 ? 1 : -1;
   }

@@ -138,9 +138,17 @@ async function boot() {
     refreshHit();
     hoverChip();
   });
-  const openAppMenu = (x, y) => {
+  const menuAvoid = (x, y) => {
+    if (dormant.contains(x, y)) return dormant.rect();
+    if (chip.visible && chip.contains(x, y, 0)) {
+      return { left: chip.x, top: chip.y, right: chip.x + chip.w, bottom: chip.y + chip.h };
+    }
+    if (!capri.hidden && capri.p.alpha >= 0.5) return capri.bounds();
+    return { left: x, top: y, right: x, bottom: y };
+  };
+  const openAppMenu = (x, y, avoid) => {
     setInteractive(true);
-    appMenu.show(x, y);
+    appMenu.show(x, y, avoid || menuAvoid(x, y));
   };
   const onAppMenuTarget = (x, y) => (
     (chip.visible && chip.contains(x, y, 0)) || dormant.contains(x, y) || capri.hit(x, y)
@@ -200,7 +208,7 @@ async function boot() {
   };
   appMenu.onOpenChange = () => refreshHit();
   dormant.onOpenChange = () => refreshHit();
-  capri.onMenu = (at) => openAppMenu(at?.x ?? capri.head().x, at?.y ?? capri.head().y);
+  capri.onMenu = (at) => openAppMenu(at?.x ?? capri.head().x, at?.y ?? capri.head().y, capri.bounds());
 
   let idleMs = Number(config.idle?.dormantAfterMs);
   let glitchFx = config.fx?.glitch !== false;

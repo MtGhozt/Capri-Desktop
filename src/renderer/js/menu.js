@@ -1,5 +1,7 @@
 // Overlay context menu. Same actions as the tray, drawn like the chat bubble.
 
+import { clamp } from './util.js';
+
 export class AppMenu {
   constructor({ el, host, folded }) {
     this.el = el;
@@ -37,7 +39,7 @@ export class AppMenu {
     return this.open || this.opening;
   }
 
-  async show(x, y) {
+  async show(x, y, avoid) {
     this.opening = true;
     this.openedAt = performance.now();
     this.onOpenChange?.(true);
@@ -45,10 +47,11 @@ export class AppMenu {
       const state = await this.host.getMenu({ folded: this.folded() });
       this.expanded = null;
       this.at = { x, y };
+      this.avoid = avoid || { left: x, top: y, right: x, bottom: y };
       this.render(state);
       this.open = true;
       this.el.hidden = false;
-      this.place(x, y);
+      this.place();
       this.openedAt = performance.now();
       this.onOpenChange?.(true);
     } catch (err) {
@@ -76,13 +79,44 @@ export class AppMenu {
     return this.el.getBoundingClientRect();
   }
 
-  place(x, y) {
+  place() {
     const pad = 8;
-    const w = this.el.offsetWidth;
-    const h = this.el.offsetHeight;
-    const left = Math.max(pad, Math.min(x, innerWidth - w - pad));
-    const top = Math.max(pad, Math.min(y, innerHeight - h - pad));
-    this.el.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+    const mw = this.el.offsetWidth;
+    const mh = this.el.offsetHeight;
+    const vw = innerWidth;
+    const vh = innerHeight;
+    const a = this.avoid || { left: this.at.x, top: this.at.y, right: this.at.x, bottom: this.at.y };
+    const maxL = Math.max(pad, vw - mw - pad);
+    const maxT = Math.max(pad, vh - mh - pad);
+    const snap = (left, top) => ({
+      left: clamp(left, pad, maxL),
+      top: clamp(top, pad, maxT),
+    });
+    const slots = [
+      { left: a.right + pad, top: a.top },
+      { left: a.right + pad, top: a.bottom - mh },
+      { left: a.left - pad - mw, top: a.top },
+      { left: a.left - pad - mw, top: a.bottom - mh },
+      { left: a.left, top: a.bottom + pad },
+      { left: a.right - mw, top: a.bottom + pad },
+      { left: a.left, top: a.top - pad - mh },
+      { left: a.right - mw, top: a.top - pad - mh },
+    ];
+    const onScreen = (p) => (
+      p.left >= pad && p.top >= pad && p.left + mw <= vw - pad && p.top + mh <= vh - pad
+    );
+    const overlap = (p) => {
+      const x = Math.max(0, Math.min(p.left + mw, a.right) - Math.max(p.left, a.left));
+      const y = Math.max(0, Math.min(p.top + mh, a.bottom) - Math.max(p.top, a.top));
+      return x * y;
+    };
+    let best = null;
+    for (let i = 0; i < slots.length; i++) {
+      const p = snap(slots[i].left, slots[i].top);
+      const score = (onScreen(p) ? 0 : 1e9) + overlap(p) + i * 0.01;
+      if (!best || score < best.score) best = { ...p, score };
+    }
+    this.el.style.transform = `translate3d(${Math.round(best.left)}px, ${Math.round(best.top)}px, 0)`;
   }
 
   render(state) {
@@ -181,7 +215,7 @@ export class AppMenu {
     rows.push(item(t.quit, { action: () => this.act('quit') }));
 
     this.el.replaceChildren(...rows);
-    if (this.open && this.at) this.place(this.at.x, this.at.y);
+    if (this.open && this.at) this.place();
   }
 
   toggle(name, state) {
