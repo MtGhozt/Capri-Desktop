@@ -78,6 +78,7 @@ function createVoice({ root, loadConfig, onEvent }) {
       ...voiceCfg(),
       muted: Boolean(cfg.muted),
       volume: cfg.volume,
+      llmBaseUrl: cfg.llm?.baseUrl || 'http://localhost:1235/v1',
     };
   }
 

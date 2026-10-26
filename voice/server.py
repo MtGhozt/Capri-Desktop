@@ -17,6 +17,7 @@ import sounddevice as sd
 import websockets
 
 from tts import load_engine
+from vram import GEMMA_RESERVE_MIB, llm_has_model, usable_vram_mib
 
 ROOT = Path(__file__).resolve().parent
 MODELS = ROOT / "models"
@@ -26,6 +27,7 @@ MIC_BLOCK = 4096
 MIC_QUEUE = 48
 WAKE_FRAME = 1280
 MEDIUM_VRAM_MIB = 2800
+LISTEN_TIMEOUT_S = 10.0
 MAX_SECONDS = 15
 SILENCE_MS = 700
 MIN_SPEECH_MS = 250
@@ -196,6 +198,7 @@ class Engine:
             "tts": "auto",
             "ttsRef": None,
             "ttsSpeed": 1.0,
+            "llmBaseUrl": "http://localhost:1235/v1",
             "muted": False,
             "volume": 0.7,
         }
@@ -213,6 +216,8 @@ class Engine:
         self._wake = None
         self._vad = None
         self._lock = threading.Lock()
+        self._models_lock = threading.Lock()
+        self._cfg_ready = False
         self._level_t = 0.0
         self._wake_log_t = 0.0
         self._wake_logged_shape = False
@@ -247,6 +252,7 @@ class Engine:
             self.restart_stream()
         if bool(self.cfg.get("muted")) and not was_muted:
             self.stop_speak()
+        self._cfg_ready = True
 
     def list_devices(self) -> list[dict]:
         devices = []
@@ -274,45 +280,65 @@ class Engine:
         else:
             self.broadcast(payload)
 
+    def _vram_budget(self) -> tuple[int, int, bool]:
+        free = free_vram_mib()
+        base = str(self.cfg.get("llmBaseUrl") or "http://localhost:1235/v1")
+        loaded = llm_has_model(base)
+        usable = usable_vram_mib(free, loaded)
+        reserve = 0 if loaded else GEMMA_RESERVE_MIB
+        log(f"vram free ~{free} MiB usable ~{usable} MiB llm_loaded={int(loaded)} reserve={reserve}")
+        return free, usable, loaded
+
+    def _tts_wants_gpu(self) -> bool:
+        return str(self.cfg.get("tts") or "auto").lower() in ("auto", "omnivoice")
+
     def ensure_models(self) -> None:
-        MODELS.mkdir(parents=True, exist_ok=True)
-        if self._vad is None:
-            path = MODELS / "silero_vad.onnx"
-            try:
-                download(SILERO_URL, path)
-                self._vad = SileroVAD(path)
-                log("silero vad ready")
-            except Exception as err:
-                log(f"silero vad fallback to energy: {err}")
-                self._vad = EnergyVAD()
-        if self._whisper is None:
-            self._whisper = self._load_whisper()
-        self.ensure_tts()
-        if self._wake is None and self.cfg.get("wakeWord"):
-            try:
-                Model, download_models = load_openwakeword()
-                model = self.cfg.get("wakeModel") or "hey_jarvis"
-                download_models(model_names=[model], target_directory=str(MODELS))
-                download_models(model_names=[model])
-                custom = sorted(MODELS.glob(f"*{model}*.onnx"))
-                names = [str(custom[0])] if custom else [model]
-                self._wake = Model(wakeword_models=names, inference_framework="onnx")
-                log(f"wake word {model} ready threshold={self.wake_threshold()} onnx={names}")
-            except Exception as err:
-                log(f"wake word unavailable: {err}")
-                self._wake = False
+        with self._models_lock:
+            MODELS.mkdir(parents=True, exist_ok=True)
+            if self._vad is None:
+                path = MODELS / "silero_vad.onnx"
+                try:
+                    download(SILERO_URL, path)
+                    self._vad = SileroVAD(path)
+                    log("silero vad ready")
+                except Exception as err:
+                    log(f"silero vad fallback to energy: {err}")
+                    self._vad = EnergyVAD()
+            if self._wake is None and self.cfg.get("wakeWord"):
+                try:
+                    Model, download_models = load_openwakeword()
+                    model = self.cfg.get("wakeModel") or "hey_jarvis"
+                    download_models(model_names=[model], target_directory=str(MODELS))
+                    download_models(model_names=[model])
+                    custom = sorted(MODELS.glob(f"*{model}*.onnx"))
+                    names = [str(custom[0])] if custom else [model]
+                    self._wake = Model(wakeword_models=names, inference_framework="onnx")
+                    log(f"wake word {model} ready threshold={self.wake_threshold()} onnx={names}")
+                except Exception as err:
+                    log(f"wake word unavailable: {err}")
+                    self._wake = False
+            if self._cfg_ready:
+                self.ensure_tts()
+            elif self._tts is None:
+                log("tts waits for config")
+            if self._whisper is None:
+                self._whisper = self._load_whisper()
 
     def _load_whisper(self):
         from faster_whisper import WhisperModel
         root = str(MODELS / "whisper")
         wanted = str(self.cfg.get("sttModel") or "auto").lower()
         self._stt_beam = 5
-        free = free_vram_mib()
-        log(f"vram free ~{free} MiB")
-        try_medium = wanted in ("auto", "medium") and free >= MEDIUM_VRAM_MIB
+        free, usable, _loaded = self._vram_budget()
+        keep_gpu = self._tts_wants_gpu()
+        try_medium = (
+            not keep_gpu
+            and wanted in ("auto", "medium")
+            and usable >= MEDIUM_VRAM_MIB
+        )
         if try_medium:
             try:
-                log("loading whisper medium (cuda float16)")
+                log(f"loading whisper medium (cuda float16) vram_free={free} vram_usable={usable}")
                 model = WhisperModel("medium", device="cuda", compute_type="float16", download_root=root)
                 log("whisper medium cuda ready")
                 return model
@@ -321,7 +347,11 @@ class Engine:
         name = "small" if wanted in ("auto", "medium") else wanted
         if name not in ("base", "small", "medium"):
             name = "small"
-        log(f"loading whisper {name} (cpu int8) beam={self._stt_beam}")
+        reason = "tts keeps gpu for omnivoice" if keep_gpu else "cpu"
+        log(
+            f"loading whisper {name} (cpu int8) reason={reason} beam={self._stt_beam} "
+            f"vram_free={free} vram_usable={usable}"
+        )
         return WhisperModel(name, device="cpu", compute_type="int8", download_root=root)
 
     def wake_threshold(self) -> float:
@@ -359,11 +389,23 @@ class Engine:
         self._set_speaking(False)
         self.broadcast({"type": "talking_done", "skipped": False})
 
+    def _maybe_listen_timeout(self) -> None:
+        if not self.capturing or self.hold:
+            return
+        if time.monotonic() - self.started_at < LISTEN_TIMEOUT_S:
+            return
+        log(
+            f"listen timeout after {LISTEN_TIMEOUT_S:.0f}s "
+            f"speech_ms={self.speech_ms:.0f} silence_ms={self.silence_ms:.0f} samples={self.buffer.size}"
+        )
+        asyncio.run_coroutine_threadsafe(self.finish(reason="timeout"), self.loop)
+
     def _idle_watch(self) -> None:
         while True:
             time.sleep(0.25)
             try:
                 self._maybe_idle_talk()
+                self._maybe_listen_timeout()
             except Exception:
                 pass
 
@@ -646,6 +688,7 @@ class Engine:
     def ensure_tts(self) -> None:
         with self._tts_lock:
             if self._tts is None:
+                free, usable, _loaded = self._vram_budget()
                 self._tts = load_engine(
                     str(self.cfg.get("tts") or "auto"),
                     MODELS,
@@ -653,7 +696,8 @@ class Engine:
                     voice_dir=ROOT,
                     tts_ref=self.cfg.get("ttsRef"),
                     tts_speed=self.cfg.get("ttsSpeed"),
-                    free_vram=free_vram_mib(),
+                    free_vram=free,
+                    usable_vram=usable,
                     notice=lambda m: self.broadcast({"type": "notice", "message": m}),
                 )
 
@@ -759,6 +803,7 @@ class Engine:
                     self.silence_ms += dt
             should_cut = (
                 elapsed >= MAX_SECONDS
+                or (not self.hold and elapsed >= LISTEN_TIMEOUT_S)
                 or (
                     not self.hold
                     and self.speech_ms >= MIN_SPEECH_MS
@@ -766,25 +811,42 @@ class Engine:
                 )
             )
             if should_cut:
-                asyncio.run_coroutine_threadsafe(self.finish(), self.loop)
+                why = "max" if elapsed >= MAX_SECONDS else "timeout" if elapsed >= LISTEN_TIMEOUT_S else "vad"
+                asyncio.run_coroutine_threadsafe(self.finish(reason=why), self.loop)
 
-    async def finish(self) -> None:
+    async def finish(self, reason: str = "vad") -> None:
         with self._lock:
             if not self.capturing:
                 return
             self.capturing = False
             audio = self.buffer.copy()
+            speech_ms = self.speech_ms
+            silence_ms = self.silence_ms
             self.buffer = np.zeros(0, dtype=np.float32)
+        log(
+            f"listen end reason={reason} speech_ms={speech_ms:.0f} "
+            f"silence_ms={silence_ms:.0f} samples={audio.size}"
+        )
         self.arm_wake()
         self.broadcast({"type": "stopped"})
         if audio.size < SAMPLE_RATE * 0.2:
+            log(f"listen drop too-short samples={audio.size} reason={reason}")
             return
         if self.cfg.get("debugSave"):
             self._debug_wav(audio)
-        text = await asyncio.to_thread(self.transcribe, audio)
+        try:
+            text = await asyncio.wait_for(asyncio.to_thread(self.transcribe, audio), timeout=15)
+        except asyncio.TimeoutError:
+            log("stt timeout after 15s")
+            return
+        except Exception as err:
+            log(f"stt failed: {err}")
+            return
         text = (text or "").strip()
         if text:
             self.broadcast({"type": "transcript", "text": text})
+        else:
+            log("stt empty")
 
     def transcribe(self, audio: np.ndarray) -> str:
         self.ensure_models()

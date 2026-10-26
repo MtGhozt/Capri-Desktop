@@ -272,13 +272,20 @@ def load_engine(
     tts_ref=None,
     tts_speed=1.0,
     free_vram: int = 0,
+    usable_vram: int | None = None,
     notice=None,
 ) -> TTSEngine:
     name = str(kind or "auto").strip().lower()
     speed = _speed(tts_speed)
+    free = int(free_vram or 0)
+    usable = int(free if usable_vram is None else usable_vram)
+
+    def decided(engine: str, reason: str, loaded: TTSEngine) -> TTSEngine:
+        log(f"tts engine={engine} reason={reason} vram_free={free} vram_usable={usable}")
+        return loaded
+
     if name in ("off", "none", "false"):
-        log("tts off")
-        return NullTTS()
+        return decided("off", "tts=off", NullTTS())
 
     warn = notice or (lambda _m: None)
     want_omni = name in ("auto", "omnivoice")
@@ -287,19 +294,19 @@ def load_engine(
         wav, txt = resolve_ref(Path(voice_dir or models_dir.parent), tts_ref)
         omni = OmniVoiceTTS(models_dir, log, wav, txt, speed)
         try:
-            omni.load(allow_cpu=allow_cpu, free_vram=int(free_vram or 0))
-            return omni
+            omni.load(allow_cpu=allow_cpu, free_vram=usable)
+            return decided("omnivoice", f"gpu device={omni.device}", omni)
         except SlowCpuTTS as err:
             omni.close()
             msg = f"{err}; falling back to Kokoro"
             log(msg)
             warn(msg)
+            return decided("kokoro", "omnivoice-cpu-slow", _load_kokoro(models_dir, log, speed))
         except Exception as err:
             omni.close()
             log(f"omnivoice unavailable: {err}")
             if name == "omnivoice":
                 warn(f"OmniVoice failed ({err}); using Kokoro")
+            return decided("kokoro", f"omnivoice-failed:{err}", _load_kokoro(models_dir, log, speed))
 
-    if name == "omnivoice":
-        log("tts fallback kokoro")
-    return _load_kokoro(models_dir, log, speed)
+    return decided("kokoro", f"tts={name}", _load_kokoro(models_dir, log, speed))
