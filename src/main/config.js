@@ -68,6 +68,8 @@ const DEFAULTS = {
     ttsSpeed: 1.0,
     ttsSteps: 16,            // OmniVoice diffusion steps (8–32)
     replyMode: 'voice',      // 'voice' | 'blips' | 'silent'
+    ttsIdleUnloadMin: 10,    // DORMANT this long → release OmniVoice (0 = never)
+    sttIdleUnloadMin: 10,    // mic muted this long → release Whisper (0 = never)
   },
 };
 

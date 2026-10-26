@@ -53,3 +53,9 @@ test('the sidecar config carries the speaker mute and the llm url', () => {
   assert.equal(sent.muted, true);
   assert.equal(sent.llmBaseUrl, 'http://localhost:1235/v1');
 });
+
+test('folding her into DORMANT reaches the sidecar as sleeping:true', () => {
+  assert.equal(sidecarConfig(base()).sleeping, false);
+  assert.equal(sidecarConfig(base(), { sleeping: true }).sleeping, true);
+  assert.equal(sidecarConfig(base(), { sleeping: false }).sleeping, false);
+});

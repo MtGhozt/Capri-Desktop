@@ -38,6 +38,9 @@ class TTSEngine(ABC):
     def speak(self, text: str) -> tuple[np.ndarray, int]:
         raise NotImplementedError
 
+    def close(self) -> None:
+        """Drop the engine's weights; subclasses that hold CUDA memory free it here."""
+
 
 class NullTTS(TTSEngine):
     def speak(self, text: str) -> tuple[np.ndarray, int]:
@@ -116,6 +119,11 @@ def _release_cuda() -> None:
         pass
 
 
+def release_memory() -> None:
+    """Public hook: drop unreferenced weights and return cached blocks to the driver."""
+    _release_cuda()
+
+
 class KokoroTTS(TTSEngine):
     def __init__(self, models_dir: Path, log, speed: float = 1.0):
         self.models_dir = models_dir
@@ -139,6 +147,10 @@ class KokoroTTS(TTSEngine):
         self._kokoro = Kokoro(str(onnx), str(voices))
         self.log(f"kokoro ready voice={KOKORO_VOICE} lang={KOKORO_LANG} speed={self.speed}")
         self.warmup()
+
+    def close(self) -> None:
+        self._kokoro = None
+        _release_cuda()
 
     def warmup(self) -> float:
         t0 = time.perf_counter()

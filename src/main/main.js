@@ -585,6 +585,7 @@ function registerIpc() {
   });
   ipcMain.on('overlay:folded', (_e, on) => {
     overlayFolded = Boolean(on);
+    voice?.setSleeping?.(overlayFolded);
     rebuildTray();
   });
   ipcMain.handle('overlay:cursor', () => {

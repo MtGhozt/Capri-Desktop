@@ -54,6 +54,7 @@ function createVoice({ root, loadConfig, onEvent }) {
   let connecting = false;
   let stopped = false;
   let retries = 0;
+  let sleeping = false;
   const logFile = voiceLogPath();
 
   function emit(payload) {
@@ -70,7 +71,7 @@ function createVoice({ root, loadConfig, onEvent }) {
   }
 
   function speakCfg() {
-    return sidecarConfig(loadConfig());
+    return sidecarConfig(loadConfig(), { sleeping });
   }
 
   function send(payload) {
@@ -209,6 +210,14 @@ function createVoice({ root, loadConfig, onEvent }) {
     killChild();
   }
 
+  function setSleeping(on) {
+    const next = Boolean(on);
+    if (next === sleeping) return;
+    sleeping = next;
+    appendVoiceLog(logFile, `[capri] voice sleeping=${sleeping}`);
+    send({ type: 'config', ...speakCfg() });
+  }
+
   function applyConfig() {
     const cfg = loadConfig();
     if (cfg.voice && cfg.voice.enabled === false) {
@@ -223,6 +232,7 @@ function createVoice({ root, loadConfig, onEvent }) {
     start,
     stop,
     applyConfig,
+    setSleeping,
     pttStart: () => send({ type: 'ptt_start' }),
     pttStop: () => send({ type: 'ptt_stop' }),
     push: send,

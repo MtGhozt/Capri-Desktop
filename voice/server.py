@@ -22,6 +22,7 @@ from tts import (
     OmniVoiceTTS,
     load_kokoro,
     normalize_pcm,
+    release_memory,
     resolve_ref,
     tts_steps,
 )
@@ -46,6 +47,7 @@ MIN_SPEECH_MS = 250
 WAKE_THRESHOLD = 0.2
 WAKE_WHILE_TALKING = 0.5
 IDLE_TALK_S = 2.0
+DEFAULT_IDLE_UNLOAD_MIN = 10.0
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
 STT_PROMPT = "Capri, choom, Matias"
@@ -106,6 +108,15 @@ def free_vram_mib() -> int:
         return int(out.strip().splitlines()[0].split()[0])
     except Exception:
         return 0
+
+
+def idle_unload_seconds(value, default: float = DEFAULT_IDLE_UNLOAD_MIN) -> float:
+    """Minutes from config -> seconds; 0 disables the unload, bad values use the default."""
+    try:
+        minutes = float(value)
+    except (TypeError, ValueError):
+        minutes = default
+    return max(0.0, minutes) * 60.0
 
 
 def as_pcm16(frame: np.ndarray) -> np.ndarray:
@@ -213,6 +224,9 @@ class Engine:
             "ttsSpeed": 1.0,
             "ttsSteps": 16,
             "replyMode": "voice",
+            "ttsIdleUnloadMin": DEFAULT_IDLE_UNLOAD_MIN,
+            "sttIdleUnloadMin": DEFAULT_IDLE_UNLOAD_MIN,
+            "sleeping": False,
             "llmBaseUrl": "http://localhost:1235/v1",
             "muted": False,
             "volume": 0.7,
@@ -258,6 +272,8 @@ class Engine:
         self._live_id = 0
         self._held_phrase = ""
         self._out = None
+        self._sleep_since = 0.0
+        self._mic_off_since = 0.0
         self._synth_thread = threading.Thread(target=self._synth_loop, name="capri-tts-synth", daemon=True)
         self._synth_thread.start()
         self._play_thread = threading.Thread(target=self._play_loop, name="capri-tts-play", daemon=True)
@@ -268,9 +284,20 @@ class Engine:
     def apply_cfg(self, patch: dict) -> None:
         before = (self.cfg.get("enabled"), self.cfg.get("inputDevice"))
         was_muted = bool(self.cfg.get("muted"))
+        was_sleeping = bool(self.cfg.get("sleeping"))
         for key in self.cfg:
             if key in patch:
                 self.cfg[key] = patch[key]
+        now = time.monotonic()
+        if bool(self.cfg.get("sleeping")):
+            if not was_sleeping:
+                self._sleep_since = now
+        else:
+            self._sleep_since = 0.0
+        if bool(self.cfg.get("enabled")):
+            self._mic_off_since = 0.0
+        elif before[0]:
+            self._mic_off_since = now
         after = (self.cfg.get("enabled"), self.cfg.get("inputDevice"))
         if after != before:
             self.restart_stream()
@@ -278,6 +305,11 @@ class Engine:
             self.stop_speak()
         if self._omni is not None:
             self._omni.steps = tts_steps(self.cfg.get("ttsSteps"))
+        if self.reply_mode() != "voice":
+            # The overlay may change modes while the mic is muted, and then the
+            # session skips start_tts(): release the engines from here too.
+            self._want_tts = False
+            self._drop_tts(f"replyMode={self.reply_mode()}")
         self._cfg_ready = True
 
     def list_devices(self) -> list[dict]:
@@ -339,6 +371,19 @@ class Engine:
         self.ensure_stt()
         if self._cfg_ready:
             self.start_tts()
+
+    def _unload_whisper(self) -> None:
+        with self._stt_lock:
+            whisper = self._whisper
+            self._whisper = None
+        if whisper is None:
+            return
+        del whisper
+        try:
+            release_memory()
+        except Exception:
+            pass
+        log(f"stt unloaded reason=mic-idle vram_free={free_vram_mib()}")
 
     def _load_wake(self):
         model = self.cfg.get("wakeModel") or "hey_jarvis"
@@ -472,8 +517,22 @@ class Engine:
             try:
                 self._maybe_idle_talk()
                 self._maybe_listen_timeout()
+                self._maybe_unload_idle()
             except Exception:
                 pass
+
+    def _maybe_unload_idle(self) -> None:
+        """DORMANT or muted for long enough: give the GPU/CPU models back."""
+        now = time.monotonic()
+        tts_limit = idle_unload_seconds(self.cfg.get("ttsIdleUnloadMin"))
+        if tts_limit > 0 and self._sleep_since and now - self._sleep_since >= tts_limit:
+            if self._omni is not None or self._omni_loading:
+                self._want_tts = False
+                self._drop_tts("dormant-idle")
+        stt_limit = idle_unload_seconds(self.cfg.get("sttIdleUnloadMin"))
+        if stt_limit > 0 and self._mic_off_since and now - self._mic_off_since >= stt_limit:
+            if self._whisper is not None:
+                self._unload_whisper()
 
     def restart_stream(self) -> None:
         self.stop_stream()
@@ -834,31 +893,42 @@ class Engine:
             log(msg)
             self.broadcast({"type": "notice", "message": msg})
 
-    def _drop_tts(self) -> None:
+    def _drop_tts(self, reason: str = "off") -> None:
         with self._tts_lock:
             omni = self._omni
+            kokoro = self._tts
             self._omni = None
             self._omni_loading = False
             self._tts = None
             self._session_tts = None
-        if omni is not None:
+        if omni is None and kokoro is None:
+            return
+        engines = [e for e in (omni, kokoro) if e is not None and not isinstance(e, NullTTS)]
+        if not engines:
+            return
+        for engine in engines:
             try:
-                omni.close()
+                engine.close()
             except Exception:
                 pass
+        try:
+            release_memory()
+        except Exception:
+            pass
+        log(f"tts unloaded reason={reason} vram_free={free_vram_mib()}")
 
     def start_tts(self) -> None:
         mode = self.reply_mode()
         if mode != "voice":
             self._want_tts = False
-            self._drop_tts()
+            self._drop_tts(f"replyMode={mode}")
             log(f"tts engine=off reason=replyMode={mode} vram_free={free_vram_mib()} vram_usable=n/a")
             self._announce_tts("off", "off")
             return
         kind = str(self.cfg.get("tts") or "auto").strip().lower()
         if kind in ("off", "none", "false"):
             self._want_tts = False
-            self._drop_tts()
+            self._drop_tts("tts=off")
             log(f"tts engine=off reason=tts=off vram_free={free_vram_mib()} vram_usable=n/a")
             self._announce_tts("off", "off")
             return
@@ -881,6 +951,12 @@ class Engine:
             return
         if loading:
             self._announce_tts("omnivoice", "loading")
+            return
+        if self.cfg.get("sleeping"):
+            # Folded into DORMANT: keep the VRAM free and load again on wake.
+            self._want_tts = False
+            log(f"tts engine=off reason=sleeping vram_free={free_vram_mib()} vram_usable=n/a")
+            self._announce_tts("off", "off")
             return
         with self._tts_lock:
             self._omni_loading = True
@@ -919,8 +995,13 @@ class Engine:
             return
         if not self._want_tts:
             omni.close()
+            try:
+                release_memory()
+            except Exception:
+                pass
             with self._tts_lock:
                 self._omni_loading = False
+            log(f"tts unloaded reason=late-load vram_free={free_vram_mib()}")
             log(f"tts engine=off reason=replyMode={self.reply_mode()} vram_free={free_vram_mib()} vram_usable=n/a")
             self._announce_tts("off", "off")
             return
@@ -1090,7 +1171,10 @@ class Engine:
 
     def transcribe(self, audio: np.ndarray) -> str:
         self.ensure_stt()
-        segments, _info = self._whisper.transcribe(
+        whisper = self._whisper
+        if whisper is None:
+            raise RuntimeError("whisper model unavailable")
+        segments, _info = whisper.transcribe(
             audio,
             language="es",
             task="transcribe",
