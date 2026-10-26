@@ -27,6 +27,13 @@ const DEFAULTS = {
   guide: {
     welcome: false,          // Claude Code "plug me in" onboarding
   },
+  idle: {
+    dormantAfterMs: 5 * 60 * 1000, // 0 = never fold into the DORMANT widget
+    widget: { x: null, y: null },
+  },
+  fx: {
+    glitch: true,
+  },
 };
 
 let cache = null;
@@ -44,6 +51,12 @@ function load() {
       ...saved,
       llm: { ...DEFAULTS.llm, ...(saved.llm || {}) },
       guide: { ...DEFAULTS.guide, ...(saved.guide || {}) },
+      idle: {
+        ...DEFAULTS.idle,
+        ...(saved.idle || {}),
+        widget: { ...DEFAULTS.idle.widget, ...((saved.idle && saved.idle.widget) || {}) },
+      },
+      fx: { ...DEFAULTS.fx, ...(saved.fx || {}) },
     };
   } catch {
     cache = { ...DEFAULTS };
@@ -58,6 +71,17 @@ function save(patch) {
     ...patch,
     llm: { ...DEFAULTS.llm, ...(current.llm || {}), ...(patch.llm || {}) },
     guide: { ...DEFAULTS.guide, ...(current.guide || {}), ...(patch.guide || {}) },
+    idle: {
+      ...DEFAULTS.idle,
+      ...(current.idle || {}),
+      ...(patch.idle || {}),
+      widget: {
+        ...DEFAULTS.idle.widget,
+        ...(current.idle && current.idle.widget),
+        ...(patch.idle && patch.idle.widget),
+      },
+    },
+    fx: { ...DEFAULTS.fx, ...(current.fx || {}), ...(patch.fx || {}) },
   };
   try {
     fs.mkdirSync(path.dirname(file()), { recursive: true });

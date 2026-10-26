@@ -4,11 +4,13 @@ import { Chip, Mask } from './chip.js';
 import { Panel } from './panel.js';
 import { Bubble } from './bubble.js';
 import { AppMenu } from './menu.js';
+import { DormantWidget } from './dormant.js';
+import { Machine } from './state.js';
 import { Voice } from './voice.js';
 import { Brain } from './brain.js';
 import { Guide } from './guide.js';
 import { LINES } from './lines.js';
-import { pick, fmt } from './util.js';
+import { pick, fmt, sleep, tween, reducedMotion } from './util.js';
 
 const host = window.host;
 
@@ -53,8 +55,13 @@ async function boot() {
     ticker: document.getElementById('ticker'),
     labels: LINES[config.lang] || LINES.fr,
   });
-  const bubble = new Bubble({ el: document.getElementById('bubble') });
+  const machine = new Machine('ONLINE');
+  machine.dev = Boolean(config.dev);
+  const bubble = new Bubble({ el: document.getElementById('bubble'), machine });
   const appMenu = new AppMenu({ el: document.getElementById('app-menu'), host });
+  const dormant = new DormantWidget({ el: document.getElementById('dormant'), host });
+  const vhs = document.getElementById('vhs');
+  dormant.loadPos(config.idle?.widget, innerWidth, innerHeight);
 
   const capri = new Capri({
     root: document.getElementById('capri'),
@@ -72,6 +79,8 @@ async function boot() {
   // Click-through everywhere except on her body, the panel and her biochip.
   let interactive = false;
   let mouse = null;
+  let lastLive = performance.now();
+  const bumpIdle = () => { lastLive = performance.now(); };
   const setInteractive = (on) => {
     if (on === interactive) return;
     interactive = on;
@@ -87,8 +96,9 @@ async function boot() {
     const onBubble = b && mouse.x >= b.left && mouse.x <= b.right && mouse.y >= b.top && mouse.y <= b.bottom;
     const m = appMenu.rect();
     const onMenu = m && mouse.x >= m.left && mouse.x <= m.right && mouse.y >= m.top && mouse.y <= m.bottom;
-    document.body.style.cursor = onChip() ? 'pointer' : '';
-    return setInteractive(Boolean(onPanel || onBubble || onMenu || capri.hit(mouse.x, mouse.y) || onChip()));
+    const onDormant = dormant.contains(mouse.x, mouse.y);
+    document.body.style.cursor = (onChip() || onDormant) ? 'pointer' : '';
+    return setInteractive(Boolean(onPanel || onBubble || onMenu || onDormant || capri.hit(mouse.x, mouse.y) || onChip()));
   };
   // Her biochip: her eyes on it follow the pointer over it, and she comes out when you click it
   // (only then, so the pointer passing through that corner doesn't call her back).
@@ -116,6 +126,7 @@ async function boot() {
     mouse = { x: e.clientX, y: e.clientY };
     refreshHit();
     hoverChip();
+    if (interactive) bumpIdle();
   });
   document.addEventListener('mouseleave', () => {
     mouse = null;
@@ -127,7 +138,7 @@ async function boot() {
     appMenu.show(x, y);
   };
   const onAppMenuTarget = (x, y) => (
-    (chip.visible && chip.contains(x, y, 0)) || capri.hit(x, y)
+    (chip.visible && chip.contains(x, y, 0)) || dormant.contains(x, y) || capri.hit(x, y)
   );
   window.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -183,7 +194,101 @@ async function boot() {
     refreshHit();
   };
   appMenu.onOpenChange = () => refreshHit();
+  dormant.onOpenChange = () => refreshHit();
   capri.onMenu = (at) => openAppMenu(at?.x ?? capri.head().x, at?.y ?? capri.head().y);
+
+  let idleMs = Number(config.idle?.dormantAfterMs);
+  let glitchFx = config.fx?.glitch !== false;
+  let folding = false;
+  let talkGlitch = 0;
+  const useGlitch = () => glitchFx && !reducedMotion.matches;
+  const showVhs = (on) => { vhs.hidden = !on; };
+  const canFold = () => (
+    Number.isFinite(idleMs) && idleMs > 0
+    && !folding
+    && machine.get() !== 'DORMANT'
+    && machine.get() !== 'THINKING'
+    && machine.get() !== 'TALKING'
+    && machine.get() !== 'BOOTING'
+    && !bubble.open && !bubble.busy
+    && !capri.stowed && !capri.busy
+    && brain.busySessions.length === 0
+  );
+  const fold = async ({ force = false } = {}) => {
+    if (folding || capri.stowed || machine.get() === 'DORMANT') return;
+    if (!force && !canFold()) return;
+    folding = true;
+    appMenu.hide();
+    panel.hide();
+    if (bubble.open) bubble.hide();
+    if (useGlitch()) {
+      showVhs(true);
+      capri.p.glitchSeed = Math.random() * 100;
+      await tween(capri.p, { glitch: 0.85, split: 7, collapse: 0.7, alpha: 0.2 }, 420);
+      await tween(capri.p, { collapse: 1, glitch: 1, alpha: 0 }, 180);
+      showVhs(false);
+    }
+    if (capri.dormant) {
+      mask.hide();
+      capri.dormant = false;
+    }
+    capri.setHidden(true);
+    Object.assign(capri.p, { glitch: 0, split: 0, collapse: 0, alpha: 1 });
+    machine.set('DORMANT');
+    dormant.setLabel('DORMANT');
+    dormant.show();
+    folding = false;
+    refreshHit();
+  };
+  const unfold = async ({ chat = false } = {}) => {
+    if (capri.stowed) {
+      host.setConfig({ visible: true });
+      await capri.unstow();
+    }
+    if (machine.get() === 'DORMANT') {
+      folding = true;
+      dormant.hide();
+      capri.setHidden(false);
+      if (useGlitch()) {
+        showVhs(true);
+        Object.assign(capri.p, { alpha: 0, collapse: 1, glitch: 0.7, split: 6 });
+        capri.drawFrame();
+        await tween(capri.p, { collapse: 0, alpha: 1, glitch: 0.25, split: 2 }, 320);
+        await tween(capri.p, { glitch: 0, split: 0 }, 180);
+        showVhs(false);
+      } else {
+        capri.p.alpha = 1;
+        capri.drawFrame();
+      }
+      const boot = bubble.boot;
+      machine.set(boot === 'booting' ? 'BOOTING' : boot === 'failed' ? 'OFFLINE' : 'ONLINE');
+      folding = false;
+    }
+    bumpIdle();
+    capri.wake();
+    refreshHit();
+    if (chat) bubble.show();
+  };
+  dormant.onWake = () => unfold();
+  machine.onChange((state) => {
+    dormant.setLabel(state, machine.pct);
+    clearInterval(talkGlitch);
+    talkGlitch = 0;
+    if (state === 'TALKING' && useGlitch() && !capri.hidden) {
+      talkGlitch = setInterval(() => {
+        capri.p.glitchSeed = Math.random() * 100;
+        capri.p.glitch = capri.p.glitch > 0.05 ? 0 : 0.16;
+        capri.p.split = capri.p.glitch > 0 ? 2 : 0;
+      }, 220);
+    } else if (state !== 'TALKING') {
+      capri.p.glitch = 0;
+      capri.p.split = 0;
+    }
+  });
+  window.addEventListener('keydown', () => { if (bubble.open) bumpIdle(); });
+  setInterval(() => {
+    if (canFold() && performance.now() - lastLive >= idleMs) fold();
+  }, 1000);
 
   // Her guide (guide.js): her welcome on first launch, and "How does it work?" in her menu,
   // where she takes you to things and points at them.
@@ -273,6 +378,7 @@ async function boot() {
 
   const applyBoot = (state) => {
     bubble.setBoot(state);
+    if (machine.get() === 'DORMANT') return;
     if (state === 'booting') {
       panel.say({ kind: 'info', badge: 'BOOTING', line: 'Spinning up the local stack. Hold still, choom.', hold: null });
     } else if (state === 'failed') {
@@ -289,11 +395,21 @@ async function boot() {
   host.llmStatus().then(applyBoot);
   host.onLlmBoot((payload) => applyBoot(payload?.state || payload));
 
-  host.onChatToken((piece) => bubble.onToken(typeof piece === 'string' ? piece : piece?.text || ''));
+  host.onChatToken((piece) => {
+    bumpIdle();
+    bubble.onToken(typeof piece === 'string' ? piece : piece?.text || '');
+  });
   host.onChatDone((payload) => bubble.onDone(payload?.text || ''));
   host.onChatError(() => bubble.onError());
 
   host.onClaudeEvent((evt) => brain.handle(evt));
+  brain.onPulse = (evt) => {
+    bumpIdle();
+    const name = evt?.hook_event_name;
+    if (name === 'UserPromptSubmit' || name === 'Notification' || name === 'SessionStart') {
+      unfold();
+    }
+  };
   host.onWindows((data) => {
     capri.setWindows(data);
     brain.onWindows(data);
@@ -304,11 +420,13 @@ async function boot() {
   host.onResize(({ width, height }) => {
     fx.resize(width, height);
     chip.place(width, height);
+    dormant.setView(width, height);
     capri.setView(width, height);
   });
   window.addEventListener('resize', () => {
     fx.resize(innerWidth, innerHeight);
     chip.place(innerWidth, innerHeight);
+    dormant.setView(innerWidth, innerHeight);
     capri.setView(innerWidth, innerHeight);
   });
 
@@ -316,6 +434,8 @@ async function boot() {
     voice.configure(cfg);
     capri.wander = cfg.wander;
     capri.possessWindows = cfg.possess;
+    idleMs = Number(cfg.idle?.dormantAfterMs);
+    glitchFx = cfg.fx?.glitch !== false;
     if (cfg.scale !== capri.scale) capri.setScale(cfg.scale);
     if (cfg.lang !== brain.lang) {
       brain.lang = cfg.lang;
@@ -328,6 +448,7 @@ async function boot() {
     const t = brain.t;
     switch (cmd.name) {
       case 'teleport':
+        await unfold();
         capri.teleport(capri.spot('random'));
         break;
       case 'status':
@@ -352,22 +473,23 @@ async function boot() {
       case 'stow': // Ctrl+Alt+C: into her biochip, or back out
         if (cmd.on) {
           bubble.hide({ fromHost: true });
+          dormant.hide();
+          if (machine.get() === 'DORMANT') machine.set('ONLINE');
           capri.stow();
         } else capri.unstow();
         break;
-      case 'chat': // Ctrl+Alt+T
+      case 'chat': // Ctrl+Alt+T: wake DORMANT and open chat
         if (cmd.on) {
-          if (capri.stowed) {
-            host.setConfig({ visible: true });
-            await capri.unstow();
-          }
-          capri.wake();
-          bubble.show();
+          await unfold({ chat: true });
         } else {
           bubble.hide({ fromHost: true });
         }
         break;
+      case 'sleep':
+        await fold({ force: true });
+        break;
       case 'satellite': // the whole sequence, on demand (tray)
+        await unfold();
         if (capri.stowed) {
           host.setConfig({ visible: true });
           await capri.unstow();
@@ -429,6 +551,7 @@ async function boot() {
   if (config.visible === false) capri.stowNow();
   else if (intro) await capri.intro(capri.spot('post'));
   else await capri.materialize(capri.spot('post'));
+  bumpIdle();
   if (config.guide?.welcome) {
     const hooks = await host.hooksStatus();
     if (!config.welcomed || !hooks.installed) guide.welcome();

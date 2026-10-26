@@ -121,6 +121,7 @@ export class AppMenu {
     rows.push(item(t.demo, { action: () => this.act('demo') }));
     rows.push(item(t.help, { action: () => this.act('help') }));
     rows.push(item(cfg.visible ? t.hide : t.show, { action: () => this.act('visible') }));
+    rows.push(item(t.sleep, { action: () => this.act('sleep') }));
     rows.push(sep());
 
     rows.push(item(t.size, { expander: true, action: () => this.toggle('size', state) }));
@@ -197,7 +198,7 @@ export class AppMenu {
       || id === 'possess' || id === 'lang' || id === 'startup' || id === 'sounds-dir'
       || id === 'hooks-install' || id === 'hooks-remove';
     await this.host.menuAction({ id, value });
-    if (id === 'quit' || id === 'teleport' || id === 'satellite' || id === 'demo' || id === 'help' || id === 'visible') {
+    if (id === 'quit' || id === 'teleport' || id === 'satellite' || id === 'demo' || id === 'help' || id === 'visible' || id === 'sleep') {
       this.hide();
       return;
     }

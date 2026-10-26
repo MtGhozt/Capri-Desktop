@@ -2,6 +2,7 @@
 // decode runs once when a reply is finished.
 
 import { clamp, reducedMotion } from './util.js';
+import { statusText } from './state.js';
 
 const NOISE = '▚▞▙▟░▒#%&/\\<>01XZ';
 const DECODE_STEP_MS = 28;
@@ -12,8 +13,9 @@ const OFFLINE = [
 ];
 
 export class Bubble {
-  constructor({ el }) {
+  constructor({ el, machine }) {
     this.el = el;
+    this.machine = machine;
     this.logEl = el.querySelector('.bubble__log');
     this.field = el.querySelector('.bubble__field');
     this.stateEl = el.querySelector('.bubble__state');
@@ -28,6 +30,7 @@ export class Bubble {
     this.onTalk = null;
     this.onOpenChange = null;
     this.boot = 'ready';
+    machine.onChange(() => this.paint());
 
     this.field.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -58,7 +61,12 @@ export class Bubble {
     }
     this.open = true;
     this.el.hidden = false;
-    this.setState(this.boot === 'booting' ? 'BOOTING' : 'ONLINE');
+    if (this.machine.get() === 'DORMANT' || this.machine.get() === 'LISTENING') {
+      this.machine.set(this.boot === 'booting' ? 'BOOTING' : this.boot === 'failed' ? 'OFFLINE' : 'ONLINE');
+    } else if (this.boot === 'booting') this.machine.set('BOOTING');
+    else if (this.boot === 'failed') this.machine.set('OFFLINE');
+    else if (this.machine.get() === 'BOOTING' || this.machine.get() === 'OFFLINE') this.machine.set('ONLINE');
+    this.paint();
     this.place();
     const focusField = () => this.field.focus();
     focusField();
@@ -79,6 +87,7 @@ export class Bubble {
     }
     this.el.hidden = true;
     this.field.blur();
+    if (this.machine.get() === 'THINKING' || this.machine.get() === 'TALKING') this.machine.set('ONLINE');
     this.onOpenChange?.(false);
     if (!fromHost) window.host.closeChat();
   }
@@ -196,18 +205,24 @@ export class Bubble {
 
   setBoot(state) {
     this.boot = state;
-    if (this.open && !this.busy) {
-      this.setState(state === 'booting' ? 'BOOTING' : 'ONLINE');
-    }
+    if (this.machine.get() === 'DORMANT') return;
+    if (state === 'booting') this.machine.set('BOOTING');
+    else if (state === 'failed') this.machine.set('OFFLINE');
+    else if (!this.busy) this.machine.set('ONLINE');
   }
 
   setState(name, pct) {
     if (name === 'THINKING') {
-      const n = String(Math.max(0, Math.min(99, pct ?? 0))).padStart(3, '0');
-      this.stateEl.textContent = `decrypting ${n} %`;
-    } else {
-      this.stateEl.textContent = name;
+      if (this.machine.get() !== 'THINKING') this.machine.set('THINKING');
+      this.machine.setPct(pct ?? 0);
+      return;
     }
+    this.machine.set(name);
+  }
+
+  paint() {
+    const name = this.machine.get();
+    this.stateEl.textContent = statusText(name, this.machine.pct);
     this.el.dataset.state = name;
   }
 

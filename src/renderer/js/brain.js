@@ -21,6 +21,7 @@ export class Brain {
     this.linked = true;      // has a Claude Code event ever reached her (app.js sets it from the config)
     this.onLinked = null;
     this.onShowcase = null; // the demo's second half (app.js)
+    this.onPulse = null;    // any hook event (idle / wake the DORMANT widget)
   }
 
   get t() {
@@ -49,6 +50,7 @@ export class Brain {
   }
 
   handle(evt) {
+    this.onPulse?.(evt);
     // the demo's second half (scripts/demo-sequence.js), not a Claude event
     if (evt.hook_event_name === 'CapriShowcase') return this.onShowcase?.();
     // the first real Claude Code event that ever reaches her (the demo's don't count)

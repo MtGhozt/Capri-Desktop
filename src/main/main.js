@@ -143,7 +143,6 @@ function closeChat() {
   chatOpen = false;
   llm?.cancel();
   if (wasOpen) sendCommand('chat', { on: false });
-  overlay?.setIgnoreMouseEvents(true, { forward: true });
   const target = previousForeground;
   previousForeground = null;
   // Restore first while we still own focus, then drop keyboard on the overlay.
@@ -217,7 +216,10 @@ function resolveLang(setting) {
 // What the overlay gets: `lang` is the resolved one, `langSetting` what the user picked.
 function rendererConfig() {
   const cfg = config.load();
-  return { ...cfg, lang: resolveLang(cfg.lang), langSetting: cfg.lang };
+  const idle = { ...cfg.idle };
+  // --dev only: 10 s idle for testing. Never written to config.json.
+  if (DEV) idle.dormantAfterMs = 10_000;
+  return { ...cfg, idle, lang: resolveLang(cfg.lang), langSetting: cfg.lang, dev: DEV };
 }
 
 function updateConfig(patch) {
@@ -235,6 +237,7 @@ function applyMenuAction(id, value) {
     case 'demo': playDemo(); break;
     case 'help': sendCommand('welcome'); break;
     case 'visible': toggleVisible(); break;
+    case 'sleep': sendCommand('sleep'); break;
     case 'scale': updateConfig({ scale: Number(value) }); break;
     case 'muted': updateConfig({ muted: Boolean(value) }); break;
     case 'sounds-dir':
@@ -306,6 +309,7 @@ function rebuildTray() {
     { label: t.demo, click: () => applyMenuAction('demo') },
     { label: t.help, click: () => applyMenuAction('help') },
     { label: s.cfg.visible ? t.hide : t.show, accelerator: 'Ctrl+Alt+C', click: () => applyMenuAction('visible') },
+    { label: t.sleep, click: () => applyMenuAction('sleep') },
     { type: 'separator' },
     {
       label: t.size,
