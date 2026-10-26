@@ -740,11 +740,11 @@ button.appmenu__row {
   cursor: pointer;
 }
 
-.appmenu__row--action:hover {
+.appmenu button.appmenu__row--action:hover {
   background: rgba(94, 246, 255, 0.06);
 }
 
-.appmenu__row--action:hover .appmenu__label {
+.appmenu button.appmenu__row--action:hover .appmenu__label {
   text-shadow: 0 0 8px rgba(255, 90, 79, 0.55);
 }
 
