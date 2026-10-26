@@ -49,9 +49,9 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
 - **dev** (`pnpm start` / `pnpm dev`): si `dir` es `null`, Electron usa `<repo>/voice`.
 - **exe instalado**: poné una ruta absoluta al sidecar, por ejemplo `"dir": "C:\\Programacion\\Capri\\Capri-Desktop\\voice"`. Si falta `dir` o el `.venv`, Capri avisa en el panel (badge `VOICE`) y sigue con chat de texto. Logs: `%APPDATA%\capri-desktop\logs\voice.log`.
 
-`sttModel`: `auto` (default) intenta **medium en CUDA float16** si hay ≥ ~2.8 GB de VRAM libre; si no, **small en CPU int8**. Siempre `language=es`, `task=transcribe`, `beam_size=5`. Prompt fijo `Capri, choom, Matias`. Wake word: `voice.wakeThreshold` (default **0.2**). En `pnpm dev` el sidecar loguea `wake score=...`.
+`sttModel`: con `tts=auto`/`omnivoice`, Whisper va **siempre a CPU (small int8)** para dejar la GPU a OmniVoice. Medium CUDA solo si `tts` es `kokoro` o `off` y, descontando ~4.5 GB de reserva para Gemma si el LLM aún no cargó, quedan ≥ ~2.8 GB. Siempre `language=es`, `task=transcribe`, `beam_size=5`. Prompt fijo `Capri, choom, Matias`. Wake word: `voice.wakeThreshold` (default **0.2**). En `pnpm dev` el sidecar loguea `wake score=...`. Si un wake no transcribe en ~10 s, el sidecar corta, loguea el motivo y vuelve a idle.
 
-`tts`: `"auto"` (default: OmniVoice en GPU si hay ≥ ~2000 MiB libres **sin** cargar Whisper ASR; si no, Kokoro), `"omnivoice"`, `"kokoro"` o `"off"`.
+`tts`: `"auto"` (default: OmniVoice en GPU si el VRAM **usable** ≥ ~2000 MiB **sin** cargar Whisper ASR; si no, Kokoro), `"omnivoice"`, `"kokoro"` o `"off"`. El usable resta ~4.5 GB para Gemma cuando LM Studio todavía no tiene el modelo cargado. En `voice.log` siempre hay una línea `tts engine=omnivoice|kokoro reason=... vram_free=... vram_usable=...`.
 
 `ttsRef`: ruta al wav de referencia (absoluta o relativa a `voice/`). Default `ref/capri_ref_short.wav`. Tiene que existir el `.txt` con la transcripción al lado (mismo nombre). El embedding se cachea en `voice/models/omnivoice/capri-<hash>.pt`; si cambiás el wav o el txt, el hash cambia y se regenera.
 
