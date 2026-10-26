@@ -223,6 +223,7 @@ async function boot() {
     && machine.get() !== 'THINKING'
     && machine.get() !== 'TALKING'
     && machine.get() !== 'BOOTING'
+    && machine.get() !== 'LISTENING'
     && !bubble.open && !bubble.busy
     && !capri.stowed && !capri.busy
     && brain.busySessions.length === 0
@@ -430,6 +431,33 @@ async function boot() {
   });
   host.onChatDone((payload) => bubble.onDone(payload?.text || ''));
   host.onChatError(() => bubble.onError());
+  host.onVoice(async (evt) => {
+    const type = evt?.type;
+    if (type === 'listening') {
+      const now = machine.get();
+      if (now === 'THINKING' || now === 'TALKING') return;
+      bumpIdle();
+      await unfold({ chat: true });
+      machine.set('LISTENING');
+      bubble.setMeter(true);
+      return;
+    }
+    if (type === 'level') {
+      bumpIdle();
+      bubble.setLevel(evt.rms);
+      return;
+    }
+    if (type === 'stopped') {
+      bubble.setMeter(false);
+      if (machine.get() === 'LISTENING' && !bubble.busy) machine.set('ONLINE');
+      return;
+    }
+    if (type === 'transcript') {
+      bumpIdle();
+      await unfold({ chat: true });
+      bubble.submitFromVoice(evt.text);
+    }
+  });
 
   host.onClaudeEvent((evt) => brain.handle(evt));
   brain.onPulse = (evt) => {

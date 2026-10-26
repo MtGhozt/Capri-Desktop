@@ -196,6 +196,22 @@ export class AppMenu {
 
     if (!folded) rows.push(item(t.wander, { checked: cfg.wander, action: () => this.act('wander', !cfg.wander) }));
     rows.push(item(t.possess, { checked: cfg.possess, action: () => this.act('possess', !cfg.possess) }));
+    rows.push(item(cfg.mic ? t.micOn : t.micOff, { checked: cfg.mic, action: () => this.act('mic', !cfg.mic) }));
+    rows.push(item(t.micDevice, { expander: true, action: () => this.toggle('mic-device', state) }));
+    if (this.expanded === 'mic-device') {
+      rows.push(item(t.micDefault, {
+        radio: true,
+        checked: cfg.micDevice == null,
+        action: () => this.act('mic-device', null),
+      }));
+      for (const d of state.micDevices || []) {
+        rows.push(item(d.name, {
+          radio: true,
+          checked: Number(cfg.micDevice) === Number(d.id),
+          action: () => this.act('mic-device', d.id),
+        }));
+      }
+    }
     rows.push(item(t.lang, { expander: true, action: () => this.toggle('lang', state) }));
     if (this.expanded === 'lang') {
       for (const [value, label] of state.langs) {
@@ -225,7 +241,8 @@ export class AppMenu {
 
   async act(id, value) {
     const keep = id === 'scale' || id === 'muted' || id === 'display' || id === 'wander'
-      || id === 'possess' || id === 'lang' || id === 'startup' || id === 'sounds-dir';
+      || id === 'possess' || id === 'lang' || id === 'startup' || id === 'sounds-dir'
+      || id === 'mic' || id === 'mic-device';
     await this.host.menuAction({ id, value });
     if (id === 'quit' || id === 'teleport' || id === 'satellite' || id === 'demo' || id === 'help' || id === 'visible' || id === 'sleep' || id === 'wake') {
       this.hide();

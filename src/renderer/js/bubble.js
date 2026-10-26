@@ -19,6 +19,8 @@ export class Bubble {
     this.logEl = el.querySelector('.bubble__log');
     this.field = el.querySelector('.bubble__field');
     this.stateEl = el.querySelector('.bubble__state');
+    this.meterEl = el.querySelector('.bubble__meter');
+    this.meterBar = this.meterEl?.querySelector('i');
     this.anchor = { x: 0, y: 0 };
     this.view = { w: innerWidth, h: innerHeight };
     this.open = false;
@@ -69,7 +71,8 @@ export class Bubble {
   }
 
   syncBoot() {
-    if (this.machine.get() === 'DORMANT' || this.machine.get() === 'LISTENING') {
+    if (this.machine.get() === 'LISTENING') return;
+    if (this.machine.get() === 'DORMANT') {
       this.machine.set(this.boot === 'booting' ? 'BOOTING' : this.boot === 'failed' ? 'OFFLINE' : 'ONLINE');
     } else if (this.boot === 'booting') this.machine.set('BOOTING');
     else if (this.boot === 'failed') this.machine.set('OFFLINE');
@@ -137,7 +140,10 @@ export class Bubble {
     }
     this.el.hidden = true;
     this.field.blur();
-    if (this.machine.get() === 'THINKING' || this.machine.get() === 'TALKING') this.machine.set('ONLINE');
+    if (this.machine.get() === 'LISTENING' || this.machine.get() === 'THINKING' || this.machine.get() === 'TALKING') {
+      this.machine.set('ONLINE');
+    }
+    this.setMeter(false);
     this.onOpenChange?.(false);
     if (!fromHost) window.host.closeChat();
   }
@@ -146,6 +152,17 @@ export class Bubble {
     const text = this.field.value.trim();
     if (!text || this.busy) return;
     this.field.value = '';
+    this.sendLine(text);
+  }
+
+  submitFromVoice(text) {
+    const line = String(text || '').trim();
+    if (!line || this.busy) return;
+    if (!this.open) this.show();
+    this.sendLine(line);
+  }
+
+  sendLine(text) {
     this.addLine('you', text);
     this.busy = true;
     this.replyText = '';
@@ -155,6 +172,19 @@ export class Bubble {
     window.host.sendChat(text).catch(() => {
       if (this.busy) this.fail();
     });
+  }
+
+  setMeter(on) {
+    if (!this.meterEl) return;
+    this.meterEl.hidden = !on;
+    if (!on && this.meterBar) this.meterBar.style.width = '0%';
+  }
+
+  setLevel(rms) {
+    if (!this.meterBar) return;
+    this.setMeter(true);
+    const pct = Math.max(0, Math.min(100, Math.round(Number(rms) * 100)));
+    this.meterBar.style.width = `${pct}%`;
   }
 
   onToken(piece) {
@@ -255,7 +285,7 @@ export class Bubble {
 
   setBoot(state) {
     this.boot = state;
-    if (this.machine.get() === 'DORMANT') return;
+    if (this.machine.get() === 'DORMANT' || this.machine.get() === 'LISTENING') return;
     if (state === 'booting') this.machine.set('BOOTING');
     else if (state === 'failed') this.machine.set('OFFLINE');
     else if (!this.busy) this.machine.set('ONLINE');
