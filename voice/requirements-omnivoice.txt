@@ -1,0 +1,3 @@
+# Optional cloned-voice engine (Paso 2). Install PyTorch CUDA first, then this file.
+# See setup.ps1 -OmniVoice. Weights are CC-BY-NC (personal use).
+omnivoice>=0.2.1
