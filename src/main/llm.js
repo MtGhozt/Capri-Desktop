@@ -11,7 +11,7 @@ function createLlm({ loadConfig, personaPath }) {
   let abort = null;
 
   function localClock() {
-    const parts = new Intl.DateTimeFormat('en-US', {
+    const parts = new Intl.DateTimeFormat('es-CR', {
       timeZone: LOCAL_TZ,
       weekday: 'long',
       year: 'numeric',
@@ -32,7 +32,8 @@ function createLlm({ loadConfig, personaPath }) {
     } catch {
       base = 'You are Capri. Short, sarcastic, loyal. 1–3 sentences.';
     }
-    return `${base}\n\nLocal date and time for Matias right now: ${localClock()}. If he asks the time or date, use that.`;
+    const lang = String(loadConfig().lang || 'es');
+    return `${base}\n\nLanguage setting: ${lang}. Always speak Spanish. Local date and time for Matias right now: ${localClock()}. If he asks the time or date, use that.`;
   }
 
   function cancel() {

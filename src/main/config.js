@@ -8,7 +8,7 @@ const DEFAULTS = {
   scale: 0.6,        // sprite scale, 0.6 ≈ 250px tall
   muted: false,
   volume: 0.7,
-  lang: 'auto',      // 'auto' follows the system language, or 'fr' / 'en'
+  lang: 'es',        // overlay + Capri's spoken replies; 'auto' follows the system language
   displayId: null,   // null = primary display
   wander: true,      // random teleports when idle
   possess: true,     // now and then she dives into the window she sits on and takes it over
@@ -55,6 +55,16 @@ function file() {
   return path.join(app.getPath('userData'), 'config.json');
 }
 
+function persist() {
+  if (!cache) return;
+  try {
+    fs.mkdirSync(path.dirname(file()), { recursive: true });
+    fs.writeFileSync(file(), JSON.stringify(cache, null, 2));
+  } catch (err) {
+    console.error('[capri] could not save config:', err.message);
+  }
+}
+
 function load() {
   if (cache) return cache;
   try {
@@ -74,6 +84,11 @@ function load() {
     };
   } catch {
     cache = { ...DEFAULTS };
+  }
+  // Older installs defaulted to English; Capri now speaks Spanish.
+  if (cache.lang === 'en') {
+    cache.lang = 'es';
+    persist();
   }
   return cache;
 }
@@ -98,12 +113,7 @@ function save(patch) {
     fx: { ...DEFAULTS.fx, ...(current.fx || {}), ...(patch.fx || {}) },
     voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
   };
-  try {
-    fs.mkdirSync(path.dirname(file()), { recursive: true });
-    fs.writeFileSync(file(), JSON.stringify(cache, null, 2));
-  } catch (err) {
-    console.error('[capri] could not save config:', err.message);
-  }
+  persist();
   return cache;
 }
 
