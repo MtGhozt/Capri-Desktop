@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { app } = require('electron');
+const { sidecarConfig } = require('./voice-config');
 
 const PORT = 47824;
 
@@ -68,18 +69,8 @@ function createVoice({ root, loadConfig, onEvent }) {
     emit({ type: 'notice', message });
   }
 
-  function voiceCfg() {
-    return loadConfig().voice || {};
-  }
-
   function speakCfg() {
-    const cfg = loadConfig();
-    return {
-      ...voiceCfg(),
-      muted: Boolean(cfg.muted),
-      volume: cfg.volume,
-      llmBaseUrl: cfg.llm?.baseUrl || 'http://localhost:1235/v1',
-    };
+    return sidecarConfig(loadConfig());
   }
 
   function send(payload) {
