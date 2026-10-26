@@ -13,6 +13,7 @@ const { createBridge } = require('./bridge');
 const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
 const { createLms } = require('./lms');
+const { createVoice } = require('./voice');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
 
@@ -35,6 +36,7 @@ let windowWatch = null;
 let lastWindows = null;
 let llm = null;
 let lms = null;
+let voice = null;
 let chatOpen = false;
 let previousForeground = null;
 
@@ -226,6 +228,7 @@ function updateConfig(patch) {
   config.save(patch);
   const cfg = rendererConfig();
   overlay?.webContents.send('capri:config', cfg);
+  voice?.applyConfig();
   rebuildTray();
   return cfg;
 }
@@ -252,6 +255,8 @@ function applyMenuAction(id, value) {
       break;
     case 'wander': updateConfig({ wander: Boolean(value) }); break;
     case 'possess': updateConfig({ possess: Boolean(value) }); break;
+    case 'mic': updateConfig({ voice: { enabled: Boolean(value) } }); break;
+    case 'mic-device': updateConfig({ voice: { inputDevice: value } }); break;
     case 'lang': updateConfig({ lang: value }); break;
     case 'startup':
       app.setLoginItemSettings({ ...loginItemOptions(), openAtLogin: Boolean(value) });
@@ -288,7 +293,10 @@ function menuState(extra = {}) {
       muted: cfg.muted,
       wander: cfg.wander,
       possess: cfg.possess,
+      mic: cfg.voice?.enabled !== false,
+      micDevice: cfg.voice?.inputDevice ?? null,
     },
+    micDevices: voice?.devices() || [],
     displays: displays.map((d, i) => ({
       id: d.id,
       label: `${i + 1} — ${d.size.width}×${d.size.height}`,
@@ -344,6 +352,29 @@ function rebuildTray() {
     },
     ...(!s.folded ? [{ label: t.wander, type: 'checkbox', checked: s.cfg.wander, click: (item) => applyMenuAction('wander', item.checked) }] : []),
     { label: t.possess, type: 'checkbox', checked: s.cfg.possess, click: (item) => applyMenuAction('possess', item.checked) },
+    {
+      label: s.cfg.mic ? t.micOn : t.micOff,
+      type: 'checkbox',
+      checked: s.cfg.mic,
+      click: (item) => applyMenuAction('mic', item.checked),
+    },
+    {
+      label: t.micDevice,
+      submenu: [
+        {
+          label: t.micDefault,
+          type: 'radio',
+          checked: s.cfg.micDevice == null,
+          click: () => applyMenuAction('mic-device', null),
+        },
+        ...(s.micDevices || []).map((d) => ({
+          label: d.name,
+          type: 'radio',
+          checked: Number(s.cfg.micDevice) === Number(d.id),
+          click: () => applyMenuAction('mic-device', d.id),
+        })),
+      ],
+    },
     {
       label: t.lang,
       submenu: s.langs.map(([value, label]) => ({
@@ -436,6 +467,7 @@ function registerIpc() {
     return { found: true, dir, file: fs.existsSync(file) };
   });
   ipcMain.handle('menu:get', (_e, extra = {}) => {
+    voice?.listDevices();
     const state = menuState(extra);
     structuredClone(state);
     return state;
@@ -558,6 +590,16 @@ function main() {
       onStatus: (state) => overlay?.webContents.send('llm:boot', { state }),
     });
     lms.start();
+    voice = createVoice({
+      root: ROOT,
+      loadConfig: () => config.load(),
+      onEvent: (payload) => {
+        if (payload?.type === 'listening') openChat();
+        if (payload?.type === 'devices') rebuildTray();
+        overlay?.webContents.send('voice:event', payload);
+      },
+    });
+    voice.start();
     createOverlay();
     createTray();
     windowWatch = startWindowWatch({
@@ -574,6 +616,7 @@ function main() {
     });
     globalShortcut.register('Control+Alt+C', () => toggleVisible());
     globalShortcut.register('Control+Alt+T', () => toggleChat());
+    globalShortcut.register('Control+Alt+V', () => voice?.pttStart());
     screen.on('display-metrics-changed', fitOverlay);
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });
@@ -582,6 +625,7 @@ function main() {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     windowWatch?.stop();
+    voice?.stop();
     lms?.unload();
   });
   app.on('window-all-closed', (e) => e.preventDefault());

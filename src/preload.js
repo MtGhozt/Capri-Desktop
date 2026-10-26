@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('host', {
   onChatDone: on('chat:done'),
   onChatError: on('chat:error'),
   onLlmBoot: on('llm:boot'),
+  onVoice: on('voice:event'),
   llmStatus: () => ipcRenderer.invoke('llm:status'),
   getMenu: (opts) => ipcRenderer.invoke('menu:get', opts || {}),
   setFolded: (on) => ipcRenderer.send('overlay:folded', Boolean(on)),

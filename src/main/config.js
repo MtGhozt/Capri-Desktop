@@ -34,6 +34,17 @@ const DEFAULTS = {
   fx: {
     glitch: true,
   },
+  voice: {
+    enabled: true,
+    dir: null,               // null → repo voice/ in dev; set an absolute path for the installed exe
+    pushToTalk: 'Ctrl+Alt+V',
+    wakeWord: true,
+    wakeModel: 'hey_jarvis',
+    sttModel: 'small',
+    language: 'auto',
+    inputDevice: null,
+    debugSave: false,
+  },
 };
 
 let cache = null;
@@ -57,6 +68,7 @@ function load() {
         widget: { ...DEFAULTS.idle.widget, ...((saved.idle && saved.idle.widget) || {}) },
       },
       fx: { ...DEFAULTS.fx, ...(saved.fx || {}) },
+      voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
     };
   } catch {
     cache = { ...DEFAULTS };
@@ -82,6 +94,7 @@ function save(patch) {
       },
     },
     fx: { ...DEFAULTS.fx, ...(current.fx || {}), ...(patch.fx || {}) },
+    voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
   };
   try {
     fs.mkdirSync(path.dirname(file()), { recursive: true });
