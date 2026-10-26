@@ -83,6 +83,7 @@ async function boot() {
   // Click-through everywhere except on her body, the panel and her biochip.
   let interactive = false;
   let mouse = null;
+  let folding = false;
   let lastLive = performance.now();
   const bumpIdle = () => { lastLive = performance.now(); };
   const setInteractive = (on) => {
@@ -92,7 +93,7 @@ async function boot() {
   };
   const onChip = () => Boolean(chip.visible && mouse && chip.contains(mouse.x, mouse.y, 0));
   const refreshHit = () => {
-    if (capri.dragging || appMenu.visible) return setInteractive(true);
+    if (folding || capri.dragging || appMenu.visible) return setInteractive(true);
     if (!mouse) return setInteractive(false);
     const r = panel.rect();
     const onPanel = r && mouse.x >= r.left && mouse.x <= r.right && mouse.y >= r.top && mouse.y <= r.bottom;
@@ -203,7 +204,7 @@ async function boot() {
 
   let idleMs = Number(config.idle?.dormantAfterMs);
   let glitchFx = config.fx?.glitch !== false;
-  let folding = false;
+  dormant.setFx(glitchFx);
   let talkGlitch = 0;
   const useGlitch = () => glitchFx && !reducedMotion.matches;
   const showVhs = (on) => { vhs.hidden = !on; };
@@ -252,30 +253,44 @@ async function boot() {
     }
     if (machine.get() === 'DORMANT') {
       folding = true;
-      dormant.hide();
-      capri.setHidden(false);
+      refreshHit();
+      const from = dormant.rect();
+      const boot = bubble.boot;
+      const next = boot === 'booting' ? 'BOOTING' : boot === 'failed' ? 'OFFLINE' : 'ONLINE';
       if (useGlitch()) {
         showVhs(true);
+        await dormant.burst();
+        capri.setHidden(false);
         Object.assign(capri.p, { alpha: 0, collapse: 1, glitch: 0.7, split: 6 });
         capri.drawFrame();
-        await tween(capri.p, { collapse: 0, alpha: 1, glitch: 0.25, split: 2 }, 320);
-        await tween(capri.p, { glitch: 0, split: 0 }, 180);
+        machine.set(next);
+        host.setFolded(false);
+        await Promise.all([
+          (async () => {
+            await tween(capri.p, { collapse: 0, alpha: 1, glitch: 0.25, split: 2 }, 320);
+            await tween(capri.p, { glitch: 0, split: 0 }, 180);
+          })(),
+          bubble.birth(from, { animate: true }),
+        ]);
         showVhs(false);
+        dormant.hide();
       } else {
+        dormant.hide();
+        capri.setHidden(false);
         capri.p.alpha = 1;
         capri.drawFrame();
+        machine.set(next);
+        host.setFolded(false);
+        bubble.show();
       }
-      const boot = bubble.boot;
-      machine.set(boot === 'booting' ? 'BOOTING' : boot === 'failed' ? 'OFFLINE' : 'ONLINE');
-      host.setFolded(false);
       folding = false;
     }
     bumpIdle();
     capri.wake();
     refreshHit();
-    if (chat) bubble.show();
+    if (chat && !bubble.open) bubble.show();
   };
-  dormant.onWake = () => unfold();
+  dormant.onWake = () => unfold({ chat: true });
   machine.onChange((state) => {
     dormant.setLabel(state, machine.pct);
     clearInterval(talkGlitch);
@@ -442,6 +457,7 @@ async function boot() {
     capri.possessWindows = cfg.possess;
     idleMs = Number(cfg.idle?.dormantAfterMs);
     glitchFx = cfg.fx?.glitch !== false;
+    dormant.setFx(glitchFx);
     if (cfg.scale !== capri.scale) capri.setScale(cfg.scale);
     if (cfg.lang !== brain.lang) {
       brain.lang = cfg.lang;

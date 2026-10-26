@@ -1,7 +1,7 @@
 // Terminal chat bubble above Capri. Streaming text is shown as-is; the glitch
 // decode runs once when a reply is finished.
 
-import { clamp, reducedMotion } from './util.js';
+import { clamp, reducedMotion, sleep } from './util.js';
 import { statusText } from './state.js';
 
 const NOISE = '▚▞▙▟░▒#%&/\\<>01XZ';
@@ -56,23 +56,73 @@ export class Bubble {
 
   show() {
     if (this.open) {
-      this.field.focus();
+      this.focusField();
       return;
     }
     this.open = true;
     this.el.hidden = false;
+    this.syncBoot();
+    this.paint();
+    this.place();
+    this.focusField();
+    this.onOpenChange?.(true);
+  }
+
+  syncBoot() {
     if (this.machine.get() === 'DORMANT' || this.machine.get() === 'LISTENING') {
       this.machine.set(this.boot === 'booting' ? 'BOOTING' : this.boot === 'failed' ? 'OFFLINE' : 'ONLINE');
     } else if (this.boot === 'booting') this.machine.set('BOOTING');
     else if (this.boot === 'failed') this.machine.set('OFFLINE');
     else if (this.machine.get() === 'BOOTING' || this.machine.get() === 'OFFLINE') this.machine.set('ONLINE');
+  }
+
+  focusField() {
+    const focus = () => this.field.focus();
+    focus();
+    requestAnimationFrame(focus);
+    setTimeout(focus, 80);
+  }
+
+  readPos() {
+    const m = /translate3d\((-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px/.exec(this.el.style.transform || '');
+    return { x: Number(m?.[1] || 0), y: Number(m?.[2] || 0) };
+  }
+
+  async birth(from, { animate = true } = {}) {
+    if (this.open) {
+      this.focusField();
+      return;
+    }
+    this.open = true;
+    this.el.hidden = false;
+    this.el.style.opacity = '0';
     this.paint();
     this.place();
-    const focusField = () => this.field.focus();
-    focusField();
-    requestAnimationFrame(focusField);
-    setTimeout(focusField, 80);
+    const dest = this.readPos();
+    if (!animate || !from || reducedMotion.matches) {
+      this.el.style.opacity = '';
+      this.focusField();
+      this.onOpenChange?.(true);
+      return;
+    }
+    const startX = from.left + from.width / 2 - this.el.offsetWidth / 2;
+    const startY = from.top + from.height / 2 - 1;
+    this.el.classList.add('bubble--birth');
+    this.el.style.clipPath = 'inset(calc(50% - 1px) 0)';
+    this.el.style.transform = `translate3d(${Math.round(startX)}px, ${Math.round(startY)}px, 0)`;
+    this.el.style.opacity = '1';
     this.onOpenChange?.(true);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    this.el.style.transition = 'transform 420ms cubic-bezier(0.16, 1, 0.3, 1), clip-path 420ms cubic-bezier(0.16, 1, 0.3, 1)';
+    this.el.style.clipPath = 'inset(0)';
+    this.el.style.transform = `translate3d(${Math.round(dest.x)}px, ${Math.round(dest.y)}px, 0)`;
+    await sleep(430);
+    this.el.style.transition = '';
+    this.el.style.clipPath = '';
+    this.el.style.opacity = '';
+    this.el.classList.remove('bubble--birth');
+    this.place();
+    this.focusField();
   }
 
   hide({ fromHost = false } = {}) {
