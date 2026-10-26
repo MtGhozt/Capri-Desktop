@@ -17,6 +17,10 @@ const { createVoice } = require('./voice');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
 const { isClipCommand } = require('./clip-command');
+const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
+const { isForgetCommand } = require('./forget-command');
+const { isWakeCommand } = require('./wake-command');
+const { pickLine } = require('./lines-es');
 const { saveClip, openClipsFolder, clipFolderLabel } = require('./clips');
 const { micActive } = require('./voice-config');
 const hooks = require('../../scripts/install-hooks');
@@ -276,12 +280,6 @@ function rendererConfig() {
   return { ...cfg, idle, lang: resolveLang(cfg.lang), langSetting: cfg.lang, dev: DEV, floorGap: overlayArea().gap };
 }
 
-const SLEEP_LINES = [
-  'Dale, me apago un toque. No hagas lío, choom.',
-  'A mimir. Despertame si hay quilombo.',
-  'Ok, me duermo. Chau.',
-];
-
 function requestSleep() {
   if (sleepTimer) {
     clearTimeout(sleepTimer);
@@ -298,35 +296,57 @@ function speakLine(line) {
   speakQueue.flush(speakId);
 }
 
-function goSleepReply() {
-  const bye = SLEEP_LINES[Math.floor(Math.random() * SLEEP_LINES.length)];
-  overlay?.webContents.send('chat:token', bye);
-  overlay?.webContents.send('chat:done', { text: bye });
-  speakLine(bye);
+// One of her direct-command lines (lines-es.js), said and shown where the command came from:
+// her chat bubble, or the panel when it came from her menu or the tray.
+function announce(line, { chat = false, badge = 'CAPRI' } = {}) {
+  speakLine(line);
+  if (chat) {
+    overlay?.webContents.send('chat:token', line);
+    overlay?.webContents.send('chat:done', { text: line });
+  } else {
+    sendCommand('line', { badge, text: line });
+  }
+  return line;
+}
+
+function commandReply(kind, opts) {
+  return announce(pickLine(kind), opts);
+}
+
+function goSleepReply({ chat = true } = {}) {
+  commandReply('dormir', { chat, badge: 'SLEEP' });
   pendingSleep = true;
   sleepTimer = setTimeout(requestSleep, 2200);
   return { ok: true };
 }
 
-const CLIP_LINES = [
-  'Clip guardado. NVIDIA hizo lo suyo, yo también, ¿sí?',
-  'Ahí va tu clip, choom. No lo pierdas.',
-  'Capturado. Otro momento para el archivo de la humanidad.',
-];
+function goWakeReply({ chat = true } = {}) {
+  commandReply('despertar', { chat, badge: 'WAKE' });
+  sendCommand('wake');
+  return { ok: true };
+}
+
+function goForgetReply({ chat = true } = {}) {
+  llm.reset();
+  commandReply('olvidar', { chat, badge: 'MEM' });
+  return { ok: true };
+}
+
+function goMicReply(on, { chat = true } = {}) {
+  updateConfig({ voice: { enabled: Boolean(on) } });
+  commandReply(on ? 'unmute' : 'mute', { chat, badge: 'MIC' });
+  return { ok: true };
+}
 
 function clipFailLine(error) {
   return `No pude disparar el atajo del clip. Revisá NVIDIA o el atajo en config.${error ? ` (${error})` : ''}`;
 }
 
-async function goClipReply() {
+async function goClipReply({ chat = true } = {}) {
   const cfg = config.load();
   const result = await saveClip(cfg.clips?.saveHotkey || 'Alt+F10');
-  const line = result.ok
-    ? CLIP_LINES[Math.floor(Math.random() * CLIP_LINES.length)]
-    : clipFailLine(result.error);
-  overlay?.webContents.send('chat:token', line);
-  overlay?.webContents.send('chat:done', { text: line });
-  speakLine(line);
+  if (result.ok) commandReply('clip', { chat, badge: 'CLIP' });
+  else announce(clipFailLine(result.error), { chat, badge: 'CLIP' });
   return { ok: result.ok };
 }
 
@@ -357,8 +377,8 @@ function applyMenuAction(id, value) {
     case 'demo': playDemo(); break;
     case 'help': sendCommand('welcome'); break;
     case 'visible': toggleVisible(); break;
-    case 'sleep': sendCommand('sleep'); break;
-    case 'wake': sendCommand('wake'); break;
+    case 'sleep': goSleepReply({ chat: false }); break;
+    case 'wake': goWakeReply({ chat: false }); break;
     case 'scale': updateConfig({ scale: Number(value) }); break;
     case 'muted': updateConfig({ muted: Boolean(value) }); break;
     case 'reply-mode': updateConfig({ voice: { replyMode: String(value || 'voice') } }); break;
@@ -373,12 +393,9 @@ function applyMenuAction(id, value) {
       break;
     case 'wander': updateConfig({ wander: Boolean(value) }); break;
     case 'possess': updateConfig({ possess: Boolean(value) }); break;
-    case 'mic': updateConfig({ voice: { enabled: Boolean(value) } }); break;
+    case 'mic': goMicReply(Boolean(value), { chat: false }); break;
     case 'mic-device': updateConfig({ voice: { inputDevice: value } }); break;
-    case 'forget':
-      llm.reset();
-      sendCommand('line', { badge: 'MEM', text: 'Memoria borrada. Como si nunca hubiéramos hablado, ¿sí?' });
-      break;
+    case 'forget': goForgetReply({ chat: false }); break;
     case 'persona-reload': {
       const r = llm.reloadPersona();
       sendCommand('line', {
@@ -387,14 +404,7 @@ function applyMenuAction(id, value) {
       });
       break;
     }
-    case 'clip-save': {
-      const hotkey = config.load().clips?.saveHotkey || 'Alt+F10';
-      saveClip(hotkey).then((r) => sendCommand('line', {
-        badge: 'CLIP',
-        text: r.ok ? 'Clip guardado. NVIDIA hizo lo suyo, yo también, ¿sí?' : clipFailLine(r.error),
-      }));
-      break;
-    }
+    case 'clip-save': goClipReply({ chat: false }); break;
     case 'clips-dir': openClipsFolder(config.load()); break;
     case 'drag-lock':
       config.save({ position: { locked: Boolean(value) } });
@@ -679,6 +689,11 @@ function registerIpc() {
     if (!line || !overlay) return { ok: false };
     if (isSleepCommand(line)) return goSleepReply();
     if (isClipCommand(line)) return goClipReply();
+    if (isMuteCommand(line)) return goMicReply(false);
+    if (isUnmuteCommand(line)) return goMicReply(true);
+    if (isForgetCommand(line)) return goForgetReply();
+    // typing to her while she's DORMANT (or asking her to wake) brings her back, no model needed
+    if (overlayFolded || isWakeCommand(line)) return goWakeReply();
     const boot = await lms.whenReady();
     if (boot === 'failed') {
       overlay.webContents.send('chat:error', { kind: 'offline' });
