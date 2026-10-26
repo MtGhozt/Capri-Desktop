@@ -1,7 +1,13 @@
 // Compact CAPRI // DORMANT capsule. Separate from the biochip (chip.js).
 
-import { clamp } from './util.js';
+import { clamp, reducedMotion } from './util.js';
 import { statusText } from './state.js';
+
+const RED = '#ff2152';
+const GREEN = '#36ff7a';
+const BLUE = '#3d6bff';
+const WHITE = '#f4f7ff';
+const FRAME = 1000 / 12;
 
 export class DormantWidget {
   constructor({ el, host }) {
@@ -14,6 +20,13 @@ export class DormantWidget {
     this.onOpenChange = null;
     this.onWake = null;
     this.labelEl = el.querySelector('.dormant__state');
+    this.canvas = el.querySelector('.dormant__star');
+    this.ctx = this.canvas.getContext('2d');
+    this.born = 0;
+    this.lastDraw = 0;
+    this.glitchUntil = 0;
+    this.nextGlitch = 0;
+    this.loop = this.loop.bind(this);
 
     this.el.addEventListener('click', (e) => {
       if (this.dragged) return;
@@ -35,7 +48,10 @@ export class DormantWidget {
     this.open = true;
     this.el.hidden = false;
     this.place();
+    this.born = performance.now();
+    this.nextGlitch = this.born + 2500;
     this.onOpenChange?.(true);
+    requestAnimationFrame(this.loop);
   }
 
   hide() {
@@ -77,6 +93,103 @@ export class DormantWidget {
 
   place() {
     this.el.style.transform = `translate3d(${Math.round(this.x)}px, ${Math.round(this.y)}px, 0)`;
+  }
+
+  loop(now) {
+    if (!this.open) return;
+    requestAnimationFrame(this.loop);
+    if (now - this.lastDraw < FRAME - 1) return;
+    this.lastDraw = now;
+    this.draw(now);
+  }
+
+  draw(now) {
+    const canvas = this.canvas;
+    const ctx = this.ctx;
+    const dpr = window.devicePixelRatio || 1;
+    const css = 18;
+    if (canvas.width !== Math.round(css * dpr)) {
+      canvas.width = Math.round(css * dpr);
+      canvas.height = Math.round(css * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, css, css);
+
+    const calm = reducedMotion.matches;
+    if (!calm && now > this.nextGlitch) {
+      this.glitchUntil = now + 140;
+      this.nextGlitch = now + 4000 + Math.random() * 5000;
+    }
+    const glitch = !calm && now < this.glitchUntil;
+    const spin = calm ? 0 : ((now - this.born) / 1000) * 0.35;
+    const blink = calm ? 1 : (Math.floor(now / 80) % 70 < 3 ? 0.12 : 1);
+    const jx = glitch ? (Math.random() < 0.5 ? -1.2 : 1.2) : 0;
+    const jy = glitch ? (Math.random() - 0.5) * 1.4 : 0;
+
+    ctx.save();
+    ctx.translate(css / 2 + jx, css / 2 + jy);
+    ctx.rotate(spin);
+    if (glitch) {
+      ctx.globalCompositeOperation = 'screen';
+      this.star(ctx, -1.4, 0, '#00e5ff', 1);
+      this.star(ctx, 1.4, 0, '#ff2a7a', 1);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    this.star(ctx, 0, 0, null, blink);
+    ctx.restore();
+  }
+
+  star(ctx, dx, dy, flat, blink) {
+    ctx.save();
+    ctx.translate(dx, dy);
+    const outer = 8.2;
+    const inner = 3.1;
+    const path = () => {
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const r = i % 2 === 0 ? outer : inner;
+        const a = -Math.PI / 2 + i * Math.PI / 4;
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    };
+    if (flat) {
+      path();
+      ctx.fillStyle = flat;
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(-outer, -outer, outer, outer * 2);
+    ctx.clip();
+    path();
+    ctx.fillStyle = RED;
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, -outer, outer, outer * 2);
+    ctx.clip();
+    path();
+    ctx.fillStyle = GREEN;
+    ctx.fill();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 2.1, 2.1 * blink, 0, 0, Math.PI * 2);
+    ctx.fillStyle = BLUE;
+    ctx.fill();
+    if (blink > 0.4) {
+      ctx.beginPath();
+      ctx.arc(0.5, -0.4, 0.7, 0, Math.PI * 2);
+      ctx.fillStyle = WHITE;
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   bindDrag() {
