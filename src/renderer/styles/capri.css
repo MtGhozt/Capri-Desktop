@@ -696,15 +696,16 @@ body {
   top: 0;
   z-index: 5;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0;
+  gap: 2px;
   margin: 0;
   padding: 0;
   background: transparent;
   border: 0;
   color: var(--cyan);
   font-family: var(--font-mono);
-  font-size: var(--text-data);
+  font-size: var(--text-meta);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
@@ -719,9 +720,9 @@ body {
   position: relative;
   z-index: 1;
   flex: none;
-  width: 88px;
-  height: 88px;
-  margin: -28px -18px -28px -14px;
+  width: 104px;
+  height: 104px;
+  margin: 0;
   display: block;
   pointer-events: none;
 }
@@ -730,15 +731,15 @@ body {
   position: relative;
   z-index: 0;
   white-space: nowrap;
-  padding: 6px 12px 6px 26px;
+  padding: 4px 10px;
   background: #000;
   border: 1px solid var(--cyan);
   clip-path: polygon(
-    0 6px, 6px 0,
-    78% 0, 80% 4px, 83% 0,
-    calc(100% - 8px) 0, 100% 8px,
-    100% calc(100% - 6px), calc(100% - 6px) 100%,
-    8px 100%, 0 calc(100% - 8px)
+    0 5px, 5px 0,
+    78% 0, 80% 3px, 83% 0,
+    calc(100% - 6px) 0, 100% 6px,
+    100% calc(100% - 5px), calc(100% - 5px) 100%,
+    6px 100%, 0 calc(100% - 6px)
   );
 }
 
