@@ -21,6 +21,9 @@ const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { isWakeCommand } = require('./wake-command');
 const { pickLine } = require('./lines-es');
+const { createGameMode } = require('./game-mode');
+const { vramText } = require('./vram');
+const { logEvent, voiceLogPath } = require('./log');
 const { saveClip, openClipsFolder, clipFolderLabel } = require('./clips');
 const { micActive } = require('./voice-config');
 const hooks = require('../../scripts/install-hooks');
@@ -53,6 +56,11 @@ let chatOpen = false;
 let pendingSleep = false;
 let sleepTimer = null;
 let previousForeground = null;
+let gameMode = null;
+let gameWork = Promise.resolve();
+let gameWasFolded = false;
+let gameHadLlm = false;
+let gameHadVoice = false;
 
 const userSoundsDir = () => path.join(app.getPath('userData'), 'sounds');
 
@@ -350,6 +358,43 @@ async function goClipReply({ chat = true } = {}) {
   return { ok: result.ok };
 }
 
+// -- game mode ---------------------------------------------------------------------------
+// A fullscreen game gets the whole GPU: the voice sidecar (OmniVoice) and Gemma go, she folds
+// into DORMANT and stays quiet, and both come back 30 s after the game is really gone.
+
+const gameLog = (text) => logEvent(voiceLogPath(), `[capri] ${text}`);
+
+// One step at a time: unloading takes seconds, and a game can come and go meanwhile.
+function queueGame(step) {
+  gameWork = gameWork.then(step).catch((err) => gameLog(`game mode: ${err.message}`));
+  return gameWork;
+}
+
+async function gameEnter(windows) {
+  gameWasFolded = overlayFolded;
+  gameHadVoice = Boolean(voice?.running?.());
+  gameLog(`game on exe=${windows?.fgExe || '?'} ${vramText()}`);
+  llm?.cancel();
+  speakQueue?.stop();
+  sendCommand('sleep'); // DORMANT, and the chat bubble goes with it
+  if (lms?.status() === 'booting') await lms.whenReady(); // a load in flight would land anyway
+  gameHadLlm = lms?.status() === 'ready';
+  voice?.stop(); // the sidecar holds OmniVoice: stopping it hands the VRAM back
+  await lms?.unloadAll?.();
+  gameLog(`game on after unload ${vramText()}`);
+}
+
+async function gameLeave() {
+  gameLog(`game off ${vramText()}`);
+  if (!gameWasFolded) sendCommand('wake');
+  if (gameHadVoice) voice?.start({ force: true });
+  if (gameHadLlm) await lms?.reload?.();
+  gameLog(`game off after reload ${vramText()}`);
+  gameWasFolded = false;
+  gameHadLlm = false;
+  gameHadVoice = false;
+}
+
 function ttsOn() {
   const cfg = config.load();
   if (cfg.muted) return false;
@@ -396,6 +441,7 @@ function applyMenuAction(id, value) {
     case 'mic': goMicReply(Boolean(value), { chat: false }); break;
     case 'mic-device': updateConfig({ voice: { inputDevice: value } }); break;
     case 'forget': goForgetReply({ chat: false }); break;
+    case 'gaming-mode': updateConfig({ gaming: { mode: value === 'off' ? 'off' : 'auto' } }); break;
     case 'persona-reload': {
       const r = llm.reloadPersona();
       sendCommand('line', {
@@ -486,6 +532,7 @@ function menuState(extra = {}) {
       replyMode: String(cfg.voice?.replyMode || 'voice'),
       locked: Boolean(cfg.position?.locked),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
+      gaming: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
     },
     clips: {
       hotkey: cfg.clips?.saveHotkey || 'Alt+F10',
@@ -848,6 +895,12 @@ function main() {
       send: (msg) => voice?.push?.(msg),
     });
     voice.start();
+    gameMode = createGameMode({
+      enabled: () => config.load().gaming?.mode !== 'off',
+      apps: () => config.load().gaming?.apps || [],
+      onEnter: (windows) => queueGame(() => gameEnter(windows)),
+      onExit: () => queueGame(gameLeave),
+    });
     createTray();
     windowWatch = startWindowWatch({
       overlay,
@@ -855,12 +908,17 @@ function main() {
         // a click on the taskbar brings it up over her: sitting on it, her legs would vanish behind it
         if (data.taskbar && !lastWindows?.taskbar && config.load().rest === 'taskbar') raiseOverlay();
         lastWindows = data;
+        gameMode?.update(data);
         overlay?.webContents.send('windows:update', data);
       },
     });
     createBridge({
       port: PORT,
-      onEvent: (evt) => overlay?.webContents.send('claude:event', evt),
+      onEvent: (evt) => {
+        // a game owns the screen: she stays folded and quiet until it is over
+        if (gameMode?.active()) return;
+        overlay?.webContents.send('claude:event', evt);
+      },
       onDebug: DEV ? debugHandler : null,
     });
     registerShortcuts();
@@ -875,6 +933,7 @@ function main() {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     windowWatch?.stop();
+    gameMode?.stop();
     voice?.stop();
     lms?.unload();
   });

@@ -1,14 +1,16 @@
 # Watches the top-level windows so Capri can sit on them.
-# Prints one JSON line whenever something changes: the foreground window and the visible
-# windows in z-order (front first), as physical-pixel frame bounds. No titles, no contents.
+# Prints one JSON line whenever something changes: the foreground window (with its exe and
+# whether it covers its monitor) and the visible windows in z-order (front first), as
+# physical-pixel frame bounds. No titles, no contents.
 #
-#   powershell -File windows.ps1 <capri hwnd> <capri pid>
+#   powershell -File windows.ps1 <capri hwnd> <capri pid> [-Once]
 
-param([long]$Self = 0, [int]$ParentPid = 0)
+param([long]$Self = 0, [int]$ParentPid = 0, [switch]$Once)
 $ErrorActionPreference = 'Stop'
 
 Add-Type -TypeDefinition @"
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -18,6 +20,9 @@ public static class CapriWindows {
   [StructLayout(LayoutKind.Sequential)]
   public struct RECT { public int Left, Top, Right, Bottom; }
 
+  [StructLayout(LayoutKind.Sequential)]
+  public struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+
   [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr lParam);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
   [DllImport("user32.dll")] static extern bool IsIconic(IntPtr hwnd);
@@ -26,6 +31,14 @@ public static class CapriWindows {
   [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hwnd, int index);
   [DllImport("user32.dll")] static extern int GetClassName(IntPtr hwnd, StringBuilder name, int max);
   [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+  [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+  [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern bool CloseHandle(IntPtr handle);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  static extern bool QueryFullProcessImageName(IntPtr process, uint flags, StringBuilder name, ref uint size);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT value, int size);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int value, int size);
 
@@ -34,9 +47,56 @@ public static class CapriWindows {
   const int WS_EX_NOACTIVATE = 0x08000000;
   const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
   const int DWMWA_CLOAKED = 14;
+  const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+  const uint MONITOR_DEFAULTTONEAREST = 2;
+
+  static readonly Dictionary<long, string> ExeCache = new Dictionary<long, string>();
 
   public static void Init() {
     SetProcessDpiAwarenessContext(new IntPtr(-4)); // per-monitor v2: real pixels everywhere
+  }
+
+  static string Quote(string s) {
+    if (String.IsNullOrEmpty(s)) return "\"\"";
+    return "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+  }
+
+  // Full path of the process that owns the window (game mode needs it); cached, since
+  // Snapshot runs every 150 ms.
+  static string ExeOf(long hwnd) {
+    string cached;
+    if (ExeCache.TryGetValue(hwnd, out cached)) return cached;
+    string path = "";
+    uint pid;
+    GetWindowThreadProcessId(new IntPtr(hwnd), out pid);
+    if (pid != 0) {
+      IntPtr handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+      if (handle != IntPtr.Zero) {
+        var sb = new StringBuilder(1024);
+        uint size = 1024;
+        if (QueryFullProcessImageName(handle, 0, sb, ref size)) path = sb.ToString();
+        CloseHandle(handle);
+      }
+    }
+    if (ExeCache.Count > 128) ExeCache.Clear();
+    ExeCache[hwnd] = path;
+    return path;
+  }
+
+  // Edge to edge on its monitor: borderless or exclusive fullscreen. A maximized window
+  // leaves the taskbar out, so it does not count.
+  static bool Fullscreen(IntPtr hwnd) {
+    if (hwnd == IntPtr.Zero) return false;
+    RECT r;
+    if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out r, 16) != 0
+        && !GetWindowRect(hwnd, out r)) return false;
+    IntPtr monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    var info = new MONITORINFO();
+    info.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+    if (!GetMonitorInfo(monitor, ref info)) return false;
+    RECT m = info.rcMonitor;
+    return Math.Abs(r.Left - m.Left) <= 2 && Math.Abs(r.Top - m.Top) <= 2
+        && Math.Abs(r.Right - m.Right) <= 2 && Math.Abs(r.Bottom - m.Bottom) <= 2;
   }
 
   public static string Snapshot(long self) {
@@ -46,7 +106,10 @@ public static class CapriWindows {
     GetClassName(fg, fgClass, 64);
     // the taskbar clicked: it comes up over her (Windows has no levels among windows on top)
     bool taskbar = fgClass.ToString() == "Shell_TrayWnd" || fgClass.ToString() == "Shell_SecondaryTrayWnd";
-    sb.Append("{\"fg\":").Append(fg.ToInt64()).Append(",\"taskbar\":").Append(taskbar ? "true" : "false").Append(",\"wins\":[");
+    sb.Append("{\"fg\":").Append(fg.ToInt64())
+      .Append(",\"fgExe\":").Append(Quote(fg == IntPtr.Zero ? "" : ExeOf(fg.ToInt64())))
+      .Append(",\"fgFull\":").Append(Fullscreen(fg) ? "true" : "false")
+      .Append(",\"taskbar\":").Append(taskbar ? "true" : "false").Append(",\"wins\":[");
     int count = 0;
     EnumWindows((h, l) => {
       if (count >= 40) return false;
@@ -77,6 +140,10 @@ public static class CapriWindows {
 "@
 
 [CapriWindows]::Init()
+if ($Once) {
+  [Console]::Out.WriteLine([CapriWindows]::Snapshot($Self))
+  exit 0
+}
 $last = ''
 $tick = 0
 while ($true) {

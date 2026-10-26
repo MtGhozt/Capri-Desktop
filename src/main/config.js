@@ -53,6 +53,10 @@ const DEFAULTS = {
     saveHotkey: 'Alt+F10', // NVIDIA Instant Replay
     folder: null,          // null → NVIDIA's Videos\NVIDIA if it exists, otherwise Videos
   },
+  gaming: {
+    mode: 'auto',            // 'auto' unloads the GPU while a fullscreen game runs; 'off' never
+    apps: [],                // extra exe names or path fragments to treat as games
+  },
   voice: {
     enabled: true,
     dir: null,               // null → repo voice/ in dev; set an absolute path for the installed exe
@@ -106,6 +110,7 @@ function load() {
       },
       fx: { ...DEFAULTS.fx, ...(saved.fx || {}) },
       ui: { ...DEFAULTS.ui, ...(saved.ui || {}) },
+      gaming: { ...DEFAULTS.gaming, ...(saved.gaming || {}) },
       voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
       position: { ...DEFAULTS.position, ...(saved.position || {}) },
       shortcuts: { ...DEFAULTS.shortcuts, ...(saved.shortcuts || {}) },
@@ -141,6 +146,7 @@ function save(patch) {
     },
     fx: { ...DEFAULTS.fx, ...(current.fx || {}), ...(patch.fx || {}) },
     ui: { ...DEFAULTS.ui, ...(current.ui || {}), ...(patch.ui || {}) },
+    gaming: { ...DEFAULTS.gaming, ...(current.gaming || {}), ...(patch.gaming || {}) },
     voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
     position: { ...DEFAULTS.position, ...(current.position || {}), ...(patch.position || {}) },
     shortcuts: { ...DEFAULTS.shortcuts, ...(current.shortcuts || {}), ...(patch.shortcuts || {}) },

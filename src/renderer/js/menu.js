@@ -273,6 +273,11 @@ export class AppMenu {
     section('COMPORTAMIENTO');
     toggle('Arrastrar', { on: cfg.locked, labels: ['NORMAL', 'FIJO'], onChange: (on) => this.act('drag-lock', on) });
     toggle('Iniciar con Windows', { on: state.login, labels: ['INACTIVO', 'ACTIVO'], onChange: (on) => this.act('startup', on) });
+    toggle('Modo juego', {
+      on: cfg.gaming !== 'off',
+      labels: ['OFF', 'AUTO'],
+      onChange: (on) => this.act('gaming-mode', on ? 'auto' : 'off'),
+    });
     selector('Tema', {
       options: THEME_OPTIONS,
       current: cfg.theme,
@@ -314,7 +319,7 @@ export class AppMenu {
     }
     this.confirmForget = false;
     const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock' || id === 'theme'
-      || id === 'startup';
+      || id === 'startup' || id === 'gaming-mode';
     await this.host.menuAction({ id, value });
     if (!keep) {
       this.hide();

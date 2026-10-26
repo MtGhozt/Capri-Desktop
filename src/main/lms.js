@@ -87,6 +87,48 @@ function createLms({ loadConfig, onStatus }) {
     return false;
   }
 
+  // Boots the local server if needed and loads the model: the shared half of start() and
+  // reload().
+  async function loadModel() {
+    if (!fs.existsSync(binPath())) {
+      emit('failed');
+      return 'failed';
+    }
+    emit('booting');
+    const llm = cfg();
+    const timeout = Number(llm.bootTimeoutMs) || 120000;
+    const deadline = Date.now() + timeout;
+    const server = await run(['server', 'start'], { detached: true });
+    if (!server.ok) {
+      emit('failed');
+      return 'failed';
+    }
+    startedByCapri = true;
+
+    if (!(await waitForModels(deadline))) {
+      emit('failed');
+      return 'failed';
+    }
+
+    const model = llm.model || 'google/gemma-4-e2b';
+    const ctx = String(llm.contextLength || 8192);
+    const gpu = String(llm.gpu || 'max');
+    const loaded = await run(
+      ['load', model, '--context-length', ctx, '--gpu', gpu, '-y'],
+      { timeoutMs: Math.max(5000, deadline - Date.now()) },
+    );
+    if (!loaded.ok) {
+      emit('failed');
+      return 'failed';
+    }
+    if (!(await waitForModels(deadline))) {
+      emit('failed');
+      return 'failed';
+    }
+    emit('ready');
+    return 'ready';
+  }
+
   function start() {
     ready = (async () => {
       const llm = cfg();
@@ -98,44 +140,14 @@ function createLms({ loadConfig, onStatus }) {
         emit('ready');
         return 'ready';
       }
-      if (!fs.existsSync(binPath())) {
-        emit('failed');
-        return 'failed';
-      }
-
-      emit('booting');
-      const timeout = Number(llm.bootTimeoutMs) || 120000;
-      const deadline = Date.now() + timeout;
-      const server = await run(['server', 'start'], { detached: true });
-      if (!server.ok) {
-        emit('failed');
-        return 'failed';
-      }
-      startedByCapri = true;
-
-      if (!(await waitForModels(deadline))) {
-        emit('failed');
-        return 'failed';
-      }
-
-      const model = llm.model || 'google/gemma-4-e2b';
-      const ctx = String(llm.contextLength || 8192);
-      const gpu = String(llm.gpu || 'max');
-      const loaded = await run(
-        ['load', model, '--context-length', ctx, '--gpu', gpu, '-y'],
-        { timeoutMs: Math.max(5000, deadline - Date.now()) },
-      );
-      if (!loaded.ok) {
-        emit('failed');
-        return 'failed';
-      }
-      if (!(await waitForModels(deadline))) {
-        emit('failed');
-        return 'failed';
-      }
-      emit('ready');
-      return 'ready';
+      return loadModel();
     })();
+    return ready;
+  }
+
+  // Game mode took the model out of VRAM; this puts back the one she had.
+  function reload() {
+    ready = loadModel();
     return ready;
   }
 
@@ -154,10 +166,20 @@ function createLms({ loadConfig, onStatus }) {
     }
   }
 
+  // Game mode: also frees a model the user had loaded before Capri started. Kept async so
+  // unloading never freezes her window (it can take a few seconds).
+  async function unloadAll() {
+    const bin = binPath();
+    if (!fs.existsSync(bin)) return { ok: false, error: 'lms not found' };
+    return run(['unload', '--all'], { timeoutMs: 20000 });
+  }
+
   return {
     start,
+    reload,
     whenReady,
     unload,
+    unloadAll,
     status: () => status,
     get startedByCapri() { return startedByCapri; },
   };
