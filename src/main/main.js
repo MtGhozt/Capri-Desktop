@@ -37,6 +37,7 @@ let lastWindows = null;
 let llm = null;
 let lms = null;
 let voice = null;
+let voiceQueue = [];
 let chatOpen = false;
 let previousForeground = null;
 
@@ -100,7 +101,11 @@ function createOverlay() {
   overlay.setIgnoreMouseEvents(true, { forward: true });
   overlay.loadURL('capri://app/src/renderer/index.html');
   // always shown: put away, she's still there as her biochip in the corner
-  overlay.once('ready-to-show', () => overlay.showInactive());
+  overlay.once('ready-to-show', () => {
+    overlay.showInactive();
+    for (const payload of voiceQueue) overlay.webContents.send('voice:event', payload);
+    voiceQueue = [];
+  });
   overlay.webContents.on('render-process-gone', (_e, details) => {
     console.error('[capri] renderer gone:', details.reason);
   });
@@ -596,11 +601,15 @@ function main() {
       onEvent: (payload) => {
         if (payload?.type === 'listening') openChat();
         if (payload?.type === 'devices') rebuildTray();
-        overlay?.webContents.send('voice:event', payload);
+        if (overlay?.webContents && !overlay.webContents.isDestroyed()) {
+          overlay.webContents.send('voice:event', payload);
+        } else {
+          voiceQueue.push(payload);
+        }
       },
     });
-    voice.start();
     createOverlay();
+    voice.start();
     createTray();
     windowWatch = startWindowWatch({
       overlay,

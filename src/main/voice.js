@@ -31,6 +31,20 @@ function resolveVoiceDir(root, cfg) {
   return null;
 }
 
+function voiceLogPath() {
+  const dir = path.join(app.getPath('userData'), 'logs');
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, 'voice.log');
+}
+
+function appendVoiceLog(file, text) {
+  const line = String(text).replace(/\s+$/, '');
+  if (!line) return;
+  try {
+    fs.appendFileSync(file, `${new Date().toISOString()} ${line}\n`);
+  } catch { /* disk full / locked */ }
+}
+
 function createVoice({ root, loadConfig, onEvent }) {
   let child = null;
   let ws = null;
@@ -39,12 +53,19 @@ function createVoice({ root, loadConfig, onEvent }) {
   let connecting = false;
   let stopped = false;
   let retries = 0;
+  const logFile = voiceLogPath();
 
   function emit(payload) {
     if (payload?.type === 'devices' && Array.isArray(payload.devices)) {
       devices = payload.devices;
     }
     onEvent?.(payload);
+  }
+
+  function skip(message) {
+    appendVoiceLog(logFile, `[capri] ${message}`);
+    console.log(`[capri] ${message}`);
+    emit({ type: 'notice', message });
   }
 
   function voiceCfg() {
@@ -109,18 +130,18 @@ function createVoice({ root, loadConfig, onEvent }) {
     stopped = false;
     const cfg = loadConfig();
     if (cfg.voice && cfg.voice.enabled === false) {
-      console.log('[capri] voice sidecar off (voice.enabled=false)');
+      appendVoiceLog(logFile, '[capri] voice sidecar off (voice.enabled=false)');
       return;
     }
     const dir = resolveVoiceDir(root, cfg);
     if (!dir) {
-      console.log('[capri] voice sidecar skipped: set voice.dir in %APPDATA%\\capri-desktop\\config.json');
+      skip('Voice sidecar is off: set voice.dir in %APPDATA%\\capri-desktop\\config.json to your voice folder (the one with setup.ps1). Chat still works.');
       return;
     }
     const py = resolvePython(dir);
     const script = path.join(dir, 'server.py');
     if (!py || !fs.existsSync(script)) {
-      console.log('[capri] voice sidecar skipped: run voice/setup.ps1 (missing venv or server.py)');
+      skip(`Voice sidecar is off: no venv in ${dir}. Run setup.ps1 there. Chat still works.`);
       return;
     }
     token = crypto.randomBytes(24).toString('hex');
@@ -137,26 +158,34 @@ function createVoice({ root, loadConfig, onEvent }) {
           CAPRI_VOICE_TOKEN: token,
           CAPRI_VOICE_PORT: String(PORT),
           CAPRI_DEV: process.argv.includes('--dev') ? '1' : '',
+          CAPRI_VOICE_LOG: logFile,
         },
       });
     } catch (err) {
-      console.error('[capri] voice sidecar spawn failed:', err.message);
+      skip(`Voice sidecar failed to start: ${err.message}`);
       child = null;
       return;
     }
+    appendVoiceLog(logFile, `[capri] voice sidecar spawn dir=${dir}`);
     child.stdout.on('data', (buf) => {
       const line = String(buf);
       process.stdout.write(line);
+      appendVoiceLog(logFile, line);
       if (line.includes('CAPRI_VOICE_READY')) connect();
     });
-    child.stderr.on('data', (buf) => process.stderr.write(String(buf)));
+    child.stderr.on('data', (buf) => {
+      const line = String(buf);
+      process.stderr.write(line);
+      appendVoiceLog(logFile, line);
+    });
     child.on('exit', (code) => {
+      appendVoiceLog(logFile, `[capri] voice sidecar exit ${code}`);
       console.log('[capri] voice sidecar exit', code);
       child = null;
       disconnect();
     });
     child.on('error', (err) => {
-      console.error('[capri] voice sidecar error:', err.message);
+      skip(`Voice sidecar error: ${err.message}`);
       child = null;
     });
     setTimeout(connect, 800);

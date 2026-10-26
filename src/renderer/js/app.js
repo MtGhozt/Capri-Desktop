@@ -456,6 +456,17 @@ async function boot() {
       bumpIdle();
       await unfold({ chat: true });
       bubble.submitFromVoice(evt.text);
+      return;
+    }
+    if (type === 'notice') {
+      bumpIdle();
+      await unfold();
+      panel.say({
+        kind: 'error',
+        badge: 'VOICE',
+        line: evt.message || 'Voice sidecar is offline. Chat still works.',
+        hold: 10000,
+      });
     }
   });
 

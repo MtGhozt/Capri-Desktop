@@ -25,6 +25,7 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
   "dir": null,
   "pushToTalk": "Ctrl+Alt+V",
   "wakeWord": true,
+  "wakeThreshold": 0.2,
   "wakeModel": "hey_jarvis",
   "sttModel": "small",
   "language": "auto",
@@ -33,11 +34,11 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
 ```
 
 - **dev** (`pnpm start` / `pnpm dev`): si `dir` es `null`, Electron usa `<repo>/voice`.
-- **exe instalado**: poné una ruta absoluta al sidecar, por ejemplo `"dir": "C:\\Programacion\\Capri\\Capri-Desktop\\voice"`. Si falta, Capri sigue con chat de texto y deja un log `voice sidecar skipped`.
+- **exe instalado**: poné una ruta absoluta al sidecar, por ejemplo `"dir": "C:\\Programacion\\Capri\\Capri-Desktop\\voice"`. Si falta `dir` o el `.venv`, Capri avisa en el panel (badge `VOICE`) y sigue con chat de texto. Logs: `%APPDATA%\capri-desktop\logs\voice.log`.
 
 `sttModel`: `base`, `small` (default) o `medium`. Whisper corre en **CPU int8**; la GPU queda para el LLM (y el TTS de 3B).
 
-Idioma: no hay autodetección libre. Whisper elige solo **es** o **en** (`task=transcribe`, nunca translate). Si detecta otro idioma, usa **es**. Prompt fijo `Capri, choom, Matias` para los nombres. Wake word: umbral `0.25` (hey_jarvis suele puntuar ~0.3–0.4; 0.5 se lo come). En `pnpm dev` el sidecar loguea `wake score=...`.
+Idioma: no hay autodetección libre. Whisper elige solo **es** o **en** (`task=transcribe`, nunca translate). Si detecta otro idioma, usa **es**. Prompt fijo `Capri, choom, Matias` para los nombres. Wake word: `voice.wakeThreshold` (default **0.2**). En `pnpm dev` el sidecar loguea `wake score=...`.
 
 ## Uso
 
