@@ -16,6 +16,7 @@ import numpy as np
 import sounddevice as sd
 import websockets
 
+from heavy import IMPORT_LOCK, import_whisper_model, preload_torch
 from tts import (
     NullTTS,
     OmniVoiceTTS,
@@ -35,6 +36,8 @@ MIC_QUEUE = 48
 WAKE_FRAME = 1280
 MEDIUM_VRAM_MIB = 2800
 LISTEN_TIMEOUT_S = 10.0
+WHISPER_LOAD_S = 60.0
+WAKE_ATTEMPTS = 3
 PREFETCH = 2
 SHORT_PHRASE = 20
 MAX_SECONDS = 15
@@ -77,17 +80,17 @@ def log(msg: str) -> None:
 
 def load_openwakeword():
     """Import the pip package, not a local file/folder named openwakeword."""
-    import sys
     blocked = {os.path.abspath(p) for p in (os.getcwd(), str(ROOT), str(MODELS))}
     saved = sys.path[:]
     sys.path[:] = [p for p in saved if p not in ("", ".") and os.path.abspath(p) not in blocked]
     try:
-        import openwakeword  # noqa: F401
-        from openwakeword.utils import download_models
-        from openwakeword.model import Model
-        if not hasattr(openwakeword, "FEATURE_MODELS"):
-            raise RuntimeError("openwakeword import was shadowed (no FEATURE_MODELS)")
-        return Model, download_models
+        with IMPORT_LOCK:
+            import openwakeword  # noqa: F401
+            from openwakeword.utils import download_models
+            from openwakeword.model import Model
+            if not hasattr(openwakeword, "FEATURE_MODELS"):
+                raise RuntimeError("openwakeword import was shadowed (no FEATURE_MODELS)")
+            return Model, download_models
     finally:
         sys.path[:] = saved
 
@@ -328,18 +331,7 @@ class Engine:
                     log(f"silero vad fallback to energy: {err}")
                     self._vad = EnergyVAD()
             if self._wake is None and self.cfg.get("wakeWord"):
-                try:
-                    Model, download_models = load_openwakeword()
-                    model = self.cfg.get("wakeModel") or "hey_jarvis"
-                    download_models(model_names=[model], target_directory=str(MODELS))
-                    download_models(model_names=[model])
-                    custom = sorted(MODELS.glob(f"*{model}*.onnx"))
-                    names = [str(custom[0])] if custom else [model]
-                    self._wake = Model(wakeword_models=names, inference_framework="onnx")
-                    log(f"wake word {model} ready threshold={self.wake_threshold()} onnx={names}")
-                except Exception as err:
-                    log(f"wake word unavailable: {err}")
-                    self._wake = False
+                self._wake = self._load_wake()
             if self._whisper is None:
                 self._whisper = self._load_whisper()
 
@@ -348,8 +340,29 @@ class Engine:
         if self._cfg_ready:
             self.start_tts()
 
+    def _load_wake(self):
+        model = self.cfg.get("wakeModel") or "hey_jarvis"
+        last_err = None
+        for attempt in range(1, WAKE_ATTEMPTS + 1):
+            try:
+                Model, download_models = load_openwakeword()
+                download_models(model_names=[model], target_directory=str(MODELS))
+                download_models(model_names=[model])
+                custom = sorted(MODELS.glob(f"*{model}*.onnx"))
+                names = [str(custom[0])] if custom else [model]
+                wake = Model(wakeword_models=names, inference_framework="onnx")
+                log(f"wake word {model} ready threshold={self.wake_threshold()} onnx={names}")
+                return wake
+            except Exception as err:
+                last_err = err
+                log(f"wake word failed attempt={attempt}/{WAKE_ATTEMPTS}: {err}")
+                time.sleep(0.4 * attempt)
+        log(f"wake word unavailable: {last_err}")
+        self.broadcast({"type": "notice", "message": f"Wake word no arrancó: {last_err}"})
+        return False
+
     def _load_whisper(self):
-        from faster_whisper import WhisperModel
+        WhisperModel = import_whisper_model()
         root = str(MODELS / "whisper")
         wanted = str(self.cfg.get("sttModel") or "auto").lower()
         self._stt_beam = 5
@@ -363,8 +376,7 @@ class Engine:
         if try_medium:
             try:
                 log(f"loading whisper medium (cuda float16) vram_free={free} vram_usable={usable}")
-                model = WhisperModel("medium", device="cuda", compute_type="float16", download_root=root)
-                log("whisper medium cuda ready")
+                model = self._whisper_boot(WhisperModel, "medium", "cuda", "float16", root)
                 return model
             except Exception as err:
                 log(f"whisper medium cuda failed: {err}")
@@ -376,7 +388,37 @@ class Engine:
             f"loading whisper {name} (cpu int8) reason={reason} beam={self._stt_beam} "
             f"vram_free={free} vram_usable={usable}"
         )
-        return WhisperModel(name, device="cpu", compute_type="int8", download_root=root)
+        try:
+            return self._whisper_boot(WhisperModel, name, "cpu", "int8", root)
+        except Exception as err:
+            log(f"whisper failed: {err}")
+            raise
+
+    def _whisper_boot(self, WhisperModel, name, device, compute, root):
+        timed_out = {"hit": False}
+
+        def on_timeout():
+            timed_out["hit"] = True
+            log(f"whisper load timeout after {WHISPER_LOAD_S:.0f}s name={name} device={device}")
+            self.broadcast({
+                "type": "notice",
+                "message": f"Whisper no terminó de cargar en {WHISPER_LOAD_S:.0f}s.",
+            })
+
+        timer = threading.Timer(WHISPER_LOAD_S, on_timeout)
+        timer.daemon = True
+        timer.start()
+        t0 = time.perf_counter()
+        try:
+            model = WhisperModel(name, device=device, compute_type=compute, download_root=root)
+        finally:
+            timer.cancel()
+        ms = (time.perf_counter() - t0) * 1000
+        tag = f"{name} {device}"
+        log(f"whisper ready name={name} device={device} {ms:.0f}ms")
+        if timed_out["hit"]:
+            log(f"whisper ready after timeout ({tag})")
+        return model
 
     def wake_threshold(self) -> float:
         try:
@@ -1093,6 +1135,7 @@ async def amain() -> None:
         log("CAPRI_VOICE_TOKEN missing")
         sys.exit(1)
     MODELS.mkdir(parents=True, exist_ok=True)
+    preload_torch(log)
     loop = asyncio.get_running_loop()
     engine = Engine(loop, token)
     engine.restart_stream()

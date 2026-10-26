@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+from heavy import import_omnivoice, import_torch
 from tts_text import clean_for_tts
 
 KOKORO_ONNX_URL = (
@@ -107,7 +108,7 @@ def _is_oom(err: BaseException) -> bool:
 def _release_cuda() -> None:
     gc.collect()
     try:
-        import torch
+        torch = import_torch()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
@@ -177,8 +178,7 @@ class OmniVoiceTTS(TTSEngine):
         os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         os.environ.setdefault("HF_HOME", str(self.models_dir / "hf"))
         os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
-        import torch
-        from omnivoice import OmniVoice, VoiceClonePrompt
+        torch, OmniVoice, VoiceClonePrompt = import_omnivoice()
 
         if not self.wav.is_file():
             raise FileNotFoundError(f"tts ref missing: {self.wav}")
