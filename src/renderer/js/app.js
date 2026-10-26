@@ -207,6 +207,7 @@ async function boot() {
   panel.onChar = (kind) => voice.play('blip', { mood: kind });
   panel.onTalk = (talking) => talking && capri.perform('talk');
   bubble.onTalk = (talking) => talking && capri.perform('talk');
+  bubble.onBlip = () => voice.typeBlip();
   bubble.onOpenChange = (open) => {
     if (open) panel.hide();
     refreshHit();
@@ -268,6 +269,7 @@ async function boot() {
     if (machine.get() === 'DORMANT') {
       folding = true;
       refreshHit();
+      voice.wakeArp();
       const from = dormant.rect();
       const boot = bubble.boot;
       const next = boot === 'booting' ? 'BOOTING' : boot === 'failed' ? 'OFFLINE' : 'ONLINE';
@@ -532,7 +534,9 @@ async function boot() {
 
   const applyVoiceHold = (cfg) => {
     const kind = String(cfg.voice?.tts || 'auto').toLowerCase();
-    bubble.holdVoice = cfg.voice?.enabled !== false && !cfg.muted && kind !== 'off' && kind !== 'none' && kind !== 'false';
+    const mode = String(cfg.voice?.replyMode || 'voice').toLowerCase();
+    bubble.replyMode = mode;
+    bubble.holdVoice = mode === 'voice' && cfg.voice?.enabled !== false && !cfg.muted && kind !== 'off' && kind !== 'none' && kind !== 'false';
   };
   applyVoiceHold(config);
 

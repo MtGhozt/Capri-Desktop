@@ -33,6 +33,8 @@ export class Bubble {
     this.onOpenChange = null;
     this.boot = 'ready';
     this.holdVoice = false;
+    this.replyMode = 'voice';
+    this.onBlip = null;
     this.voicePlaying = false;
     this.voiceTimer = 0;
     machine.onChange(() => this.paint());
@@ -137,7 +139,7 @@ export class Bubble {
     this.stopThink();
     clearTimeout(this.voiceTimer);
     this.voiceTimer = 0;
-    clearInterval(this.decodeTimer);
+    this.clearDecode();
     if (this.busy) {
       window.host.cancelChat();
       this.busy = false;
@@ -237,10 +239,18 @@ export class Bubble {
     return body;
   }
 
+  clearDecode() {
+    if (this.decodeTimer) {
+      clearInterval(this.decodeTimer);
+      clearTimeout(this.decodeTimer);
+      this.decodeTimer = null;
+    }
+  }
+
   decode(el, text) {
-    clearInterval(this.decodeTimer);
-    this.decodeTimer = null;
+    this.clearDecode();
     const finish = () => {
+      this.clearDecode();
       if (el) el.textContent = text;
       if (!this.voicePlaying) {
         this.setState('ONLINE');
@@ -252,10 +262,11 @@ export class Bubble {
       return;
     }
     const chars = [...text];
+    const blips = this.replyMode === 'blips';
     let done = 0;
     this.onTalk?.(true);
-    const step = () => {
-      done = Math.min(chars.length, done + 2);
+    if (blips) this.setState('TALKING');
+    const paint = () => {
       const head = chars.slice(0, done).join('');
       let tail = '';
       for (let i = done; i < Math.min(chars.length, done + 6); i++) {
@@ -263,14 +274,40 @@ export class Bubble {
       }
       el.textContent = head + tail;
       this.scrollLog();
-      if (done >= chars.length) {
-        clearInterval(this.decodeTimer);
-        this.decodeTimer = null;
-        finish();
-      }
     };
-    step();
-    this.decodeTimer = setInterval(step, DECODE_STEP_MS);
+    if (!blips) {
+      const step = () => {
+        done = Math.min(chars.length, done + 2);
+        paint();
+        if (done >= chars.length) finish();
+      };
+      step();
+      this.decodeTimer = setInterval(step, DECODE_STEP_MS);
+      return;
+    }
+    const tick = () => {
+      if (done >= chars.length) {
+        finish();
+        return;
+      }
+      const ch = chars[done];
+      let take = 1;
+      let wait = 40;
+      if (ch === '…' || (ch === '.' && chars[done + 1] === '.' && chars[done + 2] === '.')) {
+        take = ch === '…' ? 1 : 3;
+        wait = 220;
+      } else if ('.!?'.includes(ch)) wait = 110;
+      else if (ch === ',') wait = 80;
+      done = Math.min(chars.length, done + take);
+      paint();
+      if (ch !== ' ' && ch !== '\n' && ch !== '\t') this.onBlip?.();
+      if (done >= chars.length) {
+        finish();
+        return;
+      }
+      this.decodeTimer = setTimeout(tick, wait);
+    };
+    tick();
   }
 
   armVoiceWatch() {
@@ -279,8 +316,7 @@ export class Bubble {
       this.voiceTimer = 0;
       if (this.voicePlaying) return;
       if (this.decodeTimer) {
-        clearInterval(this.decodeTimer);
-        this.decodeTimer = null;
+        this.clearDecode();
         if (this.replyEl) this.replyEl.textContent = this.replyText;
       }
       if (this.machine.get() === 'THINKING' || this.machine.get() === 'TALKING') {
@@ -318,8 +354,7 @@ export class Bubble {
     this.stopThink();
     clearTimeout(this.voiceTimer);
     this.voiceTimer = 0;
-    clearInterval(this.decodeTimer);
-    this.decodeTimer = null;
+    this.clearDecode();
     this.voicePlaying = false;
     this.onTalk?.(false);
     if (cutting) this.settleInterrupted();

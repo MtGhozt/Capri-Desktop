@@ -176,6 +176,14 @@ export class AppMenu {
     rows.push(item(t.sound, { expander: true, action: () => this.toggle('sound', state) }));
     if (this.expanded === 'sound') {
       rows.push(item(t.mute, { checked: cfg.muted, action: () => this.act('muted', !cfg.muted) }));
+      rows.push(item(t.reply, { disabled: true }));
+      for (const [mode, label] of [['voice', t.replyVoice], ['blips', t.replyBlips], ['silent', t.replySilent]]) {
+        rows.push(item(label, {
+          radio: true,
+          checked: String(cfg.replyMode || 'voice') === mode,
+          action: () => this.act('reply-mode', mode),
+        }));
+      }
       rows.push(item(t.soundsDir, { action: () => this.act('sounds-dir') }));
     }
 
@@ -242,7 +250,7 @@ export class AppMenu {
   async act(id, value) {
     const keep = id === 'scale' || id === 'muted' || id === 'display' || id === 'wander'
       || id === 'possess' || id === 'lang' || id === 'startup' || id === 'sounds-dir'
-      || id === 'mic' || id === 'mic-device';
+      || id === 'mic' || id === 'mic-device' || id === 'reply-mode';
     await this.host.menuAction({ id, value });
     if (id === 'quit' || id === 'teleport' || id === 'satellite' || id === 'demo' || id === 'help' || id === 'visible' || id === 'sleep' || id === 'wake') {
       this.hide();

@@ -49,6 +49,8 @@ const DEFAULTS = {
     tts: 'auto',             // 'auto' | 'omnivoice' | 'kokoro' | 'off'
     ttsRef: null,            // null → voice/ref/capri_ref_short.wav
     ttsSpeed: 1.0,
+    ttsSteps: 16,            // OmniVoice diffusion steps (8–32)
+    replyMode: 'voice',      // 'voice' | 'blips' | 'silent'
   },
 };
 

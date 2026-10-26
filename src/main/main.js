@@ -266,6 +266,8 @@ function goSleepReply() {
 function ttsOn() {
   const cfg = config.load();
   if (cfg.muted) return false;
+  const mode = String(cfg.voice?.replyMode || 'voice').toLowerCase();
+  if (mode !== 'voice') return false;
   const kind = String(cfg.voice?.tts || 'auto').toLowerCase();
   return kind !== 'off' && kind !== 'none' && kind !== 'false';
 }
@@ -290,6 +292,7 @@ function applyMenuAction(id, value) {
     case 'wake': sendCommand('wake'); break;
     case 'scale': updateConfig({ scale: Number(value) }); break;
     case 'muted': updateConfig({ muted: Boolean(value) }); break;
+    case 'reply-mode': updateConfig({ voice: { replyMode: String(value || 'voice') } }); break;
     case 'sounds-dir':
       fs.mkdirSync(userSoundsDir(), { recursive: true });
       shell.openPath(userSoundsDir());
@@ -341,6 +344,7 @@ function menuState(extra = {}) {
       possess: cfg.possess,
       mic: cfg.voice?.enabled !== false,
       micDevice: cfg.voice?.inputDevice ?? null,
+      replyMode: String(cfg.voice?.replyMode || 'voice'),
     },
     micDevices: voice?.devices() || [],
     displays: displays.map((d, i) => ({
@@ -382,6 +386,11 @@ function rebuildTray() {
       label: t.sound,
       submenu: [
         { label: t.mute, type: 'checkbox', checked: s.cfg.muted, click: (item) => applyMenuAction('muted', item.checked) },
+        { type: 'separator' },
+        { label: t.reply, enabled: false },
+        ...[['voice', t.replyVoice], ['blips', t.replyBlips], ['silent', t.replySilent]].map(([mode, label]) => ({
+          label, type: 'radio', checked: s.cfg.replyMode === mode, click: () => applyMenuAction('reply-mode', mode),
+        })),
         { type: 'separator' },
         { label: t.soundsDir, click: () => applyMenuAction('sounds-dir') },
       ],

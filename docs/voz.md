@@ -42,7 +42,9 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
   "inputDevice": null,
   "tts": "auto",
   "ttsRef": null,
-  "ttsSpeed": 1.0
+  "ttsSpeed": 1.0,
+  "ttsSteps": 16,
+  "replyMode": "voice"
 }
 ```
 
@@ -57,13 +59,17 @@ Archivo real: **`%APPDATA%\capri-desktop\config.json`** (no `%APPDATA%\Capri`).
 
 `ttsSpeed`: 0.5–2.0.
 
-Mute y volumen del menú (`muted`, `volume` en la raíz del JSON) aplican al parlante del sidecar.
+`ttsSteps`: pasos de difusión de OmniVoice (8–32, default **16**). Menos pasos = frases más rápidas.
+
+`replyMode`: `"voice"` (TTS, default), `"blips"` (clicks 8-bit al decodificar la burbuja, **sin** cargar TTS), `"silent"` (solo texto). Menú → Sonido → Voz / Blips / Silencio.
+
+Mute y volumen del menú (`muted`, `volume` en la raíz del JSON) aplican al parlante del sidecar y a los blips.
 
 Con Gemma E2B cargado suelen quedar ~2.3 GB de VRAM. OmniVoice **no** carga su Whisper: hace falta el `.txt`. Si hay OOM, suelta el modelo y hace `torch.cuda.empty_cache()` antes de caer a Kokoro. Si forzás `"omnivoice"` sin GPU y la primera frase tarda más de ~3 s, también cae a Kokoro (aviso en el panel y en `voice.log`).
 
 ## Hablar (TTS)
 
-Cuando el LLM responde, el sidecar sintetiza **por frase** (OmniVoice clonado o Kokoro `ef_dora` en CPU) y reproduce con `sounddevice`. La primera frase no espera a que termine toda la respuesta. En `voice.log`: motor, VRAM libre, latencia de la primera frase y ms por frase.
+Cuando el LLM responde, el sidecar sintetiza **por frase** (OmniVoice clonado o Kokoro `ef_dora` en CPU) y reproduce con `sounddevice`. Whisper small CPU se carga al arrancar, **sin** esperar OmniVoice. OmniVoice se precarga en segundo plano; mientras tanto las respuestas usan Kokoro (`tts engine=kokoro reason=omnivoice_loading`) y la **siguiente** respuesta ya usa OmniVoice. La frase N+1 se sintetiza mientras suena la N (hasta 2 de adelanto). Frases <20 caracteres se pegan a la siguiente. Cada frase se normaliza a ~-1 dBFS y después se aplica `volume`. En `voice.log`: motor, `vram_free`, ms/frase y `steps`. Si tras cargar quedan <300 MiB de VRAM, avisa en el panel.
 
 - Estado `TALKING` cuando empieza el audio; `ONLINE` cuando termina (el idle de 5 min cuenta desde ahí).
 - Mientras habla no corre STT (no se transcribe a sí misma). El wake word sigue activo con umbral **0.5** (vuelve a `wakeThreshold` al terminar).

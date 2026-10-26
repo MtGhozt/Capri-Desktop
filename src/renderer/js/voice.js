@@ -146,6 +146,22 @@ export class Voice {
     if (arriving) this.osc('triangle', 70, t + 0.16, 0.18, 0.3);
   }
 
+  typeBlip() {
+    if (this.muted) return;
+    const ctx = this.ensure();
+    if (ctx.state === 'suspended') ctx.resume();
+    const t = ctx.currentTime;
+    this.osc('square', rand(600, 900), t, 0.028, 0.06);
+  }
+
+  wakeArp() {
+    if (this.muted) return;
+    const ctx = this.ensure();
+    if (ctx.state === 'suspended') ctx.resume();
+    const t = ctx.currentTime;
+    [659, 784, 988, 1318].forEach((hz, i) => this.osc('square', hz, t + i * 0.055, 0.05, 0.07));
+  }
+
   blip(mood = 'talk') {
     const now = performance.now();
     if (now - this.lastBlip < 45) return;
