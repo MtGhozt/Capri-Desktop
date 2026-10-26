@@ -499,20 +499,20 @@ function registerIpc() {
       overlay.webContents.send('chat:error', { kind: 'offline' });
       return { ok: false };
     }
-    if (ttsOn()) speakQueue?.start();
-    else speakQueue?.stop();
+    const speakId = ttsOn() ? speakQueue?.start() : 0;
+    if (!speakId) speakQueue?.stop();
     await llm.chat({
       user: line,
       onToken: (piece) => {
         overlay?.webContents.send('chat:token', piece);
-        if (ttsOn()) speakQueue?.feed(piece);
+        if (speakId) speakQueue?.feed(piece);
       },
       onDone: (payload) => {
-        if (ttsOn()) speakQueue?.flush();
+        if (speakId) speakQueue?.flush();
         overlay?.webContents.send('chat:done', payload);
       },
       onError: (payload) => {
-        speakQueue?.stop();
+        if (speakId) speakQueue?.stop(speakId);
         overlay?.webContents.send('chat:error', payload);
       },
     });

@@ -27,12 +27,13 @@ function pullSentences(buf) {
 
 function createSpeakQueue({ send }) {
   let buf = '';
-  let live = false;
+  let live = 0;
+  let nextId = 0;
 
   function emit(text) {
     const line = String(text || '').trim();
-    if (!line) return;
-    send({ type: 'speak', text: line });
+    if (!line || !live) return;
+    send({ type: 'speak', text: line, id: live });
   }
 
   function feed(piece) {
@@ -44,27 +45,33 @@ function createSpeakQueue({ send }) {
   }
 
   function start() {
-    live = true;
+    nextId += 1;
+    live = nextId;
     buf = '';
-    send({ type: 'speak_start' });
+    send({ type: 'speak_start', id: live });
+    return live;
   }
 
   function flush() {
-    if (!live) {
-      send({ type: 'speak_flush' });
+    const id = live;
+    if (!id) {
+      send({ type: 'speak_flush', id: 0 });
       return;
     }
     const rest = buf.trim();
     buf = '';
-    live = false;
-    if (rest) emit(rest);
-    send({ type: 'speak_flush' });
+    live = 0;
+    if (rest) send({ type: 'speak', text: rest, id });
+    send({ type: 'speak_flush', id });
   }
 
-  function stop() {
-    live = false;
-    buf = '';
-    send({ type: 'stop_speak' });
+  function stop(id) {
+    const target = Number(id) || live;
+    if (live && (!target || live === target)) {
+      live = 0;
+      buf = '';
+    }
+    send({ type: 'stop_speak', id: target || 0 });
   }
 
   return { start, feed, flush, stop };

@@ -31,8 +31,6 @@ SILENCE_MS = 700
 MIN_SPEECH_MS = 250
 WAKE_THRESHOLD = 0.2
 WAKE_WHILE_TALKING = 0.5
-SPEAK_FLUSH = object()
-SPEAK_STOP = object()
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
 STT_PROMPT = "Capri, choom, Matias"
@@ -226,6 +224,7 @@ class Engine:
         self._speaking = False
         self._accept_speak = True
         self._speak_gen = 0
+        self._live_id = 0
         self._out = None
         self._speak_thread = threading.Thread(target=self._speak_loop, name="capri-tts", daemon=True)
         self._speak_thread.start()
@@ -468,8 +467,15 @@ class Engine:
         except Exception:
             pass
 
-    def arm_speak(self) -> None:
-        log("speak_start")
+    def _as_id(self, raw) -> int:
+        try:
+            return int(raw or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def _accept_reply(self, rid: int, via: str) -> None:
+        log(f"speak_start id={rid} via={via}")
+        self._live_id = rid
         self._speak_gen += 1
         self._speak_stop.set()
         self._abort_out()
@@ -477,82 +483,112 @@ class Engine:
         self._speak_stop.clear()
         self._accept_speak = True
 
-    def enqueue_speak(self, text: str) -> None:
+    def arm_speak(self, reply_id=None) -> None:
+        rid = self._as_id(reply_id)
+        if rid <= 0:
+            rid = self._live_id + 1
+        self._accept_reply(rid, "speak_start")
+
+    def enqueue_speak(self, text: str, reply_id=None) -> None:
         line = str(text or "").strip()
         if not line:
             return
         if not self.tts_enabled():
             log("speak drop tts=off/muted")
             return
-        if not self._accept_speak:
-            log(f"speak drop accept=0 {line[:48]!r}")
+        rid = self._as_id(reply_id)
+        if rid <= 0:
+            rid = self._live_id if self._accept_speak else self._live_id + 1
+        if rid < self._live_id:
+            log(f"speak drop stale id={rid} live={self._live_id} {line[:48]!r}")
             return
-        log(f"speak queued n={len(line)} {line[:48]!r}")
-        self._speak_q.put(line)
+        if rid > self._live_id:
+            self._accept_reply(rid, "speak")
+        elif not self._accept_speak:
+            log(f"speak drop cut id={rid} {line[:48]!r}")
+            return
+        log(f"speak queued id={rid} n={len(line)} {line[:48]!r}")
+        self._speak_q.put(("speak", rid, line))
 
-    def flush_speak(self) -> None:
-        if not self.tts_enabled() or not self._accept_speak:
-            log("speak_flush skipped")
+    def flush_speak(self, reply_id=None) -> None:
+        rid = self._as_id(reply_id)
+        if rid > self._live_id:
+            self._accept_reply(rid, "flush")
+        if not self.tts_enabled() or rid < self._live_id or (rid == self._live_id and not self._accept_speak):
+            log(f"speak_flush skipped id={rid} live={self._live_id}")
             self.broadcast({"type": "talking_done", "skipped": True})
             return
-        log("speak_flush")
-        self._speak_q.put(SPEAK_FLUSH)
+        log(f"speak_flush id={rid}")
+        self._speak_q.put(("flush", rid, None))
 
-    def stop_speak(self) -> None:
-        log("stop_speak")
-        self._accept_speak = False
-        self._speak_gen += 1
-        self._speak_stop.set()
-        self._abort_out()
-        self._drain_speak_q()
-        self._speak_q.put(SPEAK_STOP)
+    def stop_speak(self, reply_id=None) -> None:
+        rid = self._as_id(reply_id) or self._live_id
+        log(f"stop_speak id={rid} live={self._live_id}")
+        if rid and rid < self._live_id:
+            log(f"stop_speak ignore stale id={rid}")
+            return
+        if rid == self._live_id or not rid:
+            self._accept_speak = False
+            self._speak_gen += 1
+            self._speak_stop.set()
+            self._abort_out()
+            self._drain_speak_q()
+            self._speak_q.put(("stop", rid, None))
 
     def _speak_loop(self) -> None:
         session = False
+        session_id = 0
         while True:
             try:
                 item = self._speak_q.get()
             except Exception:
                 continue
-            if item is SPEAK_STOP:
+            kind, rid, text = item if isinstance(item, tuple) else ("speak", self._live_id, item)
+            if kind == "stop":
                 was = session or self._speaking
                 session = False
+                session_id = 0
                 self._speaking = False
                 self._speak_stop.clear()
-                log(f"talking_done interrupted={was}")
+                log(f"talking_done interrupted={was} id={rid}")
                 if was:
                     self.broadcast({"type": "talking_done", "interrupted": True})
                 continue
-            if item is SPEAK_FLUSH:
+            if kind == "flush":
+                if rid != self._live_id:
+                    log(f"speak_flush stale id={rid} live={self._live_id}")
+                    continue
                 if session:
                     session = False
                     self._speaking = False
-                    log("talking_done")
+                    log(f"talking_done id={rid}")
                     self.broadcast({"type": "talking_done", "interrupted": False})
                 else:
-                    log("talking_done skipped")
+                    log(f"talking_done skipped id={rid}")
                     self.broadcast({"type": "talking_done", "skipped": True})
                 continue
-            if self._speak_stop.is_set() or not self._accept_speak:
-                log("speak skip stale")
+            if rid != self._live_id or not self._accept_speak:
+                log(f"speak skip stale id={rid} live={self._live_id}")
                 continue
             gen = self._speak_gen
             t0 = time.perf_counter()
-            pcm, sr = self._synth(str(item))
+            pcm, sr = self._synth(str(text))
             ms = (time.perf_counter() - t0) * 1000
-            log(f"synth {ms:.0f}ms samples={pcm.size} sr={sr}")
+            log(f"synth id={rid} {ms:.0f}ms samples={pcm.size} sr={sr}")
             if pcm.size == 0:
                 continue
-            if gen != self._speak_gen or self._speak_stop.is_set() or not self._accept_speak:
+            if gen != self._speak_gen or rid != self._live_id or not self._accept_speak:
                 log("speak drop after synth")
                 continue
-            if not session:
+            if not session or session_id != rid:
                 session = True
+                session_id = rid
                 self._speaking = True
-                log("talking")
+                log(f"talking id={rid}")
                 self.broadcast({"type": "talking"})
             if not self._play(pcm, sr, gen):
                 session = False
+                session_id = 0
                 self._speaking = False
                 continue
 
@@ -757,13 +793,13 @@ async def session(ws, engine: Engine) -> None:
             elif kind == "list_devices":
                 await ws.send(json.dumps({"type": "devices", "devices": engine.list_devices()}))
             elif kind == "speak_start":
-                engine.arm_speak()
+                engine.arm_speak(msg.get("id"))
             elif kind == "speak":
-                engine.enqueue_speak(str(msg.get("text") or ""))
+                engine.enqueue_speak(str(msg.get("text") or ""), msg.get("id"))
             elif kind == "speak_flush":
-                engine.flush_speak()
+                engine.flush_speak(msg.get("id"))
             elif kind == "stop_speak":
-                engine.stop_speak()
+                engine.stop_speak(msg.get("id"))
     finally:
         engine.clients.discard(ws)
 
