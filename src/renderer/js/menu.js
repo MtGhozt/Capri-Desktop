@@ -5,18 +5,26 @@ export class AppMenu {
     this.el = el;
     this.host = host;
     this.open = false;
+    this.opening = false;
+    this.openedAt = 0;
     this.expanded = null;
     this.onOpenChange = null;
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
+    this.el.addEventListener('mousedown', (e) => e.stopPropagation());
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.open) {
         e.preventDefault();
         this.hide();
       }
     });
+    // Left click outside dismisses. Right-click must not: its mousedown fires before
+    // contextmenu, and after the first open the menu is often moved up (she's at the
+    // bottom of the screen), so that mousedown looks "outside" and would hide the
+    // menu and drop ignoreMouseEvents before contextmenu can reopen it.
     window.addEventListener('mousedown', (e) => {
-      if (!this.open) return;
+      if (!this.open || e.button !== 0) return;
+      if (performance.now() - this.openedAt < 400) return;
       const r = this.el.getBoundingClientRect();
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
         this.hide();
@@ -25,10 +33,13 @@ export class AppMenu {
   }
 
   get visible() {
-    return this.open;
+    return this.open || this.opening;
   }
 
   async show(x, y) {
+    this.opening = true;
+    this.openedAt = performance.now();
+    this.onOpenChange?.(true);
     try {
       const state = await this.host.getMenu();
       this.expanded = null;
@@ -37,15 +48,23 @@ export class AppMenu {
       this.open = true;
       this.el.hidden = false;
       this.place(x, y);
+      this.openedAt = performance.now();
       this.onOpenChange?.(true);
     } catch (err) {
       console.error('[capri] menu show failed', err);
+      this.opening = false;
+      this.open = false;
+      this.el.hidden = true;
+      this.onOpenChange?.(false);
+    } finally {
+      this.opening = false;
     }
   }
 
   hide() {
-    if (!this.open) return;
+    if (!this.open && !this.opening) return;
     this.open = false;
+    this.opening = false;
     this.expanded = null;
     this.el.hidden = true;
     this.onOpenChange?.(false);

@@ -123,13 +123,15 @@ async function boot() {
     hoverChip();
   });
   const openAppMenu = (x, y) => {
-    appMenu.show(x, y);
     setInteractive(true);
+    appMenu.show(x, y);
   };
+  const onAppMenuTarget = (x, y) => (
+    (chip.visible && chip.contains(x, y, 0)) || capri.hit(x, y)
+  );
   window.addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    const onChip = chip.visible && chip.contains(e.clientX, e.clientY, 0);
-    if (onChip || capri.hit(e.clientX, e.clientY)) openAppMenu(e.clientX, e.clientY);
+    if (onAppMenuTarget(e.clientX, e.clientY)) openAppMenu(e.clientX, e.clientY);
   });
   window.addEventListener('click', (e) => {
     if (chip.visible && chip.contains(e.clientX, e.clientY, 0)) comeOut();
