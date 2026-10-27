@@ -258,6 +258,7 @@ function createVoice({ root, loadConfig, onEvent }) {
     },
     pttStart: () => send({ type: 'ptt_start' }),
     pttStop: () => send({ type: 'ptt_stop' }),
+    followUp: (seconds) => send({ type: 'follow_up', seconds }),
     push: send,
     speak: (text, id) => send({ type: 'speak', text, id }),
     speakFlush: (id) => send({ type: 'speak_flush', id }),

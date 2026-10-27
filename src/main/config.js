@@ -69,6 +69,8 @@ const DEFAULTS = {
   },
   hearing: {
     fixes: [],               // what she hears wrong, read as what you meant: [{ heard, meant }] (see fixes.js)
+    followUpSec: 8,          // her answer ends with a question: listen this long without the wake word (0 = off)
+    talkHotkey: null,        // push to talk from her menu; null → shortcuts.talk (Ctrl+Alt+V)
   },
   voice: {
     enabled: true,

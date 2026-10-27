@@ -27,9 +27,28 @@ export class AppMenu {
     this.onOpenChange = null;
     this.fixNote = '';     // "GUARDADO" under Corregir lo último, once a fix is saved
     this.keyboard = false; // Corregir lo último has text fields: the overlay has the keyboard
+    this.capturing = false; // OÍDO › Tecla para hablar: waiting for the new combo
+    this.talkNote = '';     // what came of the last combo (taken, saved...)
+    this.lastState = null;
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
+    // the new push-to-talk combo: this keydown is the combo, not a menu key
+    window.addEventListener('keydown', (e) => {
+      if (!this.open || !this.capturing) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.key === 'Escape') {
+        this.capturing = false;
+        this.talkNote = '';
+        this.rerender();
+        return;
+      }
+      if (['Control', 'Alt', 'Shift', 'Meta', 'AltGraph', 'OS'].includes(e.key)) return; // still holding
+      this.saveTalkKey({
+        key: e.key, code: e.code, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, metaKey: e.metaKey,
+      });
+    }, true);
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.open) {
         e.preventDefault();
@@ -89,6 +108,8 @@ export class AppMenu {
     this.expanded = null;
     this.confirmForget = false;
     this.el.hidden = true;
+    this.capturing = false;
+    this.talkNote = '';
     this.useKeyboard(false);
     this.onOpenChange?.(false);
   }
@@ -150,6 +171,7 @@ export class AppMenu {
   }
 
   render(state) {
+    this.lastState = state;
     const { cfg } = state;
     this.setTheme(cfg.theme);
     const build = (tag, className, text) => {
@@ -284,6 +306,8 @@ export class AppMenu {
       onClick: () => this.toggle('fixes', state),
     });
     if (this.expanded === 'fixes') body.append(this.fixPanel(hearing, build));
+    body.append(this.sensitivityRow(hearing, build));
+    body.append(this.talkKeyRow(hearing, build, kbd));
 
     // CLIPS
     section('CLIPS');
@@ -328,7 +352,76 @@ export class AppMenu {
     plate.append(rail, body, keys);
     this.el.replaceChildren(plate);
     if (this.open && this.at) this.place();
-    this.useKeyboard(this.expanded === 'fixes');
+    this.useKeyboard(this.expanded === 'fixes' || this.capturing);
+  }
+
+  rerender() {
+    if (this.open && this.lastState) this.render(this.lastState);
+  }
+
+  // Wake word sensitivity: a % of how sure she must be it was "hey Jarvis". Saved on release,
+  // and the sidecar takes it right away.
+  sensitivityRow(hearing, build) {
+    const wrap = build('div', 'appmenu__slider-wrap');
+    const row = build('div', 'appmenu__row');
+    const value = build('span', 'appmenu__meta appmenu__slider-value', `${hearing.sensitivity} %`);
+    row.append(build('span', 'appmenu__label', 'Sensibilidad'), value);
+    const range = build('input', 'appmenu__slider');
+    range.type = 'range';
+    range.min = String(hearing.sensMin ?? 10);
+    range.max = String(hearing.sensMax ?? 90);
+    range.step = String(hearing.sensStep ?? 5);
+    range.value = String(hearing.sensitivity ?? 20);
+    range.setAttribute('aria-label', 'Sensibilidad de la palabra de activación');
+    const paint = () => {
+      const lo = Number(range.min);
+      const pct = ((Number(range.value) - lo) / (Number(range.max) - lo)) * 100;
+      range.style.setProperty('--fill', `${pct}%`);
+      value.textContent = `${range.value} %`;
+    };
+    range.addEventListener('input', paint);
+    range.addEventListener('change', () => {
+      hearing.sensitivity = Number(range.value);
+      this.host.menuAction({ id: 'wake-sensitivity', value: Number(range.value) }).catch(() => {});
+    });
+    for (const type of ['mousedown', 'click']) range.addEventListener(type, (e) => e.stopPropagation());
+    paint();
+    wrap.append(row, range, build('div', 'appmenu__hint', 'Más alto: menos falsas alarmas, pero hay que decir «hey Jarvis» más claro.'));
+    return wrap;
+  }
+
+  // Push to talk: the combo, and a way to change it (the next combo you press; Esc cancels).
+  talkKeyRow(hearing, build, kbd) {
+    const wrap = build('div', 'appmenu__talkkey');
+    const row = build('button', 'appmenu__row appmenu__row--action');
+    row.type = 'button';
+    row.append(build('span', 'appmenu__label', 'Tecla para hablar'));
+    if (this.capturing) row.append(build('span', 'appmenu__meta appmenu__capture', 'PULSA LA COMBINACIÓN…'));
+    else if (hearing.talkHotkey) row.append(kbd(hearing.talkHotkey));
+    row.append(build('span', 'appmenu__meta', this.capturing ? 'ESC' : 'CAMBIAR'));
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.capturing = !this.capturing;
+      this.talkNote = '';
+      this.rerender();
+    });
+    wrap.append(row);
+    const note = this.capturing ? 'Ctrl, Alt o Win más una tecla. Esc cancela.'
+      : this.talkNote || (hearing.talkActive ? '' : 'No se pudo registrar: elige otra combinación.');
+    if (note) wrap.append(build('div', 'appmenu__hint', note));
+    return wrap;
+  }
+
+  async saveTalkKey(keys) {
+    let result;
+    try {
+      result = await this.host.menuAction({ id: 'talk-hotkey', value: keys });
+    } catch {
+      result = { ok: false, message: 'No se pudo guardar.' };
+    }
+    this.capturing = false;
+    this.talkNote = result?.ok ? `GUARDADA: ${result.accel}` : result?.message || 'Esa no sirve.';
+    await this.refresh();
   }
 
   // Corregir lo último: what she heard last, two fields (what she heard, what you meant), and the

@@ -28,7 +28,7 @@ function freshConfig(dir) {
 test('no fixes by default', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-cfg-'));
   const config = freshConfig(dir);
-  assert.deepEqual(config.load().hearing, { fixes: [] });
+  assert.deepEqual(config.load().hearing, { fixes: [], followUpSec: 8, talkHotkey: null });
   assert.deepEqual(config.DEFAULTS.hearing.fixes, []);
 });
 
@@ -49,5 +49,16 @@ test('saved fixes are written to config.json and read back after a restart', () 
 test('an older config.json with no hearing section gets the default', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-cfg-'));
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ wander: true, voice: { enabled: true } }));
-  assert.deepEqual(freshConfig(dir).load().hearing, { fixes: [] });
+  assert.deepEqual(freshConfig(dir).load().hearing, { fixes: [], followUpSec: 8, talkHotkey: null });
+});
+
+test('follow-up seconds and the talk combo are saved next to the fixes', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-cfg-'));
+  const config = freshConfig(dir);
+  config.save({ hearing: { fixes: [{ heard: 'a', meant: 'b' }] } });
+  config.save({ hearing: { talkHotkey: 'Ctrl+Alt+J' } });
+  config.save({ hearing: { followUpSec: 0 } });
+  assert.deepEqual(freshConfig(dir).load().hearing, {
+    fixes: [{ heard: 'a', meant: 'b' }], followUpSec: 0, talkHotkey: 'Ctrl+Alt+J',
+  });
 });

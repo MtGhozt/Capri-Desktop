@@ -32,6 +32,11 @@ const { vramText } = require('./vram');
 const { logEvent, voiceLogPath } = require('./log');
 const { saveClip, openClipsFolder, clipFolderLabel } = require('./clips');
 const { micActive } = require('./voice-config');
+const { createFollowUp } = require('./follow-up');
+const {
+  SENS_MIN, SENS_MAX, SENS_STEP, thresholdFromPct, pctFromThreshold,
+  normalizeAccelerator, acceleratorFromKey, sameCombo,
+} = require('./hearing');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
 
@@ -323,6 +328,30 @@ function rendererConfig() {
 // Sleep by command: her goodnight line first, then her corner and the fold (goodnight.js).
 const goodnight = createGoodnight({ fold: () => sendCommand('sleep') });
 
+// When her answer to what you said ends with a question, the mic opens for the answer, no wake
+// word (follow-up.js). Never while the mic is muted, she is DORMANT or going there, or a game runs.
+const followUp = createFollowUp({
+  seconds: () => followUpSec(config.load()),
+  canListen: () => Boolean(
+    voice?.running?.()
+    && micActive(config.load())
+    && !overlayFolded
+    && !goodnight.pending
+    && !gameMode?.active?.()
+    && !menuKeyboard
+  ),
+  open: (secs) => {
+    logEvent(voiceLogPath(), `[capri] follow-up listen ${secs}s chain=${followUp.chain}`);
+    voice?.followUp?.(secs);
+  },
+});
+
+function followUpSec(cfg) {
+  const n = Number(cfg.hearing?.followUpSec);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(30, n);
+}
+
 // Her line to the sidecar, when her voice is on. The speak id, or 0 when it was not sent.
 function speakLine(line) {
   const speakId = ttsOn() ? speakQueue?.start() : 0;
@@ -335,7 +364,8 @@ function speakLine(line) {
 // One of her direct-command lines (lines-es.js), said and shown where the command came from:
 // her chat bubble, or the panel when it came from her menu or the tray.
 function announce(line, opts) {
-  speakLine(line);
+  const spoken = Boolean(speakLine(line));
+  followUp.reply(line, { spoken }); // a question to what you said: she listens for the answer
   return showLine(line, opts);
 }
 
@@ -356,6 +386,7 @@ function commandReply(kind, opts) {
 function goSleepReply({ chat = true } = {}) {
   const line = pickLine('dormir');
   const spoken = Boolean(speakLine(line));
+  followUp.reply('', {}); // off to sleep: no listening for an answer
   showLine(line, { chat, badge: 'SLEEP' });
   goodnight.start({ spoken, line }); // folds once she has said it
   return { ok: true };
@@ -450,6 +481,7 @@ async function gameEnter(windows) {
   llm?.cancel();
   speakQueue?.stop();
   goodnight.cancel();
+  followUp.cancel();
   sendCommand('sleep'); // DORMANT, and the chat bubble goes with it
   if (lms?.status() === 'booting') await lms.whenReady(); // a load in flight would land anyway
   gameHadLlm = lms?.status() === 'ready';
@@ -539,6 +571,10 @@ function applyMenuAction(id, value) {
     case 'fix-add': saveFix(value?.heard, value?.meant); break;
     case 'fix-remove': dropFix(value); break;
     case 'menu-keyboard': menuKeyboardOn(Boolean(value)); break;
+    case 'wake-sensitivity':
+      updateConfig({ voice: { wakeThreshold: thresholdFromPct(value) } }); // live: the sidecar gets the new config
+      break;
+    case 'talk-hotkey': return setTalkHotkey(value);
     case 'clips-dir': openClipsFolder(config.load()); break;
     case 'drag-lock':
       config.save({ position: { locked: Boolean(value) } });
@@ -586,11 +622,71 @@ function registerShortcuts() {
   const s = config.load().shortcuts || {};
   bind(s.toggle, () => toggleVisible());
   bind(s.chat, () => toggleChat());
-  bind(s.talk, () => {
-    llm?.cancel();
-    speakQueue?.stop();
-    voice?.pttStart();
-  });
+  talkCombo = '';
+  const talk = talkHotkey(config.load());
+  if (talk && registerTalk(talk)) talkCombo = talk;
+}
+
+// Push to talk (OÍDO in her menu, hearing.talkHotkey): she listens right away, as if you had
+// said "hey Jarvis". DORMANT, she wakes up first.
+let talkCombo = '';
+
+function talkHotkey(cfg) {
+  return normalizeAccelerator(cfg.hearing?.talkHotkey) || normalizeAccelerator(cfg.shortcuts?.talk) || 'Ctrl+Alt+V';
+}
+
+function talkNow() {
+  llm?.cancel();
+  speakQueue?.stop();
+  goodnight.cancel();
+  followUp.cancel();
+  if (overlayFolded) sendCommand('wake');
+  voice?.pttStart();
+}
+
+function registerTalk(combo) {
+  try {
+    if (globalShortcut.register(combo, talkNow)) {
+      registeredShortcuts.push(combo);
+      return true;
+    }
+    console.error(`[capri] shortcut already taken: ${combo}`);
+  } catch (err) {
+    console.error(`[capri] bad shortcut "${combo}": ${err.message}`);
+  }
+  return false;
+}
+
+function unregisterTalk(combo) {
+  if (!combo) return;
+  try { globalShortcut.unregister(combo); } catch { /* already gone */ }
+  registeredShortcuts = registeredShortcuts.filter((c) => c !== combo);
+}
+
+// A new combo from her menu: { key, code, ctrlKey, altKey, shiftKey, metaKey } or { accel }.
+// { ok, accel } or { ok: false, message } in Spanish for her menu.
+function setTalkHotkey(value) {
+  const accel = value?.accel != null ? normalizeAccelerator(value.accel) : acceleratorFromKey(value || {});
+  if (!accel) return { ok: false, message: 'Esa no sirve: Ctrl, Alt o Win más una tecla.' };
+  const cfg = config.load();
+  if (accel === talkCombo) return { ok: true, accel };
+  const others = [
+    [cfg.shortcuts?.toggle, 'mostrar / ocultar'],
+    [cfg.shortcuts?.chat, 'abrir el chat'],
+    [cfg.clips?.saveHotkey, 'guardar clip'],
+  ];
+  const clash = others.find(([combo]) => sameCombo(combo, accel));
+  if (clash) return { ok: false, message: `${accel} ya es «${clash[1]}».` };
+  const old = talkCombo;
+  unregisterTalk(old);
+  if (!registerTalk(accel)) {
+    if (old && registerTalk(old)) talkCombo = old;
+    return { ok: false, message: `${accel} ya lo usa otra app.` };
+  }
+  talkCombo = accel;
+  config.save({ hearing: { talkHotkey: accel } });
+  rebuildTray();
+  return { ok: true, accel };
 }
 
 function menuState(extra = {}) {
@@ -626,6 +722,13 @@ function menuState(extra = {}) {
     hearing: {
       fixes: cleanFixes(cfg.hearing?.fixes),
       lastHeard,
+      sensitivity: pctFromThreshold(cfg.voice?.wakeThreshold),
+      sensMin: SENS_MIN,
+      sensMax: SENS_MAX,
+      sensStep: SENS_STEP,
+      talkHotkey: talkCombo || talkHotkey(cfg),
+      talkActive: Boolean(talkCombo),
+      followUpSec: followUpSec(cfg),
     },
     clips: {
       hotkey: cfg.clips?.saveHotkey || 'Alt+F10',
@@ -634,7 +737,7 @@ function menuState(extra = {}) {
     shortcuts: [
       { label: 'Mostrar / ocultar Capri', accel: cfg.shortcuts?.toggle || '' },
       { label: 'Abrir el chat', accel: cfg.shortcuts?.chat || '' },
-      { label: 'Hablar (push to talk)', accel: cfg.shortcuts?.talk || '' },
+      { label: 'Hablar (push to talk)', accel: talkCombo || talkHotkey(cfg) },
     ],
     micDevices: voice?.devices() || [],
     displays: displays.map((d, i) => ({
@@ -820,8 +923,8 @@ function registerIpc() {
     return state;
   });
   ipcMain.handle('menu:action', (_e, payload = {}) => {
-    applyMenuAction(payload.id, payload.value);
-    return { ok: true };
+    const result = applyMenuAction(payload.id, payload.value);
+    return result && typeof result === 'object' ? result : { ok: true };
   });
   // her hello at boot: the overlay shows it, and it plays from the cached wav if there is one
   ipcMain.handle('greet', () => {
@@ -860,19 +963,23 @@ function registerIpc() {
     const speakId = ttsOn() ? speakQueue?.start() : 0;
     if (!speakId) speakQueue?.stop();
     llmBusy = true;
+    let said = '';
     try {
       await llm.chat({
         user: line,
         onToken: (piece) => {
+          said += typeof piece === 'string' ? piece : piece?.text || '';
           overlay?.webContents.send('chat:token', piece);
           if (speakId) speakQueue?.feed(piece);
         },
         onDone: (payload) => {
           if (speakId) speakQueue?.flush(speakId);
           overlay?.webContents.send('chat:done', payload);
+          followUp.reply(payload?.text || said, { spoken: Boolean(speakId) });
         },
         onError: (payload) => {
           if (speakId) speakQueue?.stop(speakId);
+          followUp.reply('', {});
           overlay?.webContents.send('chat:error', payload);
         },
       });
@@ -884,10 +991,12 @@ function registerIpc() {
   ipcMain.on('chat:cancel', () => {
     llm?.cancel();
     speakQueue?.stop();
+    followUp.cancel();
   });
   ipcMain.on('voice:interrupt', () => {
     llm?.cancel();
     speakQueue?.stop();
+    followUp.cancel();
     voice?.pttStart();
   });
   ipcMain.on('chat:close', () => closeChat());
@@ -996,6 +1105,11 @@ function main() {
       loadConfig: () => config.load(),
       onEvent: (event) => {
         const payload = event?.type === 'transcript' ? hearTranscript(event) : event;
+        if (payload?.type === 'transcript') followUp.heard({ followUp: Boolean(payload.followUp) });
+        followUp.onVoiceEvent(payload);
+        if (payload?.type === 'stopped' && payload.quiet) {
+          logEvent(voiceLogPath(), '[capri] follow-up closed: nobody answered');
+        }
         if (payload?.type === 'tts_state') ttsLoading = payload.state === 'loading';
         if (payload?.type === 'talking') voiceTalking = true;
         if (payload?.type === 'talking_done' || payload?.type === 'stopped') voiceTalking = false;
