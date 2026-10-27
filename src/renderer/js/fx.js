@@ -14,7 +14,10 @@ export const COLORS = {
   violet: '#7b3dff',
   paper: '#fff4f6',
   blue: '#3d6bff',
+  magenta: '#ff2bd6',
 };
+// her app effects (Paso 4E): magenta, violet and green, white-hot in the middle
+const APP_PALETTE = ['magenta', 'magenta', 'magenta', 'violet', 'violet', 'green', 'green', 'paper'];
 
 const SHARD_PALETTE = ['red', 'red', 'red', 'red', 'ink', 'ink', 'green', 'green', 'violet', 'paper'];
 const GLYPHS = ['01', '10', '▚', '▞', '◢', '◣', '>_', '{}', '#', '⌁', '//', '0x'];
@@ -290,7 +293,7 @@ export class FxLayer {
   // ---------- shards and light ----------
 
   // Shards thrown out (or sucked in) around a point.
-  burst(x, y, { count = 22, power = 1, inward = false, spread = 70 } = {}) {
+  burst(x, y, { count = 22, power = 1, inward = false, spread = 70, palette = SHARD_PALETTE } = {}) {
     for (let i = 0; i < count; i++) {
       const angle = rand(0, Math.PI * 2);
       const speed = rand(220, 680) * power;
@@ -308,7 +311,7 @@ export class FxLayer {
         vr: rand(-9, 9),
         len: rand(10, 36),
         wid: rand(3, 10),
-        color: COLORS[pick(SHARD_PALETTE)],
+        color: COLORS[pick(palette)],
       });
     }
   }
@@ -380,6 +383,41 @@ export class FxLayer {
   // `to` can be a function of time, for a moving target.
   bolt(from, to, { life = 380, forks = 2, width = 3 } = {}) {
     this.add({ type: 'bolt', life, from, to, forks, width });
+  }
+
+  // ---------- her apps (Paso 4E) ----------
+
+  // Her zap at a window she's about to close: a bolt that runs from her (`from`) to the window
+  // (`rect`, or a `point` when there's no window to aim at) in `travel` ms, then the window's
+  // frame flashes and throws sparks. Resolves when it hits; the whole thing is ~0.8 s.
+  zapApp(from, { rect = null, point = null } = {}, { travel = 260 } = {}) {
+    const aim = rect ? this.inside(rect) : point;
+    this.add({ type: 'zap', life: travel + 340, from: { ...from }, aim, travel, width: 3.2 });
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        if (rect) this.add({ type: 'hitbox', life: 520, rect: { ...rect }, aim, kind: 'zap' });
+        this.add({ type: 'flare', life: 360, x: aim.x, y: aim.y, size: rect ? 1 : 0.7, kind: 'zap' });
+        this.burst(aim.x, aim.y, { count: rect ? 20 : 12, power: 0.7, spread: 30, palette: APP_PALETTE });
+        resolve();
+      }, travel);
+    });
+  }
+
+  // Her spark where an app she opened came up: a star flare, and the window's corners snapping
+  // out from its middle to its edges (just the flare and a few sparks on a `point`). ~0.7 s.
+  sparkApp({ rect = null, point = null } = {}) {
+    const at = rect ? this.inside(rect) : point;
+    if (rect) this.add({ type: 'hitbox', life: 680, rect: { ...rect }, aim: at, kind: 'spark' });
+    this.add({ type: 'flare', life: 560, x: at.x, y: at.y, size: rect ? 1.3 : 0.8, kind: 'spark' });
+    this.burst(at.x, at.y, { count: rect ? 16 : 10, power: 0.55, spread: 24, palette: APP_PALETTE });
+  }
+
+  // The middle of `rect`, kept on her screen (a window half off it still gets hit where it shows).
+  inside(rect) {
+    const w = this.size?.w || innerWidth, h = this.size?.h || innerHeight;
+    const x0 = clamp(rect.x, 0, w), x1 = clamp(rect.x + rect.w, 0, w);
+    const y0 = clamp(rect.y, 0, h), y1 = clamp(rect.y + rect.h, 0, h);
+    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
   }
 
   glyph(x, y) {
@@ -1359,6 +1397,97 @@ export class FxLayer {
           ctx.fillStyle = s.color;
           ctx.fill();
         }
+        ctx.restore();
+        break;
+      }
+      case 'zap': {
+        const el = now - it.born;
+        const reach = Math.min(1, el / it.travel);
+        const k = 1 - (1 - reach) ** 2; // fast out of her hand, slowing on the way in
+        const tip = { x: lerp(it.from.x, it.aim.x, k), y: lerp(it.from.y, it.aim.y, k) };
+        const after = Math.max(0, (el - it.travel) / (it.life - it.travel));
+        const frame = Math.floor(el / FRAME_MS);
+        if (after > 0 && frame % 3 === 2) break; // strobes once it's in
+        const len = Math.hypot(tip.x - it.from.x, tip.y - it.from.y);
+        if (len < 4) break;
+        const w = it.width * (1 - after * 0.8);
+        const pts = this.jag(it.from, tip, Math.min(24, Math.max(6, len * 0.07)), true);
+        ctx.save();
+        ctx.lineJoin = 'miter';
+        ctx.globalAlpha = after > 0.6 ? 1 - Math.floor(((after - 0.6) / 0.4) * 3) / 3 : 1;
+        this.stroke(pts, COLORS.violet, w + 3, -2, 2);
+        this.stroke(pts, COLORS.green, w * 0.6, 2, -1);
+        this.stroke(pts, COLORS.magenta, w + 1);
+        this.stroke(pts, COLORS.paper, Math.max(0.8, w * 0.35));
+        for (let f = 0; f < 2; f++) {
+          const [fx, fy] = pts[1 + Math.floor(rand(0, pts.length - 2))];
+          const a = Math.atan2(tip.y - it.from.y, tip.x - it.from.x) + rand(-1.2, 1.2);
+          const l = rand(16, 44);
+          const fork = this.jag({ x: fx, y: fy }, { x: fx + Math.cos(a) * l, y: fy + Math.sin(a) * l }, 6);
+          this.stroke(fork, f ? COLORS.green : COLORS.magenta, Math.max(1, w * 0.55));
+        }
+        ctx.restore();
+        break;
+      }
+      case 'hitbox': {
+        // the window's frame: a zap flashes it and lets it go; a spark snaps it out from the middle
+        const { rect, aim } = it;
+        const grow = it.kind === 'spark' ? 1 - (1 - Math.min(1, t / 0.35)) ** 3 : 1;
+        const x = lerp(aim.x, rect.x, grow), y = lerp(aim.y, rect.y, grow);
+        const w = rect.w * grow, h = rect.h * grow;
+        const fade = t > 0.55 ? 1 - Math.floor(((t - 0.55) / 0.45) * 4) / 4 : 1;
+        const frame = Math.floor((now - it.born) / FRAME_MS);
+        ctx.save();
+        ctx.globalAlpha = fade;
+        if (it.kind === 'zap' && t < 0.4) {
+          ctx.fillStyle = COLORS.magenta;
+          ctx.globalAlpha = fade * (frame % 2 ? 0.16 : 0.26) * (1 - t / 0.4);
+          ctx.fillRect(x, y, w, h);
+          ctx.globalAlpha = fade;
+        }
+        const jitter = it.kind === 'zap' ? 3 : 2;
+        for (const [dx, color] of [[-jitter, COLORS.violet], [jitter, COLORS.green], [0, COLORS.magenta]]) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = color === COLORS.magenta ? 2.5 : 1.5;
+          const c = Math.min(46, w * 0.25, h * 0.25); // corner brackets
+          ctx.beginPath();
+          for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]]) {
+            ctx.moveTo(cx + dx + sx * c, cy - dx);
+            ctx.lineTo(cx + dx, cy - dx);
+            ctx.lineTo(cx + dx, cy - dx + sy * c);
+          }
+          ctx.stroke();
+        }
+        if (it.kind === 'zap' && frame % 2 === 0) { // the frame itself, glitching
+          ctx.strokeStyle = COLORS.magenta;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + rand(-2, 2), y + rand(-2, 2), w, h);
+        }
+        ctx.restore();
+        break;
+      }
+      case 'flare': {
+        // a four-point star: long thin rays, a hot middle, a ring going out
+        const k = Math.floor(t * 8) / 8;
+        const r = (it.kind === 'spark' ? 70 : 54) * it.size * (0.4 + k);
+        ctx.save();
+        ctx.globalAlpha = 1 - k;
+        const rays = it.kind === 'spark' ? [0, Math.PI / 2, Math.PI, Math.PI * 1.5] : [Math.PI / 4, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75];
+        for (const [a0, color, width] of [[0, COLORS.violet, 7], [0, it.kind === 'spark' ? COLORS.green : COLORS.magenta, 4], [0, COLORS.paper, 1.5]]) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width * (1 - k * 0.6);
+          ctx.beginPath();
+          for (const a of rays) {
+            ctx.moveTo(it.x, it.y);
+            ctx.lineTo(it.x + Math.cos(a + a0) * r, it.y + Math.sin(a + a0) * r);
+          }
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(it.x, it.y, r * 0.55, 0, Math.PI * 2);
+        ctx.strokeStyle = it.kind === 'spark' ? COLORS.green : COLORS.magenta;
+        ctx.lineWidth = Math.max(1, 5 * (1 - k));
+        ctx.stroke();
         ctx.restore();
         break;
       }

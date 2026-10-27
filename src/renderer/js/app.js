@@ -580,6 +580,52 @@ async function boot() {
     }
   });
 
+  // -- her apps' effects (Paso 4E) --------------------------------------------------------------
+  // Drawn on the fx layer (pointer-events: none): they never take a click. main.js waits for the
+  // zap's hit before closing (never more than 1.2 s), so she always answers it, played or not.
+  const fxFrom = () => {
+    if (!capri.hidden && !capri.stowed && machine.get() !== 'DORMANT') return capri.head();
+    const d = dormant.rect();
+    if (d) return { x: d.left + d.width / 2, y: d.top + d.height / 2 };
+    if (chip.visible) return { x: chip.x + chip.w / 2, y: chip.y + chip.h / 2 };
+    return { x: innerWidth / 2, y: innerHeight - 40 };
+  };
+  // no window to aim at: the taskbar, where its button is
+  const fxTaskbar = () => {
+    const bar = capri.windows?.bar;
+    if (bar?.shown && bar.w > 0) return { x: bar.x + bar.w / 2, y: bar.y + bar.h / 2 };
+    return { x: innerWidth / 2, y: innerHeight - 20 };
+  };
+  const fxRect = (r) => (r && [r.x, r.y, r.w, r.h].every(Number.isFinite) && r.w > 0 && r.h > 0 ? r : null);
+  let sparkWatch = 0;
+  const appFx = (cmd) => {
+    const live = !reducedMotion.matches;
+    if (cmd.kind === 'zap') {
+      if (!live) return host.appFxHit(cmd.id);
+      const rect = fxRect(cmd.rect);
+      fx.zapApp(fxFrom(), rect ? { rect } : { point: fxTaskbar() })
+        .then(() => host.appFxHit(cmd.id), () => host.appFxHit(cmd.id));
+      return;
+    }
+    if (cmd.kind !== 'spark' || !live) return;
+    // a small one at her hand now; the real one where the new window comes up, if one does
+    const from = fxFrom();
+    fx.sparkApp({ point: from });
+    clearInterval(sparkWatch);
+    const before = capri.windows?.fg;
+    const until = performance.now() + 8000;
+    sparkWatch = setInterval(() => {
+      const fg = capri.windows?.fg;
+      const win = fg != null && String(fg) !== String(before) && capri.windows?.wins?.find((w) => String(w.id) === String(fg));
+      if (win && win.w > 80 && win.h > 60) {
+        clearInterval(sparkWatch);
+        // a game taking the whole screen: nothing drawn over it (game mode is on its way)
+        const full = win.w >= innerWidth - 2 && win.h >= innerHeight - 2;
+        if (!full) fx.sparkApp({ rect: { x: win.x, y: win.y, w: win.w, h: win.h } });
+      } else if (performance.now() > until) clearInterval(sparkWatch);
+    }, 150);
+  };
+
   setInterval(() => bubble.watchdog(), 5000); // never stuck in DECRYPTING or TALKING
   // Click-through can't stay off by itself: a fold that never ended lets go, and what she asks
   // main for is sent again (main may have lost it to a focus change).
@@ -705,6 +751,9 @@ async function boot() {
             edge: capri.grounded, // on the bottom edge: she keeps riding the bar up and down
           },
         });
+        break;
+      case 'app-fx': // her zap before closing an app, her spark after opening one (Paso 4E)
+        appFx(cmd);
         break;
       case 'menu-close': // another window came to the front
         appMenu.hide();
