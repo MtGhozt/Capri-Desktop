@@ -601,7 +601,7 @@ class Engine:
                 pass
             self.stream = None
 
-    def begin_capture(self, hold: bool, follow: float = 0.0) -> None:
+    def begin_capture(self, hold: bool, follow: float = 0.0, wake: float | None = None) -> None:
         if not self.cfg.get("enabled") or self.stream is None:
             return
         if self._speaking:
@@ -622,7 +622,11 @@ class Engine:
                 self._vad.reset()
         if follow > 0:
             log(f"follow-up listen {follow:.1f}s")
-        self.broadcast({"type": "listening", "followUp": follow > 0})
+        payload = {"type": "listening", "followUp": follow > 0}
+        if wake is not None:
+            payload["wake"] = True
+            payload["score"] = int(round(float(wake) * 100))
+        self.broadcast(payload)
 
     def begin_follow(self, seconds) -> None:
         """She just asked something: listen for the answer without the wake word."""
@@ -1244,7 +1248,7 @@ class Engine:
                 log(f"wake score={peak:.3f} {named}")
             if peak >= self.wake_threshold():
                 log(f"wake hit score={peak:.3f} threshold={self.wake_threshold():.2f} {named}")
-                self.begin_capture(hold=False)
+                self.begin_capture(hold=False, wake=peak)
 
     def _capture_chunk(self, chunk: np.ndarray, now: float) -> None:
         with self._lock:
