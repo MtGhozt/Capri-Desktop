@@ -35,6 +35,26 @@ const sleepPhrases = [
   'Capri, duérmete ya',
   'andá a dormir vos también',
   'descansá un rato, por favor',
+  // cozy ones (Paso 4A fix)
+  'Capri, duermito un rato, quieres?',
+  'Capri, duérmete un rato',
+  'duermito',
+  'duérmete un ratito',
+  'a dormir un ratito',
+  'una siestita',
+  'échate una siesta',
+  'Tómate una siestita, ¿va?',
+  'a la camita',
+  've a la camita, porfa',
+  'a mimir, dale',
+  'Hey Jarvis. Duérmete un poquito, ¿sí?',
+  'a dormir, ¿quieres?',
+  // offers to her
+  '¿quieres dormir un rato?',
+  '¿quieres dormir?',
+  '¿te quieres dormir un rato?',
+  '¿por qué no duermes un rato?',
+  'Capri, ¿por qué no te echas una siestita?',
 ];
 
 const notSleep = [
@@ -50,6 +70,17 @@ const notSleep = [
   'no quiero dormir',
   '¿estás durmiendo?',
   'me gusta dormir la siesta',
+  '¿dormiste bien?',
+  '¿tienes sueño?',
+  '¿cuánto duermes?',
+  'yo quiero dormir pero tengo tarea',
+  '¿te gusta dormir?',
+  'anoche no dormí',
+  '¿quieres que te cuente un chiste?',
+  'yo quiero una siesta',
+  'la cama está desordenada',
+  '¿por qué no dormiste?',
+  'quiero dormir un rato',
 ];
 
 for (const text of sleepPhrases) {
