@@ -89,6 +89,8 @@ async function boot() {
   // COMPORTAMIENTO > Arrastrar: FIJO keeps her where she was dropped and remembers it.
   const applyPosition = (cfg) => {
     capri.locked = Boolean(cfg.position?.locked);
+    const home = cfg.position?.homeX;
+    capri.homeX = home != null && Number.isFinite(Number(home)) ? Number(home) : null;
     const x = Number(cfg.position?.x);
     const y = Number(cfg.position?.y);
     if (capri.locked && Number.isFinite(x) && Number.isFinite(y)
@@ -98,6 +100,8 @@ async function boot() {
     }
   };
   applyPosition(config);
+  // dropped somewhere new at the bottom of the screen: she rests there from now on
+  capri.onHome = (homeX) => host.setConfig({ position: { homeX: Math.round(homeX * 10000) / 10000 } });
 
   const brain = new Brain({ capri, panel, voice, host, lang: config.lang });
 

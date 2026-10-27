@@ -56,6 +56,7 @@ export class Capri {
     this.possessWindows = true; // tray: "Possess my windows"
     this.restOn = 'taskbar'; // where she rests when nothing's going on: on the taskbar, or her corner
     this.nextHome = 0;
+    this.homeX = null;    // her own rest spot, as a fraction of the screen width (where you last dropped her)
     this.locked = false;  // menu: FIJO, no dragging
     this.dragging = false;
 
@@ -97,6 +98,7 @@ export class Capri {
     this.onUnstow = null; // she's coming out of it
     this.chipAt = null;   // () => the biochip's middle on screen
     this.onDoze = null;   // ('start', face) | 'waking' | 'end': down to her mask and back
+    this.onHome = null;   // (fraction of the screen width): you dropped her somewhere new to rest
 
     this.alphaMap = this.buildAlphaMap(image);
     this.setScale(this.scale);
@@ -348,13 +350,31 @@ export class Capri {
     return id === 'taskbar' ? this.ledge() : this.windows.wins.find((w) => w.id === id);
   }
 
-  // Back to where she rests: her corner, or sitting on the taskbar below it.
+  // Where along the bottom of the screen she rests: where you last dropped her, else left of the
+  // clock and the tray icons, right of the middle (the app icons, on Windows 11).
+  homeSpot() {
+    const { w } = this.view;
+    const frac = Number(this.homeX);
+    if (this.homeX != null && Number.isFinite(frac)) return clamp(frac * w, 50, w - 60);
+    return clamp(w - 440, w * 0.6, this.spot('post').x);
+  }
+
+  // You dropped her down there: that's her spot now.
+  chooseHome(x = this.pos.x) {
+    const w = this.view.w || 1;
+    const was = this.homeX;
+    this.homeX = clamp(x / w, 0, 1);
+    if (was == null || Math.abs(was - this.homeX) > 0.0005) this.onHome?.(this.homeX);
+  }
+
+  // Back to where she rests: her corner, or sitting on the taskbar below it. FIJO: she stays put.
   goHome() {
+    if (this.locked) return Promise.resolve();
     const post = this.spot('post');
     if (this.restOn !== 'taskbar') return this.teleport(post);
-    if (this.stance === 'sit' && this.perch?.id === 'taskbar') return Promise.resolve();
-    // left of the clock and the tray icons, right of the middle (the app icons, on Windows 11)
-    return this.sitOn({ win: this.ledge(), dx: clamp(this.view.w - 440, this.view.w * 0.6, post.x) });
+    const dx = this.homeSpot();
+    if (this.stance === 'sit' && this.perch?.id === 'taskbar' && Math.abs(this.perch.dx - dx) < 2) return Promise.resolve();
+    return this.sitOn({ win: this.ledge(), dx });
   }
 
   // A window she could sit on, the one in front first. Returns { win, dx } or null.
@@ -479,7 +499,7 @@ export class Capri {
     }
 
     // resting on the taskbar: a little while after anything happens, she goes back to sit on it
-    if (this.restOn === 'taskbar' && this.mode === 'idle' && this.stance === 'stand'
+    if (this.restOn === 'taskbar' && this.mode === 'idle' && this.stance === 'stand' && !this.locked
       && now - this.lastActivity > 6000 && now > this.nextHome) {
       this.nextHome = now + 8000;
       this.goHome();
@@ -1445,6 +1465,7 @@ export class Capri {
     }
     this.pos.y = target.y;
     this.setStance(target.stance, { perch: target.perch });
+    if (target.chosen && target.stance === 'stand') this.chooseHome(); // you let go of her above it
     const s = this.scale;
     if (target.stance === 'sit') {
       this.perform('plop');
@@ -1691,8 +1712,13 @@ export class Capri {
       this.voice.play('land');
       return;
     }
-    if (this.pos.y < this.floor - 2) this.fall();
-    else this.perform('land');
+    if (this.pos.y < this.floor - 2) {
+      this.fall();
+      this.landingSpot.chosen = true; // down to the floor: wherever she lands is her spot
+      return;
+    }
+    this.perform('land');
+    this.chooseHome(); // let go at the bottom of the screen: she rests right here from now on
   }
 
   // When the pointer comes close she turns around to face it and cocks her head;

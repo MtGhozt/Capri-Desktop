@@ -43,6 +43,7 @@ const DEFAULTS = {
     locked: false,         // menu: NORMAL / FIJO; when locked she stays at x,y
     x: null,
     y: null,
+    homeX: null,           // where she rests on the taskbar, a fraction of the screen width (where you last dropped her)
   },
   shortcuts: {
     toggle: 'Ctrl+Alt+C',  // put her away / bring her back
