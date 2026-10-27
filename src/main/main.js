@@ -4,7 +4,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor,
+  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog,
 } = require('electron');
 
 const config = require('./config');
@@ -37,6 +37,13 @@ const {
   SENS_MIN, SENS_MAX, SENS_STEP, thresholdFromPct, pctFromThreshold,
   normalizeAccelerator, acceleratorFromKey, sameCombo,
 } = require('./hearing');
+const { createAppFlow } = require('./app-flow');
+const { createAppActions } = require('./app-actions');
+const appHost = require('./app-host');
+const {
+  TYPE_LABEL, CLOSE_LABEL, CLOSE_MODES, plainKey, cleanApps, normalizeApp, seedApps, defaultCandidates,
+  browserName, exeFromCommand, processName, linkTarget, linkOk,
+} = require('./apps-config');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
 
@@ -462,6 +469,129 @@ async function goClipReply({ chat = true } = {}) {
   return { ok: result.ok };
 }
 
+// -- her apps (Paso 4C) ---------------------------------------------------------------------
+// "abre Discord", "cierra Spotify": straight from her table (config apps.list), no model.
+
+const appList = () => cleanApps(config.load().apps?.list);
+const appLog = (text) => logEvent(voiceLogPath(), `[capri] ${text}`);
+let appFlow = null;
+
+function apps() {
+  if (!appFlow) {
+    appFlow = createAppFlow({
+      apps: appList,
+      actions: createAppActions(appHost.realDeps({ shell, skipPids: () => [process.pid, process.ppid] })),
+      line: (kind, values) => fillLine(pickLine(kind), values),
+      log: appLog,
+    });
+  }
+  return appFlow;
+}
+
+function appReply(result, { chat = true } = {}) {
+  announce(result.line, { chat, badge: 'APPS' });
+  return { ok: true };
+}
+
+// First run only: what this PC has (Discord, Spotify, Namida, Steam, the browser) plus YouTube and
+// Google, added next to whatever is already in the table, never over it.
+async function seedAppTable() {
+  if (config.load().apps?.seeded) return;
+  const found = await appHost.lookups(shell).catch(() => ({}));
+  const exe = exeFromCommand(found.browserCommand);
+  const browser = exe ? { exe, ...browserName(exe) } : null;
+  const candidates = defaultCandidates({ exists: appHost.exists, found: { ...found, browser } });
+  const { list, added } = seedApps(config.load().apps?.list, candidates);
+  config.save({ apps: { list, seeded: true } });
+  appLog(`apps seeded: ${added.length ? added.join(', ') : 'nothing new'}`);
+}
+
+function saveApps(list) {
+  config.save({ apps: { list: cleanApps(list) } });
+}
+
+function sameName(a, b) {
+  return plainKey(a) === plainKey(b);
+}
+
+// A new entry from her menu: { ok, name } or { ok: false, message } in Spanish.
+function addApp(raw) {
+  const entry = normalizeApp(raw);
+  if (!entry) return { ok: false, message: 'Eso no sirve como app.' };
+  const list = appList();
+  const clash = list.find((a) => [a.name, ...a.aliases].some((n) => sameName(n, entry.name)));
+  if (clash) return { ok: false, message: `Ya tienes «${clash.name}». Cámbiale los alias en vez de repetirla.` };
+  saveApps([...list, entry]);
+  appLog(`app added ${entry.name} type=${entry.type}`);
+  return { ok: true, name: entry.name };
+}
+
+async function pickProgram() {
+  const res = await dialog.showOpenDialog(overlay, {
+    title: 'Buscar programa',
+    properties: ['openFile'],
+    filters: [{ name: 'Programas y accesos directos', extensions: ['exe', 'lnk'] }],
+  });
+  const file = !res.canceled && res.filePaths?.[0];
+  if (!file) return { ok: false, message: '' };
+  let target = file;
+  let args = '';
+  if (/\.lnk$/i.test(file)) {
+    const link = appHost.readShortcut(shell, file);
+    if (link) ({ target, args } = link);
+  }
+  const name = path.basename(file).replace(/\.(exe|lnk)$/i, '');
+  return addApp({
+    name, aliases: [], type: 'program', target, args,
+    processes: /\.exe$/i.test(target) ? [processName(target)] : [], close: 'graceful',
+  });
+}
+
+function addLink(value = {}) {
+  const name = String(value.name || '').trim();
+  if (!name) return { ok: false, message: 'Ponle un nombre.' };
+  const target = linkTarget(value.url);
+  if (!linkOk(target)) return { ok: false, message: 'Ese enlace no sirve: usa https://… o un URI como spotify:' };
+  return addApp({ name, type: 'link', target, aliases: [] });
+}
+
+function updateApp(value = {}) {
+  const list = appList();
+  const index = list.findIndex((a) => sameName(a.name, value.name));
+  if (index < 0) return { ok: false, message: 'Esa app ya no está.' };
+  const next = { ...list[index] };
+  if (value.aliases != null) next.aliases = value.aliases;
+  if (CLOSE_MODES.includes(value.close)) next.close = value.close;
+  const entry = normalizeApp(next);
+  if (!entry) return { ok: false, message: 'No se pudo guardar.' };
+  list[index] = entry;
+  saveApps(list);
+  appLog(`app updated ${entry.name} aliases=${entry.aliases.join('|') || '-'} close=${entry.close}`);
+  return { ok: true, name: entry.name };
+}
+
+function removeApp(name) {
+  const list = appList();
+  const next = list.filter((a) => !sameName(a.name, name));
+  if (next.length === list.length) return { ok: false, message: 'Esa app ya no está.' };
+  saveApps(next);
+  appLog(`app removed ${name}`);
+  return { ok: true };
+}
+
+function appsMenuState() {
+  return appList().map((a) => ({
+    name: a.name,
+    type: a.type,
+    typeLabel: TYPE_LABEL[a.type] || a.type,
+    aliases: a.aliases,
+    close: a.close,
+    closeLabel: CLOSE_LABEL[a.close] || a.close,
+    target: a.type === 'steam' ? `steam ${a.target}` : a.target,
+    processes: a.processes,
+  }));
+}
+
 // -- game mode ---------------------------------------------------------------------------
 // A fullscreen game gets the whole GPU: the voice sidecar (OmniVoice) and Gemma go, she folds
 // into DORMANT and stays quiet, and both come back 30 s after the game is really gone.
@@ -575,6 +705,11 @@ function applyMenuAction(id, value) {
       updateConfig({ voice: { wakeThreshold: thresholdFromPct(value) } }); // live: the sidecar gets the new config
       break;
     case 'talk-hotkey': return setTalkHotkey(value);
+    case 'apps-pick-program': return pickProgram().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
+    case 'apps-add-link': return addLink(value);
+    case 'apps-update': return updateApp(value);
+    case 'apps-remove': return removeApp(value);
+    case 'apps-test': return { ok: true, text: apps().dryRun(value) };
     case 'clips-dir': openClipsFolder(config.load()); break;
     case 'drag-lock':
       config.save({ position: { locked: Boolean(value) } });
@@ -730,6 +865,7 @@ function menuState(extra = {}) {
       talkActive: Boolean(talkCombo),
       followUpSec: followUpSec(cfg),
     },
+    apps: appsMenuState(),
     clips: {
       hotkey: cfg.clips?.saveHotkey || 'Alt+F10',
       folder: clipFolderLabel(cfg),
@@ -943,6 +1079,9 @@ function registerIpc() {
   ipcMain.handle('chat:send', async (_e, text) => {
     const line = String(text || '').trim();
     if (!line || !overlay) return { ok: false };
+    // her "¿quisiste decir…?" / "¿seguro?" waiting for this answer (Paso 4C)
+    const answered = await apps().answer(line);
+    if (answered) return appReply(answered);
     const fixOrder = parseFixCommand(line);
     if (fixOrder) {
       const done = goFixReply(fixOrder);
@@ -955,6 +1094,8 @@ function registerIpc() {
     if (isForgetCommand(line)) return goForgetReply();
     // typing to her while she's DORMANT (or asking her to wake) brings her back, no model needed
     if (overlayFolded || isWakeCommand(line)) return goWakeReply();
+    const appOrder = await apps().command(line); // "abre Discord", "cierra Spotify"
+    if (appOrder) return appReply(appOrder);
     const boot = await lms.whenReady();
     if (boot === 'failed') {
       overlay.webContents.send('chat:error', { kind: 'offline' });
@@ -1184,6 +1325,7 @@ function main() {
       onDebug: DEV ? debugHandler : null,
     });
     registerShortcuts();
+    setTimeout(() => seedAppTable().catch((err) => appLog(`apps seed failed: ${err.message}`)), 5000);
     screen.on('display-metrics-changed', fitOverlay);
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });

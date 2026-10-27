@@ -72,6 +72,10 @@ const DEFAULTS = {
     followUpSec: 8,          // her answer ends with a question: listen this long without the wake word (0 = off)
     talkHotkey: null,        // push to talk from her menu; null → shortcuts.talk (Ctrl+Alt+V)
   },
+  apps: {
+    list: [],                // what "abre X" / "cierra X" reach (see apps-config.js); edited in her menu, APPS
+    seeded: false,           // her first-run table was filled in (only what this PC has, never over yours)
+  },
   voice: {
     enabled: true,
     dir: null,               // null → repo voice/ in dev; set an absolute path for the installed exe
@@ -129,6 +133,7 @@ function load() {
       greeting: { ...DEFAULTS.greeting, ...(saved.greeting || {}) },
       comments: { ...DEFAULTS.comments, ...(saved.comments || {}) },
       hearing: { ...DEFAULTS.hearing, ...(saved.hearing || {}) },
+      apps: { ...DEFAULTS.apps, ...(saved.apps || {}) },
       voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
       position: { ...DEFAULTS.position, ...(saved.position || {}) },
       shortcuts: { ...DEFAULTS.shortcuts, ...(saved.shortcuts || {}) },
@@ -168,6 +173,7 @@ function save(patch) {
     greeting: { ...DEFAULTS.greeting, ...(current.greeting || {}), ...(patch.greeting || {}) },
     comments: { ...DEFAULTS.comments, ...(current.comments || {}), ...(patch.comments || {}) },
     hearing: { ...DEFAULTS.hearing, ...(current.hearing || {}), ...(patch.hearing || {}) },
+    apps: { ...DEFAULTS.apps, ...(current.apps || {}), ...(patch.apps || {}) },
     voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
     position: { ...DEFAULTS.position, ...(current.position || {}), ...(patch.position || {}) },
     shortcuts: { ...DEFAULTS.shortcuts, ...(current.shortcuts || {}), ...(patch.shortcuts || {}) },

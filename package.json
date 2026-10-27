@@ -51,7 +51,8 @@
       "hooks/**",
       "src/main/windows.ps1",
       "src/main/focus.ps1",
-      "src/main/hotkey.ps1"
+      "src/main/hotkey.ps1",
+      "src/main/close-app.ps1"
     ],
     "win": {
       "target": "nsis",
