@@ -295,6 +295,15 @@ async function boot() {
     appMenu.hide();
     panel.hide();
     if (bubble.open) bubble.hide();
+    // off to a bottom corner first (FIJO: she stays put), so she wakes up there
+    if (!capri.dormant && !capri.busy && !capri.hidden) {
+      await capri.goToBed();
+      const up = ['THINKING', 'TALKING', 'LISTENING', 'BOOTING'].includes(machine.get());
+      if (!force && (up || bubble.open || capri.stowed)) { // something came up on her way there: stay up
+        folding = false;
+        return;
+      }
+    }
     if (useGlitch()) {
       showVhs(true);
       capri.p.glitchSeed = Math.random() * 100;

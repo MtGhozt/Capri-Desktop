@@ -1,7 +1,7 @@
 'use strict';
 
 // Where Capri rests at the bottom of the screen: the spot you drop her on, roaming free (no
-// walking back to it), and FIJO keeping her where she is. The real Capri class, without its drawing (no WebGL here).
+// walking back to it), a bottom corner to sleep in, and FIJO keeping her where she is. The real Capri class, without its drawing (no WebGL here).
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -127,6 +127,96 @@ test('work with no window to sit on: standing, she stays where she is', async ()
   c.goToWork();
   assert.equal(c.teleports.length, 0);
   assert.equal(c.mode, 'work');
+});
+
+// ---------- going to sleep in a bottom corner ----------
+
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+// fall asleep from nobody doing anything, with Math.random() pinned to r (picks the corner)
+async function nodOff(c, r) {
+  const random = Math.random;
+  Math.random = () => r;
+  try {
+    c.lastActivity = performance.now() - 11 * 60 * 1000; // past SLEEP_AFTER
+    c.behave(performance.now());
+    await tick();
+  } finally {
+    Math.random = random;
+  }
+}
+
+test('nothing going on for minutes: she goes to the bottom left corner and sleeps there', async () => {
+  const c = await make();
+  at(c, { x: 900, y: 400 });
+  await nodOff(c, 0.1);
+  assert.equal(c.teleports.length, 1);
+  assert.equal(c.teleports[0].to.x, c.spot('chip').x);
+  assert.equal(c.teleports[0].opts.face, 1); // facing into the screen
+  assert.deepEqual(c.pos, { x: c.spot('chip').x, y: 1079 });
+  assert.equal(c.grounded, true);
+  assert.equal(c.mode, 'sleep');
+});
+
+test('or the bottom right one: both corners get picked', async () => {
+  const c = await make();
+  at(c, { x: 900, y: 400 });
+  await nodOff(c, 0.9);
+  assert.equal(c.teleports.length, 1);
+  assert.equal(c.teleports[0].to.x, c.spot('post').x);
+  assert.equal(c.teleports[0].opts.face, -1);
+  assert.equal(c.pos.x, c.spot('post').x);
+  assert.equal(c.mode, 'sleep');
+  assert.ok(c.spot('chip').x < 300 && c.spot('post').x > 1920 - 300);
+});
+
+test('the bar up, she sleeps in the corner on top of it, and still rides it there', async () => {
+  const c = await make({ bar: UP });
+  at(c, { x: 900, y: 400 });
+  await nodOff(c, 0.9);
+  assert.equal(c.pos.y, 1031);
+  assert.equal(c.grounded, true);
+  c.setWindows({ fg: 0, wins: [], bar: HIDDEN });
+  assert.equal(c.pos.y, 1079);
+});
+
+test('FIJO: she falls asleep right where she is', async () => {
+  const c = await make({ locked: true });
+  at(c, { x: 900, y: 400 });
+  await nodOff(c, 0.1);
+  assert.equal(c.teleports.length, 0);
+  assert.deepEqual(c.pos, { x: 900, y: 400 });
+  assert.equal(c.mode, 'sleep');
+});
+
+test('waking up, she stays in her corner', async () => {
+  const c = await make();
+  at(c, { x: 900, y: 400 });
+  await nodOff(c, 0.1);
+  const x = c.pos.x;
+  c.wake();
+  c.lastActivity = performance.now() - 30000;
+  c.behave(performance.now());
+  assert.equal(c.mode, 'idle');
+  assert.equal(c.teleports.length, 1);
+  assert.equal(c.pos.x, x);
+});
+
+test('told to sleep (DORMANT), she goes to a corner first; FIJO, she stays', async () => {
+  const c = await make();
+  at(c, { x: 900, y: 400 });
+  const random = Math.random;
+  Math.random = () => 0.9;
+  try {
+    await c.goToBed();
+  } finally {
+    Math.random = random;
+  }
+  assert.equal(c.pos.x, c.spot('post').x);
+  const fixed = await make({ locked: true });
+  at(fixed, { x: 900, y: 400 });
+  await fixed.goToBed();
+  assert.equal(fixed.teleports.length, 0);
 });
 
 test('going home, she stands on the bottom edge at her spot', async () => {

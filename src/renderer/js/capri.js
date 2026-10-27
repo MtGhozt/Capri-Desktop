@@ -384,7 +384,8 @@ export class Capri {
     return clamp(w - 440, w * 0.6, this.spot('post').x);
   }
 
-  // You dropped her down there: that's her spot now (she doesn't walk back to it by herself: she roams).
+  // You dropped her down there: that's her spot now (she doesn't walk back to it by herself: she
+  // roams, and goes to a bottom corner to sleep).
   chooseHome(x = this.pos.x) {
     const w = this.view.w || 1;
     const was = this.homeX;
@@ -406,6 +407,36 @@ export class Capri {
     const x = this.homeSpot();
     if (this.stance === 'stand' && this.grounded && Math.abs(this.pos.x - x) < 2) return Promise.resolve();
     return this.teleport({ x, y: this.floor, floor: true }, { face: this.facing });
+  }
+
+  // Where she goes to sleep: one of the two bottom corners, a different pick each time, standing
+  // on the bottom edge (the taskbar's top while it's up), facing into the screen.
+  bedSpot() {
+    const left = Math.random() < 0.5;
+    const to = this.spot(left ? 'chip' : 'post');
+    return { to, face: left ? 1 : -1 };
+  }
+
+  // Nothing's happened for a long while (or she's told to sleep): off to a bottom corner.
+  // FIJO: she stays where she is. Resolves once she's there.
+  goToBed() {
+    if (this.locked || this.stowed || this.dormant) return Promise.resolve();
+    const { to, face } = this.bedSpot();
+    if (this.stance === 'stand' && this.grounded && Math.abs(this.pos.x - to.x) < 2) return Promise.resolve();
+    return this.teleport(to, { face });
+  }
+
+  // Asleep from nobody doing anything: to a corner, then asleep there (dozing off to her mask later).
+  async bedtime() {
+    if (this.bedding) return;
+    this.bedding = true;
+    try {
+      await this.goToBed();
+    } finally {
+      this.bedding = false;
+    }
+    // something came up on the way (Claude, you): stay up
+    if (this.mode === 'idle' && !this.busy && !this.pending) this.setMode('sleep');
   }
 
   // A window she could sit on, the one in front first. Returns { win, dx } or null.
@@ -520,7 +551,10 @@ export class Capri {
       this.gaze();
     }
 
-    if (this.mode === 'idle' && now - this.lastActivity > SLEEP_AFTER) this.setMode('sleep');
+    if (this.mode === 'idle' && now - this.lastActivity > SLEEP_AFTER) {
+      this.bedtime(); // off to a bottom corner first (FIJO: right where she is), then asleep
+      return;
+    }
     if (this.mode === 'sleep' && now - this.sleptAt > DOZE_AFTER) {
       this.doze();
       return;
