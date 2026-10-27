@@ -40,7 +40,15 @@ async function closeScript(mode, spec = {}, skip = []) {
     ids: [].concat(json.ids ?? []).map(Number).filter(Boolean),
     names: [].concat(json.names ?? []).map(String).filter(Boolean),
     left: Number(json.left) || 0,
+    rect: screenRect(json.rect),
   };
+}
+
+// { x, y, w, h } in physical screen pixels, or null
+function screenRect(r) {
+  if (!r || typeof r !== 'object') return null;
+  const out = { x: Number(r.x), y: Number(r.y), w: Number(r.w), h: Number(r.h) };
+  return Object.values(out).every(Number.isFinite) && out.w > 0 && out.h > 0 ? out : null;
 }
 
 function startDetached(file, args, { cwd } = {}) {
@@ -136,4 +144,4 @@ async function lookups(shell, env = process.env) {
   return found;
 }
 
-module.exports = { SCRIPT, exists, realDeps, readShortcut, lookups, regValue, regQuery };
+module.exports = { SCRIPT, screenRect, exists, realDeps, readShortcut, lookups, regValue, regQuery };

@@ -1,6 +1,8 @@
 # Finds an app's processes and, asked to, closes their windows the way their own close button
 # does (WM_CLOSE to each visible top-level window they own), then waits for them to go.
-# Prints one JSON line: { "ids": [...], "names": [...], "left": n }.
+# Prints one JSON line: { "ids": [...], "names": [...], "left": n, "rect": {x,y,w,h} | null }.
+# `rect`: its biggest visible window before anything was closed, in physical screen pixels
+# (for her zap, Paso 4E).
 #
 # What the app is, any of:
 #   -Names Discord,Update   processes by exe name
@@ -16,19 +18,6 @@ param(
   [string]$Mode = 'probe', [int]$WaitMs = 4000
 )
 $ErrorActionPreference = 'SilentlyContinue'
-
-if ($Mode -like 'explorer*') {
-  $shellApp = New-Object -ComObject Shell.Application
-  $folders = { @($shellApp.Windows() | Where-Object { $_.FullName -match '\\explorer\.exe$' }) }
-  $wins = @(& $folders)
-  if ($Mode -eq 'explorer') {
-    foreach ($w in $wins) { $w.Quit() }
-    $deadline = (Get-Date).AddMilliseconds([Math]::Min($WaitMs, 2000))
-    do { Start-Sleep -Milliseconds 200; $wins = @(& $folders) } while ($wins.Count -gt 0 -and (Get-Date) -lt $deadline)
-  }
-  [pscustomobject]@{ ids = @(); names = @(); left = $wins.Count } | ConvertTo-Json -Compress
-  exit 0
-}
 
 $skipIds = @($Skip -split ',' | Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ })
 $wanted = @($Names -split ',' | Where-Object { $_ -match '^[\w .+()-]+$' })
@@ -52,8 +41,48 @@ public static class CapriClose {
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
   [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int max);
+  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr hwnd);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+  [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+  [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT value, int size);
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
   const uint WM_CLOSE = 0x0010;
   const uint GW_OWNER = 4;
+  const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+  public static void Init() {
+    SetProcessDpiAwarenessContext(new IntPtr(-4)); // per-monitor v2: real pixels everywhere
+  }
+
+  static int[] RectOf(IntPtr hwnd) {
+    if (IsIconic(hwnd)) return null;
+    RECT r;
+    if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out r, 16) != 0 && !GetWindowRect(hwnd, out r)) return null;
+    int w = r.Right - r.Left, h = r.Bottom - r.Top;
+    if (w < 40 || h < 30) return null;
+    return new[] { r.Left, r.Top, w, h };
+  }
+
+  // the biggest visible top-level window of these pids: [x, y, w, h], or null
+  public static int[] Biggest(int[] ids) {
+    var wanted = new HashSet<uint>();
+    foreach (var id in ids) wanted.Add((uint)id);
+    int[] best = null;
+    EnumWindows((hwnd, l) => {
+      uint pid;
+      GetWindowThreadProcessId(hwnd, out pid);
+      if (wanted.Contains(pid) && TopLevel(hwnd)) {
+        var r = RectOf(hwnd);
+        if (r != null && (best == null || (long)r[2] * r[3] > (long)best[2] * best[3])) best = r;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return best;
+  }
+
+  public static int[] Window(long hwnd) {
+    return hwnd == 0 ? null : RectOf(new IntPtr(hwnd));
+  }
 
   static bool TopLevel(IntPtr hwnd) {
     return IsWindowVisible(hwnd) && GetWindow(hwnd, GW_OWNER) == IntPtr.Zero;
@@ -100,6 +129,31 @@ public static class CapriClose {
   }
 }
 "@
+[CapriClose]::Init()
+
+function Rect-Json($r) {
+  if (-not $r) { return $null }
+  [pscustomobject]@{ x = $r[0]; y = $r[1]; w = $r[2]; h = $r[3] }
+}
+
+if ($Mode -like 'explorer*') {
+  $shellApp = New-Object -ComObject Shell.Application
+  $folders = { @($shellApp.Windows() | Where-Object { $_.FullName -match '\\explorer\.exe$' }) }
+  $wins = @(& $folders)
+  $rect = $null
+  foreach ($w in $wins) {
+    $r = [CapriClose]::Window([long]$w.HWND)
+    if ($r -and (-not $rect -or $r[2] * $r[3] -gt $rect[2] * $rect[3])) { $rect = $r }
+  }
+  if ($Mode -eq 'explorer') {
+    foreach ($w in $wins) { $w.Quit() }
+    $deadline = (Get-Date).AddMilliseconds([Math]::Min($WaitMs, 2000))
+    do { Start-Sleep -Milliseconds 200; $wins = @(& $folders) } while ($wins.Count -gt 0 -and (Get-Date) -lt $deadline)
+  }
+  [pscustomobject]@{ ids = @(); names = @(); left = $wins.Count; rect = (Rect-Json $rect) } | ConvertTo-Json -Compress
+  exit 0
+}
+
 
 function Find-Procs {
   $procs = @()
@@ -121,6 +175,8 @@ $procs = @(Find-Procs)
 $ids = @($procs | ForEach-Object { $_.Id })
 $names = @($procs | ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
 $left = $ids.Count
+$rect = $null
+if ($ids.Count) { $rect = [CapriClose]::Biggest([int[]]$ids) }
 
 if ($Mode -eq 'graceful' -and $ids.Count) {
   $sent = [CapriClose]::Close([int[]]$ids)
@@ -135,4 +191,4 @@ if ($Mode -eq 'graceful' -and $ids.Count) {
   } while ($left -gt 0 -and (Get-Date) -lt $deadline)
 }
 
-[pscustomobject]@{ ids = @($ids); names = @($names); left = $left } | ConvertTo-Json -Compress
+[pscustomobject]@{ ids = @($ids); names = @($names); left = $left; rect = (Rect-Json $rect) } | ConvertTo-Json -Compress
