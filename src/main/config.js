@@ -36,9 +36,11 @@ const DEFAULTS = {
     glitch: true,
     intro: true,           // boot grab-the-screen intro; false skips to materialize
     apps: true,            // her zap / spark when she closes / opens an app (Paso 4E)
+    scanlines: true,       // scanlines + RGB split on the message box
   },
   ui: {
     theme: 'cyberpunk',    // overlay menu palette: 'cyberpunk' | 'capri'
+    logLines: 4,           // colour log under the message, last N kept
   },
   position: {
     locked: false,         // menu: NORMAL / FIJO; when locked she stays at x,y

@@ -51,16 +51,28 @@
   <div id="vhs" class="vhs" hidden aria-hidden="true"></div>
 
   <aside id="bubble" class="bubble" hidden>
-    <div class="bubble__frame">
-      <div class="bubble__log" aria-live="polite"></div>
-      <label class="bubble__prompt">
-        <span class="bubble__you">YOU &gt;</span>
-        <input class="bubble__field" type="text" maxlength="500" placeholder="say something..." autocomplete="off" spellcheck="false">
-      </label>
-      <footer class="bubble__status">
-        <span>CAPRI // <span class="bubble__state">ONLINE</span> <span class="bubble__voice" hidden>cargando voz…</span></span>
-        <span class="bubble__meter" hidden><i></i></span>
-      </footer>
+    <div class="bubble__tab">
+      <span class="bubble__title">CAPRI.SYS // MENSAJE</span>
+    </div>
+    <div class="bubble__body">
+      <div class="bubble__brackets" aria-hidden="true"></div>
+      <div class="bubble__scan" aria-hidden="true"></div>
+      <header class="bubble__head">
+        <figure class="bubble__logo">
+          <img src="../../assets/icons/capri.png" alt="">
+        </figure>
+        <span class="bubble__badge bubble__state">EN ESPERA</span>
+      </header>
+      <p class="bubble__line">
+        <span class="bubble__text"></span><span class="bubble__cursor" aria-hidden="true">▌</span>
+      </p>
+      <ol class="bubble__log" aria-live="polite"></ol>
+      <div class="bubble__prompt">
+        <span class="bubble__you">TÚ &gt;</span>
+        <input class="bubble__field" type="text" maxlength="500" placeholder="escribe algo…" autocomplete="off" spellcheck="false">
+      </div>
+      <span class="bubble__voice" hidden>cargando voz…</span>
+      <span class="bubble__meter" hidden><i></i></span>
     </div>
   </aside>
 

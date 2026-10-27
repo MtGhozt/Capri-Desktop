@@ -391,6 +391,11 @@ export class AppMenu {
       labels: ['INACTIVO', 'ACTIVO'],
       onChange: (on) => this.act('app-fx', on),
     });
+    toggle('Caja de mensaje', {
+      on: cfg.scanlines !== false,
+      labels: ['PLANA', 'FX'],
+      onChange: (on) => this.act('scanlines', on),
+    });
     selector('Tema', {
       options: THEME_OPTIONS,
       current: cfg.theme,
@@ -889,7 +894,7 @@ export class AppMenu {
     }
     this.confirmForget = false;
     const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock' || id === 'theme'
-      || id === 'startup' || id === 'gaming-mode' || id === 'comments' || id === 'app-fx';
+      || id === 'startup' || id === 'gaming-mode' || id === 'comments' || id === 'app-fx' || id === 'scanlines';
     await this.host.menuAction({ id, value });
     if (!keep) {
       this.hide();

@@ -12,7 +12,8 @@
 const { parseAppCommand, planAppCommand, joinNames, describePlan } = require('./app-command');
 const { createConfirm } = require('./app-confirm');
 
-function createAppFlow({ apps, actions, line, log = () => {}, confirm = createConfirm() }) {
+// event(kind, names): 'abierto' / 'cerrado' with the apps it did, for the message box log
+function createAppFlow({ apps, actions, line, log = () => {}, event = () => {}, confirm = createConfirm() }) {
   const names = (list) => joinNames(list.map((a) => a.name));
   const quoted = (list) => joinNames(list.map((m) => `«${m}»`));
 
@@ -25,6 +26,7 @@ function createAppFlow({ apps, actions, line, log = () => {}, confirm = createCo
       if (res.ok) ok.push(app);
       else if (lines.length < 2) lines.push(line('appFallo', { app: app.name }));
     }
+    if (ok.length) event('abierto', names(ok));
     if (ok.length === 1) lines.unshift(line('appAbrir', { app: ok[0].name }));
     if (ok.length > 1) lines.unshift(line('appAbrirVarias', { apps: names(ok) }));
     if (missing.length) lines.push(line('appNoEncontrada', { app: quoted(missing) }));
@@ -48,6 +50,7 @@ function createAppFlow({ apps, actions, line, log = () => {}, confirm = createCo
       else (by[res.status] || by.failed).push(app);
     }
     const lines = [];
+    if (by.closed.length) event('cerrado', names(by.closed));
     if (by.closed.length) lines.push(line('appCerrar', { app: names(by.closed) }));
     if (by.notRunning.length) lines.push(line('appNoCorre', { app: names(by.notRunning) }));
     if (by.notCloseable.length) lines.push(line('appNoCerrable', { app: names(by.notCloseable) }));

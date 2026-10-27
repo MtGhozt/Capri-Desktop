@@ -82,6 +82,9 @@
   --violet: oklch(0.55 0.255 292);
   --blue: oklch(0.6 0.2 260);
   --cyan: oklch(0.86 0.14 204);
+  --capri-pink: #ff2d6f;
+  --capri-violet: #7b3fe4;
+  --capri-green: #3dff8f;
 
   --font-display: 'Chakra Petch', 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
@@ -123,12 +126,22 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  z-index: 1;
+  z-index: 5;
   will-change: transform;
 }
 
-.capri__sprite {
+.capri.is-on-box {
+  z-index: 3; /* under the message box (4): she lies on its edge, the rest hidden behind it */
+}
+
+.capri__sprite,
+.capri__pose {
   display: block;
+}
+
+.capri__pose[hidden],
+.capri__sprite[hidden] {
+  display: none;
 }
 
 .fx {
@@ -474,67 +487,179 @@ body {
   transform: scaleY(-1);
 }
 
-/* ---------- chat bubble ---------- */
+/* ---------- message box (folder tab, never steals clicks except the input) ---------- */
 
 .bubble {
+  --tab-h: 22px;
   position: absolute;
   left: 0;
   top: 0;
   z-index: 4;
-  width: clamp(280px, 22vw, 400px);
-  color: var(--cyan);
+  width: clamp(300px, 24vw, 420px);
+  color: #efe8ff;
+  font-family: var(--font-mono);
+  pointer-events: none;
   will-change: transform;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--capri-pink) 45%, transparent));
 }
 
-.bubble__frame {
+.bubble__tab {
+  position: relative;
+  z-index: 1;
+  width: 46%;
+  min-height: var(--tab-h);
+  padding: 5px 12px 4px 10px;
+  background: color-mix(in srgb, #07040d 82%, transparent);
+  color: var(--capri-pink);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 100%, 0 100%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--capri-violet) 80%, #fff);
+}
+
+.bubble__title {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.bubble__body {
+  position: relative;
+  margin-top: -1px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 12px 8px;
-  background: #000;
-  border: 1px solid var(--cyan);
-  font-family: var(--font-mono);
+  padding: 10px 12px 10px 12px;
+  background: color-mix(in srgb, #07040d 78%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--capri-violet) 85%, #fff),
+    0 0 14px color-mix(in srgb, var(--capri-pink) 28%, transparent);
   clip-path: polygon(
-    0 10px, 10px 0,
-    58% 0, 60% 6px, 63% 0,
-    calc(100% - 14px) 0, 100% 14px,
-    100% calc(100% - 10px), calc(100% - 10px) 100%,
-    18px 100%, 0 calc(100% - 18px)
+    0 0,
+    46% 0,
+    calc(46% + 18px) 0,
+    100% 0,
+    100% 100%,
+    0 100%
   );
+}
+
+.bubble__brackets {
+  pointer-events: none;
+  position: absolute;
+  inset: 5px 6px;
+  border: 1.5px solid transparent;
+  border-image: none;
+  background:
+    linear-gradient(var(--capri-pink), var(--capri-pink)) top left / 12px 1.5px no-repeat,
+    linear-gradient(var(--capri-pink), var(--capri-pink)) top left / 1.5px 12px no-repeat,
+    linear-gradient(var(--capri-pink), var(--capri-pink)) top right / 12px 1.5px no-repeat,
+    linear-gradient(var(--capri-pink), var(--capri-pink)) top right / 1.5px 12px no-repeat,
+    linear-gradient(var(--capri-pink), var(--capri-pink)) bottom left / 12px 1.5px no-repeat,
+    linear-gradient(var(--capri-pink), var(--capri-pink)) bottom left / 1.5px 12px no-repeat,
+    linear-gradient(var(--capri-pink), var(--capri-pink)) bottom right / 12px 1.5px no-repeat,
+    linear-gradient(var(--capri-pink), var(--capri-pink)) bottom right / 1.5px 12px no-repeat;
+}
+
+.bubble__scan {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  mix-blend-mode: screen;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 2px,
+    color-mix(in srgb, #9ad 12%, transparent) 2px 3px
+  );
+}
+
+.bubble:not(.is-fx) .bubble__scan {
+  display: none;
+}
+
+.bubble.is-fx .bubble__line {
+  text-shadow: 0.6px 0 color-mix(in srgb, #5ff 55%, transparent), -0.6px 0 color-mix(in srgb, var(--capri-pink) 55%, transparent);
 }
 
 .bubble--birth {
   overflow: hidden;
 }
 
-.bubble__status {
+.bubble__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  font-size: var(--text-meta);
+}
+
+.bubble__logo {
+  margin: 0;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  background: #110816;
+  clip-path: polygon(18% 0, 100% 0, 100% 82%, 82% 100%, 0 100%, 0 18%);
+}
+
+.bubble__logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  clip-path: polygon(18% 0, 100% 0, 100% 82%, 82% 100%, 0 100%, 0 18%);
+}
+
+.bubble__badge {
+  font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--cyan);
-  margin-top: 2px;
-  padding-top: 6px;
-  border-top: 1px solid color-mix(in oklch, var(--cyan) 35%, black);
+  color: var(--capri-violet);
+  text-align: right;
+}
+
+.bubble[data-state='LISTENING'] .bubble__badge { color: #e6c15a; }
+.bubble[data-state='THINKING'] .bubble__badge { color: var(--capri-pink); }
+.bubble[data-state='TALKING'] .bubble__badge { color: var(--capri-green); }
+.bubble[data-state='DORMANT'] .bubble__badge { color: #8a7aa8; }
+
+.bubble[data-state='THINKING'] .bubble__badge,
+.bubble[data-state='TALKING'] .bubble__badge,
+.bubble[data-state='LISTENING'] .bubble__badge {
+  animation: blink 700ms steps(2, jump-none) infinite;
+}
+
+.bubble__line {
+  margin: 0;
+  min-height: 2.6em;
+  font-size: var(--text-data);
+  line-height: 1.45;
+  color: #f4ecff;
+  overflow-wrap: anywhere;
+}
+
+.bubble__cursor {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--capri-pink);
+  animation: blink 900ms steps(2, jump-none) infinite;
 }
 
 .bubble__voice {
-  margin-left: 8px;
-  color: color-mix(in oklch, var(--cyan) 55%, black);
+  font-size: 9px;
+  color: color-mix(in srgb, var(--capri-violet) 70%, #fff);
   letter-spacing: 0.08em;
-  text-transform: none;
   animation: blink 1100ms steps(2, jump-none) infinite;
 }
 
 .bubble__meter {
-  flex: none;
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
   width: 52px;
   height: 5px;
   background: #12080c;
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, #e6c15a 45%, black);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #e6c15a 45%, black);
 }
 
 .bubble__meter i {
@@ -544,45 +669,32 @@ body {
   background: #e6c15a;
 }
 
-.bubble[data-state='LISTENING'] .bubble__state {
-  color: #e6c15a;
-}
-
-.bubble[data-state='THINKING'] .bubble__state,
-.bubble[data-state='TALKING'] .bubble__state,
-.bubble[data-state='BOOTING'] .bubble__state,
-.bubble[data-state='LISTENING'] .bubble__state {
-  animation: blink 700ms steps(2, jump-none) infinite;
-}
-
 .bubble__log {
-  max-height: min(28vh, 240px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  font-size: var(--text-data);
-  line-height: 1.45;
-  color: #d7fffb;
-  scrollbar-width: thin;
-  scrollbar-color: var(--cyan) transparent;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 5.6em;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
 }
 
 .bubble__row {
-  margin: 0 0 6px;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 
-.bubble__row.is-cut .bubble__text {
-  opacity: 0.78;
-}
+.bubble__row.is-oido { color: var(--capri-green); }
+.bubble__row.is-despierta { color: #5cecff; }
+.bubble__row.is-pregunta { color: #e6c15a; }
+.bubble__row.is-cerrado { color: var(--capri-pink); }
+.bubble__row.is-abierto { color: var(--capri-green); }
+.bubble__row.is-sistema { color: #c9a6ff; }
 
-.bubble__prefix {
-  color: var(--cyan);
+.bubble__tag {
   font-weight: 600;
-}
-
-.bubble__row.is-you .bubble__prefix,
-.bubble__row.is-you .bubble__text {
-  color: #8fd9d3;
+  margin-right: 6px;
 }
 
 .bubble__prompt {
@@ -596,7 +708,8 @@ body {
   flex: none;
   font-size: var(--text-data);
   letter-spacing: 0.08em;
-  color: var(--cyan);
+  color: var(--capri-violet);
+  pointer-events: none;
 }
 
 .bubble__field {
@@ -604,17 +717,18 @@ body {
   min-width: 0;
   appearance: none;
   border: 0;
-  padding: 0;
+  padding: 2px 0;
   background: transparent;
   color: #fff;
   font-family: var(--font-mono);
   font-size: var(--text-data);
   outline: none;
   user-select: text;
+  pointer-events: auto;
 }
 
 .bubble__field::placeholder {
-  color: color-mix(in oklch, var(--cyan) 45%, black);
+  color: color-mix(in srgb, var(--capri-violet) 55%, #000);
 }
 
 /* ---------- overlay context menu: Cyberpunk 2077 settings plate ---------- */
@@ -1291,10 +1405,10 @@ button.appmenu__row {
 /* ---------- reduced motion ---------- */
 
 @media (prefers-reduced-motion: reduce) {
-  .bubble[data-state='THINKING'] .bubble__state,
-  .bubble[data-state='TALKING'] .bubble__state,
-  .bubble[data-state='BOOTING'] .bubble__state,
-  .bubble[data-state='LISTENING'] .bubble__state,
+  .bubble[data-state='THINKING'] .bubble__badge,
+  .bubble[data-state='TALKING'] .bubble__badge,
+  .bubble[data-state='LISTENING'] .bubble__badge,
+  .bubble__cursor,
   .bubble__voice,
   .dormant__label::after,
   .vhs {

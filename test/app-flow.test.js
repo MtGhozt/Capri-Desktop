@@ -8,6 +8,7 @@ const { APPS } = require('./apps-fixture');
 function flow({ close = () => ({ status: 'closed', ids: [5] }), open = () => ({ ok: true }) } = {}) {
   const did = [];
   const logs = [];
+  const events = [];
   const f = createAppFlow({
     apps: () => APPS,
     actions: {
@@ -16,8 +17,9 @@ function flow({ close = () => ({ status: 'closed', ids: [5] }), open = () => ({ 
     },
     line: (kind, values) => `${kind}${values.app || values.apps ? `:${values.app || values.apps}` : ''}`,
     log: (t) => logs.push(t),
+    event: (kind, text) => events.push([kind, text]),
   });
-  return { f, did, logs };
+  return { f, did, logs, events };
 }
 
 test('a plain order does it and logs it', async () => {
@@ -89,4 +91,14 @@ test('File Explorer windows that stay are not offered a forced close', async () 
   assert.equal((await f.command('cierra el explorador')).line, 'appFallo');
   assert.equal(f.confirm.pending, null);
   assert.deepEqual(did, ['graceful']);
+});
+
+test('the message box hears what she opened and closed (ABIERTO / CERRADO)', async () => {
+  const { f, events } = flow();
+  await f.command('abre Discord y YouTube');
+  await f.command('cierra Discord');
+  assert.deepEqual(events, [['abierto', 'Discord y YouTube'], ['cerrado', 'Discord']]);
+  const failed = flow({ open: () => ({ ok: false, error: 'x' }) });
+  await failed.f.command('abre Discord');
+  assert.deepEqual(failed.events, []);
 });

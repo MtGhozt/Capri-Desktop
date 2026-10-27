@@ -1,39 +1,55 @@
-// Terminal chat bubble above Capri. Streaming text is shown as-is; the glitch
-// decode runs once when a reply is finished.
+// Folder-shaped message box. Streaming text types out on the main line; a short colour log
+// sits under it. The box itself never takes a click — only the text field does.
 
 import { clamp, reducedMotion, sleep } from './util.js';
-import { statusText } from './state.js';
+import { EventLog, DEFAULT_LOG_LIMIT } from './event-log.js';
+import { messageBadge } from './message-status.js';
 
 const NOISE = '▚▞▙▟░▒#%&/\\<>01XZ';
 const DECODE_STEP_MS = 28;
-const VOICE_STALE_MS = 90_000; // "talking" with no word from her voice for this long: it's over
-const REPLY_STALE_MS = 180_000; // no token and no answer for this long: the reply is lost
+const TYPE_MS = 18;
+const VOICE_STALE_MS = 90_000;
+const REPLY_STALE_MS = 180_000;
 const OFFLINE = [
   "Link's dead, choom. Fire up LM Studio before you ping me.",
   "No brain on the wire. LM Studio's offline — don't leave me hanging.",
   "Net's quiet. Spin the local stack and try me again.",
 ];
 
+const TAG = {
+  oido: 'OÍDO',
+  despierta: 'DESPIERTA',
+  pregunta: 'PREGUNTA',
+  cerrado: 'CERRADO',
+  abierto: 'ABIERTO',
+  sistema: 'SISTEMA',
+};
+
 export class Bubble {
   constructor({ el, machine }) {
     this.el = el;
     this.machine = machine;
     this.logEl = el.querySelector('.bubble__log');
+    this.lineEl = el.querySelector('.bubble__text');
     this.field = el.querySelector('.bubble__field');
     this.stateEl = el.querySelector('.bubble__state');
     this.voiceEl = el.querySelector('.bubble__voice');
     this.meterEl = el.querySelector('.bubble__meter');
     this.meterBar = this.meterEl?.querySelector('i');
+    this.bodyEl = el.querySelector('.bubble__body');
     this.anchor = { x: 0, y: 0 };
     this.view = { w: innerWidth, h: innerHeight };
     this.open = false;
     this.busy = false;
-    this.replyEl = null;
+    this.replyEl = this.lineEl;
     this.replyText = '';
+    this.typed = '';
     this.decodeTimer = null;
     this.thinkTimer = null;
+    this.typeTimer = null;
     this.onTalk = null;
     this.onOpenChange = null;
+    this.onPerchChange = null;
     this.boot = 'ready';
     this.holdVoice = false;
     this.replyMode = 'voice';
@@ -41,6 +57,8 @@ export class Bubble {
     this.onBlip = null;
     this.voicePlaying = false;
     this.voiceTimer = 0;
+    this.fx = true;
+    this.events = new EventLog({ limit: DEFAULT_LOG_LIMIT });
     machine.onChange(() => this.paint());
 
     this.field.addEventListener('keydown', (e) => {
@@ -54,10 +72,21 @@ export class Bubble {
         this.submit();
       }
     });
+    this.setFx(true);
   }
 
   get visible() {
     return this.open;
+  }
+
+  setFx(on) {
+    this.fx = on !== false;
+    this.el.classList.toggle('is-fx', this.fx && !reducedMotion.matches);
+  }
+
+  setLogLimit(n) {
+    this.events.setLimit(n);
+    this.renderLog();
   }
 
   toggle() {
@@ -77,6 +106,7 @@ export class Bubble {
     this.place();
     this.focusField();
     this.onOpenChange?.(true);
+    this.onPerchChange?.('open');
   }
 
   syncBoot() {
@@ -114,7 +144,8 @@ export class Bubble {
     if (!animate || !from || reducedMotion.matches) {
       this.el.style.opacity = '';
       this.focusField();
-      this.onOpenChange?.(true);
+        this.onOpenChange?.(true);
+      this.onPerchChange?.('open');
       return;
     }
     const startX = from.left + from.width / 2 - this.el.offsetWidth / 2;
@@ -124,6 +155,7 @@ export class Bubble {
     this.el.style.transform = `translate3d(${Math.round(startX)}px, ${Math.round(startY)}px, 0)`;
     this.el.style.opacity = '1';
     this.onOpenChange?.(true);
+    this.onPerchChange?.('open');
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     this.el.style.transition = 'transform 420ms cubic-bezier(0.16, 1, 0.3, 1), clip-path 420ms cubic-bezier(0.16, 1, 0.3, 1)';
     this.el.style.clipPath = 'inset(0)';
@@ -141,6 +173,7 @@ export class Bubble {
     if (!this.open) return;
     this.open = false;
     this.stopThink();
+    this.stopType();
     clearTimeout(this.voiceTimer);
     this.voiceTimer = 0;
     this.clearDecode();
@@ -156,6 +189,7 @@ export class Bubble {
     }
     this.setMeter(false);
     this.onOpenChange?.(false);
+    this.onPerchChange?.('close');
     if (!fromHost) window.host.closeChat();
   }
 
@@ -170,23 +204,46 @@ export class Bubble {
     const line = String(text || '').trim();
     if (!line || this.busy) return;
     if (!this.open) this.show();
-    this.sendLine(line);
+    this.note('oido', line);
+    this.sendLine(line, { heard: true });
   }
 
-  sendLine(text) {
-    this.addLine('you', text);
-    // a new reply cuts whatever she was saying: the sidecar drops that line without a
-    // talking_done, so don't wait for one (it left her in DECRYPTING once)
+  sendLine(text, { heard = false } = {}) {
+    if (!heard) this.note('pregunta', text);
     this.voicePlaying = false;
     this.busy = true;
     this.busyAt = Date.now();
     this.replyText = '';
-    this.replyEl = this.addLine('capri', '');
+    this.typed = '';
+    this.setLine('');
+    this.replyEl = this.lineEl;
     this.startThink();
     this.onTalk?.(false);
     window.host.sendChat(text).catch(() => {
       if (this.busy) this.fail();
     });
+  }
+
+  note(kind, text = '') {
+    if (!TAG[kind]) return;
+    this.events.push(kind, text);
+    this.renderLog();
+  }
+
+  renderLog() {
+    if (!this.logEl) return;
+    this.logEl.replaceChildren();
+    for (const row of this.events.lines) {
+      const li = document.createElement('li');
+      li.className = `bubble__row is-${row.kind}`;
+      const tag = document.createElement('span');
+      tag.className = 'bubble__tag';
+      tag.textContent = TAG[row.kind] || row.kind.toUpperCase();
+      const body = document.createElement('span');
+      body.textContent = row.text ? ` ${row.text}` : '';
+      li.append(tag, body);
+      this.logEl.append(li);
+    }
   }
 
   setMeter(on) {
@@ -195,7 +252,6 @@ export class Bubble {
     if (!on && this.meterBar) this.meterBar.style.width = '0%';
   }
 
-  // OmniVoice is booting: show the tiny notice and answer with blips (never Kokoro).
   setVoiceLoading(on) {
     this.voiceLoading = Boolean(on);
     if (this.voiceEl) this.voiceEl.hidden = !this.voiceLoading;
@@ -208,13 +264,16 @@ export class Bubble {
     this.meterBar.style.width = `${pct}%`;
   }
 
+  setLine(text) {
+    if (this.lineEl) this.lineEl.textContent = text;
+  }
+
   onToken(piece) {
     if (!this.busy) return;
     this.busyAt = Date.now();
     this.stopThink();
     this.replyText += piece;
-    if (this.replyEl) this.replyEl.textContent = this.replyText;
-    this.scrollLog();
+    this.typeToward(this.replyText);
   }
 
   onDone(text) {
@@ -223,7 +282,7 @@ export class Bubble {
     this.replyText = text || this.replyText;
     this.busy = false;
     this.armVoiceWatch();
-    this.decode(this.replyEl, this.replyText);
+    this.typeToward(this.replyText, { finish: true });
   }
 
   onError() {
@@ -236,22 +295,17 @@ export class Bubble {
     this.busy = false;
     const line = OFFLINE[Math.floor(Math.random() * OFFLINE.length)];
     this.replyText = line;
-    this.decode(this.replyEl, line);
+    this.note('sistema', line);
+    this.typeToward(line, { finish: true });
   }
 
   addLine(who, text) {
-    const row = document.createElement('div');
-    row.className = `bubble__row is-${who}`;
-    const prefix = document.createElement('span');
-    prefix.className = 'bubble__prefix';
-    prefix.textContent = who === 'you' ? '> you: ' : 'CAPRI > ';
-    const body = document.createElement('span');
-    body.className = 'bubble__text';
-    body.textContent = text;
-    row.append(prefix, body);
-    this.logEl.append(row);
-    this.scrollLog();
-    return body;
+    if (who === 'you') {
+      this.note('pregunta', text);
+      return this.lineEl;
+    }
+    this.setLine(text);
+    return this.lineEl;
   }
 
   clearDecode() {
@@ -262,11 +316,56 @@ export class Bubble {
     }
   }
 
+  stopType() {
+    if (this.typeTimer) {
+      clearTimeout(this.typeTimer);
+      this.typeTimer = null;
+    }
+  }
+
+  typeToward(text, { finish = false } = {}) {
+    this.clearDecode();
+    if (!this.lineEl || reducedMotion.matches || !text) {
+      this.typed = text;
+      this.setLine(text);
+      if (finish && !this.voicePlaying) {
+        this.setState('ONLINE');
+        this.onTalk?.(false);
+      }
+      return;
+    }
+    const blips = this.replyMode === 'blips' || this.voiceLoading;
+    if (blips && finish) {
+      this.decode(this.lineEl, text);
+      return;
+    }
+    this.onTalk?.(true);
+    const step = () => {
+      if (this.typed.length >= text.length) {
+        this.setLine(text);
+        this.typeTimer = null;
+        if (finish && !this.voicePlaying) {
+          this.setState('ONLINE');
+          this.onTalk?.(false);
+        }
+        return;
+      }
+      this.typed = text.slice(0, this.typed.length + 1);
+      this.setLine(this.typed);
+      if (this.typed.slice(-1).trim()) this.onBlip?.();
+      this.typeTimer = setTimeout(step, TYPE_MS);
+    };
+    this.stopType();
+    if (!this.typed || !text.startsWith(this.typed)) this.typed = '';
+    step();
+  }
+
   decode(el, text) {
     this.clearDecode();
     const finish = () => {
       this.clearDecode();
       if (el) el.textContent = text;
+      this.typed = text;
       if (!this.voicePlaying) {
         this.setState('ONLINE');
         this.onTalk?.(false);
@@ -288,7 +387,6 @@ export class Bubble {
         tail += chars[i] === ' ' ? ' ' : NOISE[Math.floor(Math.random() * NOISE.length)];
       }
       el.textContent = head + tail;
-      this.scrollLog();
     };
     if (!blips) {
       const step = () => {
@@ -330,7 +428,6 @@ export class Bubble {
     this.voiceTimer = setTimeout(() => {
       this.voiceTimer = 0;
       if (this.voicePlaying) {
-        // still talking: look again, but a voice that went quiet for a minute is not talking
         if (Date.now() - (this.voiceAt || 0) < VOICE_STALE_MS) {
           this.armVoiceWatch();
           return;
@@ -348,8 +445,6 @@ export class Bubble {
     }, 2000);
   }
 
-  // Never stuck: DECRYPTING with nothing pending, TALKING with no voice for a minute, or a
-  // reply that never came back. Called every few seconds.
   watchdog(now = Date.now()) {
     const state = this.machine.get();
     if (this.busy) {
@@ -360,7 +455,7 @@ export class Bubble {
       return;
     }
     if (this.voicePlaying && now - (this.voiceAt || 0) > VOICE_STALE_MS) this.voicePlaying = false;
-    if (this.voicePlaying || this.voiceTimer || this.decodeTimer || this.thinkTimer) return;
+    if (this.voicePlaying || this.voiceTimer || this.decodeTimer || this.thinkTimer || this.typeTimer) return;
     if (state === 'THINKING' || state === 'TALKING') {
       this.setState('ONLINE');
       this.onTalk?.(false);
@@ -391,8 +486,9 @@ export class Bubble {
   }
 
   abortForListen() {
-    const cutting = this.busy || this.voicePlaying || Boolean(this.decodeTimer);
+    const cutting = this.busy || this.voicePlaying || Boolean(this.decodeTimer) || Boolean(this.typeTimer);
     this.stopThink();
+    this.stopType();
     clearTimeout(this.voiceTimer);
     this.voiceTimer = 0;
     this.clearDecode();
@@ -403,15 +499,14 @@ export class Bubble {
   }
 
   settleInterrupted() {
-    if (!this.replyEl) return;
-    let text = String(this.replyText || '').trim();
+    if (!this.lineEl) return;
+    let text = String(this.replyText || this.typed || '').trim();
     if (!text) text = '…';
     else if (this.busy && !/[.!?…]$/.test(text)) text = `${text} …`;
     this.replyText = text;
-    this.replyEl.textContent = text;
-    this.replyEl.classList.add('is-cut');
-    this.replyEl.parentElement?.classList.add('is-cut');
-    this.scrollLog();
+    this.typed = text;
+    this.setLine(text);
+    this.lineEl.classList.add('is-cut');
   }
 
   setState(name, pct) {
@@ -425,7 +520,7 @@ export class Bubble {
 
   paint() {
     const name = this.machine.get();
-    this.stateEl.textContent = statusText(name, this.machine.pct);
+    if (this.stateEl) this.stateEl.textContent = messageBadge(name);
     this.el.dataset.state = name;
   }
 
@@ -437,16 +532,12 @@ export class Bubble {
 
   place() {
     if (!this.open) return;
-    const { x, y, top: crown = y - 80 } = this.anchor;
     const { w, h } = this.view;
-    const margin = 14;
-    const bw = this.el.offsetWidth;
-    const bh = this.el.offsetHeight;
-    let left = x - bw / 2;
-    left = clamp(left, margin, w - bw - margin);
-    let top = crown - bh - 8;
-    if (top < margin) top = y + 48;
-    top = clamp(top, margin, h - bh - margin);
+    const margin = 16;
+    const bw = this.el.offsetWidth || 320;
+    const bh = this.el.offsetHeight || 180;
+    const left = clamp(w - bw - 28, margin, w - bw - margin);
+    const top = clamp(Math.round(h * 0.2), margin, h - bh - 80);
     this.el.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
   }
 
@@ -455,7 +546,24 @@ export class Bubble {
     return this.el.getBoundingClientRect();
   }
 
+  inputRect() {
+    if (!this.open || this.el.hidden || !this.field) return null;
+    return this.field.getBoundingClientRect();
+  }
+
+  hitInput(x, y) {
+    const r = this.inputRect();
+    return Boolean(r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+  }
+
+  // Top edge of the folder body (under the tab): where she lies or stands.
+  ledge() {
+    if (!this.open || this.el.hidden) return null;
+    const r = (this.bodyEl || this.el).getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height, top: r.top };
+  }
+
   scrollLog() {
-    this.logEl.scrollTop = this.logEl.scrollHeight;
+    if (this.logEl) this.logEl.scrollTop = this.logEl.scrollHeight;
   }
 }
