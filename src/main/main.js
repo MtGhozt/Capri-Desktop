@@ -16,6 +16,7 @@ const { createLms } = require('./lms');
 const { createVoice } = require('./voice');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
+const { createGoodnight } = require('./goodnight');
 const { isClipCommand } = require('./clip-command');
 const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
@@ -63,8 +64,6 @@ let voiceTalking = false;
 let llmBusy = false;
 let voiceQueue = [];
 let chatOpen = false;
-let pendingSleep = false;
-let sleepTimer = null;
 let previousForeground = null;
 let menuKeyboard = false; // her menu has a text field open (Corregir lo último): it needs the keyboard
 let lastHeard = '';       // the last thing Whisper wrote, before her fixes (Corregir lo último)
@@ -321,26 +320,26 @@ function rendererConfig() {
   return { ...cfg, idle, lang: resolveLang(cfg.lang), langSetting: cfg.lang, dev: DEV, floorGap: overlayArea().gap };
 }
 
-function requestSleep() {
-  if (sleepTimer) {
-    clearTimeout(sleepTimer);
-    sleepTimer = null;
-  }
-  pendingSleep = false;
-  sendCommand('sleep');
-}
+// Sleep by command: her goodnight line first, then her corner and the fold (goodnight.js).
+const goodnight = createGoodnight({ fold: () => sendCommand('sleep') });
 
+// Her line to the sidecar, when her voice is on. The speak id, or 0 when it was not sent.
 function speakLine(line) {
   const speakId = ttsOn() ? speakQueue?.start() : 0;
-  if (!speakId) return;
+  if (!speakId) return 0;
   speakQueue.feed(line);
   speakQueue.flush(speakId);
+  return speakId;
 }
 
 // One of her direct-command lines (lines-es.js), said and shown where the command came from:
 // her chat bubble, or the panel when it came from her menu or the tray.
-function announce(line, { chat = false, badge = 'CAPRI' } = {}) {
+function announce(line, opts) {
   speakLine(line);
+  return showLine(line, opts);
+}
+
+function showLine(line, { chat = false, badge = 'CAPRI' } = {}) {
   if (chat) {
     overlay?.webContents.send('chat:token', line);
     overlay?.webContents.send('chat:done', { text: line });
@@ -355,13 +354,15 @@ function commandReply(kind, opts) {
 }
 
 function goSleepReply({ chat = true } = {}) {
-  commandReply('dormir', { chat, badge: 'SLEEP' });
-  pendingSleep = true;
-  sleepTimer = setTimeout(requestSleep, 2200);
+  const line = pickLine('dormir');
+  const spoken = Boolean(speakLine(line));
+  showLine(line, { chat, badge: 'SLEEP' });
+  goodnight.start({ spoken, line }); // folds once she has said it
   return { ok: true };
 }
 
 function goWakeReply({ chat = true } = {}) {
+  goodnight.cancel();
   commandReply('despertar', { chat, badge: 'WAKE' });
   sendCommand('wake');
   return { ok: true };
@@ -448,6 +449,7 @@ async function gameEnter(windows) {
   gameLog(`game on exe=${windows?.fgExe || '?'} ${vramText()}`);
   llm?.cancel();
   speakQueue?.stop();
+  goodnight.cancel();
   sendCommand('sleep'); // DORMANT, and the chat bubble goes with it
   if (lms?.status() === 'booting') await lms.whenReady(); // a load in flight would land anyway
   gameHadLlm = lms?.status() === 'ready';
@@ -999,7 +1001,7 @@ function main() {
         if (payload?.type === 'talking_done' || payload?.type === 'stopped') voiceTalking = false;
         if (payload?.type === 'listening') openChat();
         if (payload?.type === 'devices') rebuildTray();
-        if (pendingSleep && payload?.type === 'talking_done') requestSleep();
+        goodnight.onVoiceEvent(payload); // her goodnight line over: now she folds
         if (overlay?.webContents && !overlay.webContents.isDestroyed()) {
           overlay.webContents.send('voice:event', payload);
         } else {
@@ -1022,7 +1024,7 @@ function main() {
         && !voiceTalking
         && !llmBusy
         && !gameMode?.active()
-        && !pendingSleep
+        && !goodnight.pending
       ),
       minMs: () => commentRange(config.load().comments?.minMinutes, 15),
       maxMs: () => commentRange(config.load().comments?.maxMinutes, 40),
