@@ -21,16 +21,20 @@ const OPEN = new Set([
   'pon', 'ponme', 'poneme', 'pone', 'pones', 'poner', 'ponerme',
   'inicia', 'inicia', 'iniciame', 'iniciar', 'lanza', 'lanzame', 'lanzar', 'ejecuta', 'ejecutame', 'ejecutar',
   'arranca', 'arrancame', 'arrancar', 'open', 'launch', 'start',
+  // how Whisper writes "abre" / "ábrele" now and then
+  'abra', 'abras', 'abran', 'abrame', 'abrel', 'abrele', 'abrenos', 'habre',
 ]);
 const CLOSE = new Set([
   'cierra', 'cerra', 'cierrame', 'cerrame', 'cierralo', 'cierrala', 'cerralo', 'cerrala', 'cierras', 'cerras',
   'cerrar', 'cerrarme', 'close',
+  // "cierre", and Whisper's favourite: "Sierra Discord"
+  'cierre', 'cierres', 'cierren', 'sierra', 'sierre',
 ]);
 // open verbs that are app words for sure: an unknown Capitalized name after them is "not found"
 const STRONG_OPEN = new Set(['abre', 'abri', 'abrime', 'abreme', 'abres', 'abris', 'abrir', 'abrirme', 'inicia', 'iniciame', 'iniciar', 'lanza', 'lanzame', 'lanzar', 'ejecuta', 'ejecutame', 'ejecutar', 'arranca', 'arrancame', 'arrancar', 'open', 'launch']);
 
 // said before the order: "oye", "porfa", "me puedes", "¿podrías?"…
-const HEAD = /^(?:oye|oi|hey|che|eh|capri|jarvis|bueno|ok|okay|dale|ya|a\s+ver|ahora|porfa|por\s+favor|humanito|me|tu|vos|puedes|podes|podrias|pudieras|quieres|queres|podrias|necesito\s+que|quiero\s+que)\s+/;
+const HEAD = /^(?:oye|oi|hey|ey|che|eh|y|e|capri|jarvis|bueno|ok|okay|okey|vale|dale|ya|entonces|mira|a\s+ver|ahora|porfa|por\s+favor|humanito|me|tu|vos|puedes|podes|podrias|pudieras|quieres|queres|podrias|necesito\s+que|quiero\s+que)\s+/;
 // said after it
 const TAIL = /\s+(?:porfa|por\s+favor|plis|please|ya|ahora|ahorita|rapido|capri|jarvis|humanito|gracias|si|dale|va|vale|ok|okay|un\s+momento|de\s+una)$/;
 // it already happened: "abrí Discord ayer", "cerré Spotify hace un rato"
@@ -69,7 +73,29 @@ function similarity(a, b) {
   if (x === y) return 1;
   // short words only count when exact: "la" is not "lol"
   if (Math.min(x.length, y.length) < 4) return 0;
-  return 1 - osa(x, y) / Math.max(x.length, y.length);
+  const plain = 1 - osa(x, y) / Math.max(x.length, y.length);
+  return Math.max(plain, soundsLike(x, y));
+}
+
+// An English name the way a Spanish ear (and Whisper in Spanish) writes it: "Hollow Knight"
+// comes out "Holunite", "jolo nait" or "hola unite". Both sides go to a rough sound key (no h/j,
+// "ight" = "ait", w = u, v = b, o = u, no doubles, no silent final e) and are compared there,
+// a bit below a spelled match so a real spelling always wins.
+function soundKey(key) {
+  return key
+    .replace(/ight/g, 'ait').replace(/kn/g, 'n').replace(/ph/g, 'f').replace(/th/g, 't').replace(/sh/g, 's')
+    .replace(/ck|qu/g, 'k').replace(/c(?=[ei])/g, 's').replace(/c/g, 'k').replace(/z/g, 's')
+    .replace(/v/g, 'b').replace(/w/g, 'u').replace(/y/g, 'i').replace(/[hj]/g, '').replace(/u/g, 'o')
+    .replace(/(.)\1+/g, '$1').replace(/[ae]i/g, 'i').replace(/([^aeiou])e$/, '$1');
+}
+
+function soundsLike(x, y) {
+  const a = soundKey(x);
+  const b = soundKey(y);
+  if (Math.min(a.length, b.length) < 5) return 0;
+  const near = 1 - osa(a, b) / Math.max(a.length, b.length);
+  // only a near sound counts: loose sounds made "la puerta" sound like Opera
+  return near >= 0.8 ? 0.97 * near : 0;
 }
 
 // How well `phrase` names `app` (its name or one of its aliases).
@@ -133,13 +159,14 @@ function parseAppCommand(text, apps) {
   const original = String(text || '');
   // calling her first ("oye Capri, abre…") is not a target; other commas split targets, and the
   // normalizing below would drop them
-  const called = original.replace(/^[\s¡¿]*(?:(?:oye|hey|eh|oi|che|bueno)[\s,]+)*(?:(?:capri|jarvis)\b[\s,:]*)?/i, '');
+  const called = original.replace(/^[\s¡¿]*(?:(?:oye|hey|ey|eh|oi|che|bueno|ok|okay|okey|vale|dale|ya|ahora|entonces|mira|y)[\s,.]+)*(?:(?:capri|jarvis)\b[\s,:]*)?/i, '');
   let n = strip(normalizeCommandText(called.replace(/\s*[,;]\s*/g, ' y ')), [HEAD, TAIL]);
   if (!n || PAST.test(n)) return null;
   const [verb, ...rest] = n.split(' ');
   const action = OPEN.has(verb) ? 'open' : CLOSE.has(verb) ? 'close' : null;
   if (!action || !rest.length) return null;
-  n = rest.join(' ');
+  n = rest.join(' ').replace(/^(?:y|e)\s+/, ''); // "Sierra, Holunite": the comma became "y"
+  if (!n) return null;
   const named = namedWords(original);
   const written = new Map(String(original).split(/\s+/).map((w) => [plainKey(w), w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')]));
   const asWritten = (said) => said.split(' ').map((w) => written.get(plainKey(w)) || w).join(' ');
@@ -151,6 +178,13 @@ function parseAppCommand(text, apps) {
   };
   // the whole rest as one name first ("Opera GX", a name with "y" in it), else split
   let items = [read(whole)];
+  let glued = null;
+  if (items[0].status !== 'sure' && /[,;]/.test(called)) {
+    // Whisper puts commas inside names too ("Sierra, hola, Unite"): read it once without them
+    const plain = strip(normalizeCommandText(called.replace(/[,;]/g, ' ')), [HEAD, TAIL]).split(' ').slice(1).join(' ');
+    glued = plain ? read(readTarget(plain)) : null;
+    if (glued?.status === 'sure') return { action, verb, page: glued.page, items: [glued] };
+  }
   if (items[0].status !== 'sure' && SPLIT.test(n)) {
     const parts = n.split(SPLIT).map((p) => p.trim()).filter(Boolean);
     if (parts.length > 1 && parts.length <= 6) {
@@ -161,6 +195,8 @@ function parseAppCommand(text, apps) {
       });
     }
   }
+  // nothing in the pieces, but the whole thing without commas was close: ask about that
+  if (glued?.status === 'maybe' && items.every((i) => i.status === 'none')) items = [glued];
   items = items.filter((i) => i.said);
   if (!items.length) return null;
   return { action, verb, page: items.some((i) => i.page), items };
@@ -227,5 +263,5 @@ function describePlan(plan) {
 }
 
 module.exports = {
-  SURE, MAYBE, osa, similarity, scoreApp, matchApp, parseAppCommand, planAppCommand, joinNames, describePlan,
+  SURE, MAYBE, osa, similarity, soundKey, scoreApp, matchApp, parseAppCommand, planAppCommand, joinNames, describePlan,
 };

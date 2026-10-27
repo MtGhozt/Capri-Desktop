@@ -2,7 +2,8 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAppCommand, planAppCommand, matchApp, similarity, describePlan, joinNames } = require('../src/main/app-command');
+const { parseAppCommand, planAppCommand, matchApp, similarity, soundKey, describePlan, joinNames } = require('../src/main/app-command');
+const { cleanApps } = require('../src/main/apps-config');
 const { APPS } = require('./apps-fixture');
 
 const plan = (text) => planAppCommand(parseAppCommand(text, APPS));
@@ -69,7 +70,7 @@ test('an app she does not have, clearly named: she says so', () => {
 test('fuzzy: close enough acts, unsure asks, far is nothing', () => {
   assert.equal(matchApp(APPS, 'discor').status, 'sure'); // an alias
   assert.equal(matchApp(APPS, 'spotifi').app.name, 'Spotify');
-  const maybe = plan('abre Spotifiii');
+  const maybe = plan('abre Spotifeo');
   assert.equal(maybe.kind, 'ask');
   assert.deepEqual(maybe.suggest.map((a) => a.name), ['Spotify']);
   assert.equal(matchApp(APPS, 'calculadora').status, 'none');
@@ -98,4 +99,57 @@ test('the File Explorer by any of its names', () => {
     const p = planAppCommand(parseAppCommand(text, apps));
     assert.deepEqual(p?.apps?.map((a) => a.name), ['Explorador de archivos'], text);
   }
+});
+
+test('what Whisper does to the verb and the start of the line', () => {
+  for (const text of [
+    'Ok, abre Discord', 'Ahora, abre Discord', 'Y abre Discord', 'Ey Jarvis abre Discord', 'Ahora, ¿puedes abrir Discord?',
+    'Abrel Discord', 'Ábrele el Discord.', 'Abra Discord', 'Ahora quiero que abras Discord', 'Abre, eh, Discord',
+  ]) {
+    const p = plan(text);
+    assert.equal(p?.kind, 'do', text);
+    assert.equal(p.action, 'open', text);
+    assert.deepEqual(names(p), ['Discord'], text);
+  }
+  for (const text of ['Sierra Discord', 'Sierra, Discord', 'Cierre Discord']) {
+    const p = plan(text);
+    assert.equal(p?.action, 'close', text);
+    assert.deepEqual(names(p), ['Discord'], text);
+  }
+  assert.equal(plan('sierra la puerta'), null);
+  assert.equal(plan('cierra la puerta'), null);
+  assert.equal(plan('abre la puerta'), null);
+  assert.equal(plan('Sierra, la, puerta'), null);
+  assert.deepEqual(names(plan('abre Discord, Spotify')), ['Discord', 'Spotify']); // a list stays a list
+});
+
+test('English game names the way a Spanish ear writes them', () => {
+  const apps = cleanApps([
+    { name: 'Hollow Knight', type: 'steam', target: '367520' },
+    { name: 'Hollow Knight: Silksong', type: 'steam', target: '1030300' },
+    { name: 'Terraria', type: 'steam', target: '105600' },
+    { name: 'Slay the Spire', type: 'steam', target: '646570' },
+    { name: 'Among Us', type: 'steam', target: '945360' },
+    { name: 'Undertale', type: 'steam', target: '391540' },
+    { name: 'Word', target: 'C:\\o\\word.lnk' },
+    { name: 'Warp', target: 'C:\\w\\warp.exe' },
+  ]);
+  const said = (text) => planAppCommand(parseAppCommand(text, apps));
+  assert.equal(soundKey('hollowknight'), soundKey('holunite'));
+  assert.equal(soundKey('hollowknight'), soundKey('jolonait'));
+  for (const text of ['abre Hollow Knight', 'abre Holunite', 'abre jolo nait', 'abre Holo Night', 'Sierra, Holunite']) {
+    const p = said(text);
+    assert.equal(p?.kind, 'do', text);
+    assert.deepEqual(p.apps.map((a) => a.name), ['Hollow Knight'], text);
+  }
+  const unsure = said('Sierra, hola, Unite');
+  assert.equal(unsure.kind, 'ask');
+  assert.deepEqual(unsure.suggest.map((a) => a.name), ['Hollow Knight']);
+  assert.deepEqual(said('abre Hollow Knight Silksong').apps.map((a) => a.name), ['Hollow Knight: Silksong']);
+  assert.deepEqual(said('abre sley de spair').apps.map((a) => a.name), ['Slay the Spire']);
+  assert.deepEqual(said('abre amongas').apps.map((a) => a.name), ['Among Us']);
+  assert.deepEqual(said('abre Andertale').apps.map((a) => a.name), ['Undertale']);
+  // short names never fuzz by sound: "Word" is not "Warp"
+  assert.deepEqual(said('abre Word').apps.map((a) => a.name), ['Word']);
+  assert.notDeepEqual(said('abre Wort')?.apps?.map((a) => a.name), ['Warp']);
 });

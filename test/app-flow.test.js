@@ -30,19 +30,19 @@ test('a plain order does it and logs it', async () => {
 
 test('"¿quisiste decir…?": yes does it, no cancels, anything else drops it', async () => {
   let { f, did } = flow();
-  assert.equal((await f.command('abre Spotifiii')).line, 'appQuisiste:Spotify');
+  assert.equal((await f.command('abre Spotifeo')).line, 'appQuisiste:Spotify');
   assert.deepEqual(did, []);
   assert.equal((await f.answer('sí, dale')).line, 'appAbrir:Spotify');
   assert.deepEqual(did, [['open', 'Spotify']]);
   assert.equal(await f.answer('sí'), null); // already answered
 
   ({ f, did } = flow());
-  await f.command('abre Spotifiii');
+  await f.command('abre Spotifeo');
   assert.equal((await f.answer('no')).line, 'appCancelado');
   assert.deepEqual(did, []);
 
   ({ f, did } = flow());
-  await f.command('abre Spotifiii');
+  await f.command('abre Spotifeo');
   assert.equal(await f.answer('¿qué hora es?'), null);
   assert.equal(f.confirm.pending, null);
   assert.deepEqual(did, []);
