@@ -25,6 +25,8 @@ export class AppMenu {
     this.expanded = null;
     this.confirmForget = false;
     this.onOpenChange = null;
+    this.fixNote = '';     // "GUARDADO" under Corregir lo último, once a fix is saved
+    this.keyboard = false; // Corregir lo último has text fields: the overlay has the keyboard
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -60,6 +62,7 @@ export class AppMenu {
       const state = await this.host.getMenu({ folded: this.folded() });
       this.expanded = expand;
       this.confirmForget = false;
+      this.fixNote = '';
       this.at = { x, y };
       this.avoid = avoid || { left: x, top: y, right: x, bottom: y };
       this.render(state);
@@ -86,7 +89,15 @@ export class AppMenu {
     this.expanded = null;
     this.confirmForget = false;
     this.el.hidden = true;
+    this.useKeyboard(false);
     this.onOpenChange?.(false);
+  }
+
+  // The overlay never takes the keyboard by itself: ask for it while the fix fields are open.
+  useKeyboard(on) {
+    if (this.keyboard === on) return;
+    this.keyboard = on;
+    this.host.menuAction({ id: 'menu-keyboard', value: on }).catch(() => {});
   }
 
   rect() {
@@ -264,6 +275,16 @@ export class AppMenu {
     });
     action('Recargar personalidad', { value: 'PERSONA.MD', onClick: () => this.act('persona-reload') });
 
+    // OÍDO: what she hears wrong (Paso 4A)
+    section('OÍDO');
+    const hearing = state.hearing || { fixes: [], lastHeard: '' };
+    action('Corregir lo último', {
+      value: hearing.fixes.length ? `${hearing.fixes.length} CORRECCIONES` : '',
+      chevron: 'fixes',
+      onClick: () => this.toggle('fixes', state),
+    });
+    if (this.expanded === 'fixes') body.append(this.fixPanel(hearing, build));
+
     // CLIPS
     section('CLIPS');
     action('Guardar clip', { hotkey: state.clips.hotkey, onClick: () => this.act('clip-save') });
@@ -307,10 +328,100 @@ export class AppMenu {
     plate.append(rail, body, keys);
     this.el.replaceChildren(plate);
     if (this.open && this.at) this.place();
+    this.useKeyboard(this.expanded === 'fixes');
+  }
+
+  // Corregir lo último: what she heard last, two fields (what she heard, what you meant), and the
+  // fixes she already has, each with a way to drop it.
+  fixPanel(hearing, build) {
+    const panel = build('div', 'appmenu__fix');
+    const last = String(hearing.lastHeard || '');
+    const heardLine = build('div', 'appmenu__fix-last');
+    heardLine.append(
+      build('span', 'appmenu__meta', 'OYÓ'),
+      build('span', 'appmenu__fix-said', last ? `«${last}»` : 'Todavía no oyó nada.'),
+    );
+    const field = (label, value, placeholder) => {
+      const wrap = build('label', 'appmenu__fix-field');
+      const input = build('input', 'appmenu__input');
+      input.type = 'text';
+      input.value = value;
+      input.placeholder = placeholder;
+      input.maxLength = 60;
+      input.spellcheck = false;
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          save();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          this.hide();
+        }
+      });
+      wrap.append(build('span', 'appmenu__fix-label', label), input);
+      return { wrap, input };
+    };
+    const heard = field('Lo que oyó', last, 'la palabra que entendió mal');
+    const meant = field('Lo que quise decir', '', 'cómo se lee');
+    const saveBtn = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'GUARDAR');
+    saveBtn.type = 'button';
+    saveBtn.dataset.state = 'on';
+    const note = build('span', 'appmenu__meta', this.fixNote);
+    const save = async () => {
+      const h = heard.input.value.trim();
+      const m = meant.input.value.trim();
+      if (!h || !m) {
+        (h ? meant : heard).input.focus();
+        return;
+      }
+      await this.host.menuAction({ id: 'fix-add', value: { heard: h, meant: m } });
+      this.fixNote = 'GUARDADO';
+      await this.refresh();
+    };
+    saveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      save();
+    });
+    const actions = build('div', 'appmenu__fix-actions');
+    actions.append(note, saveBtn);
+    panel.append(heardLine, heard.wrap, meant.wrap, actions);
+
+    const list = build('div', 'appmenu__fix-list');
+    if (!hearing.fixes.length) list.append(build('span', 'appmenu__meta', 'SIN CORRECCIONES'));
+    for (const fix of hearing.fixes) {
+      const row = build('div', 'appmenu__row appmenu__row--sub appmenu__fix-item');
+      row.append(build('span', 'appmenu__label', `${fix.heard} → ${fix.meant}`));
+      const drop = build('button', 'appmenu__arrow', '✕');
+      drop.type = 'button';
+      drop.title = 'Borrar';
+      drop.setAttribute('aria-label', `Borrar ${fix.heard}`);
+      drop.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this.host.menuAction({ id: 'fix-remove', value: fix.heard });
+        this.fixNote = 'BORRADO';
+        await this.refresh();
+      });
+      row.append(drop);
+      list.append(row);
+    }
+    panel.append(list);
+    // the field to type in: what you meant when she heard something, else what she heard
+    const first = last ? meant.input : heard.input;
+    requestAnimationFrame(() => first.focus());
+    setTimeout(() => first.focus(), 80);
+    return panel;
+  }
+
+  async refresh() {
+    if (!this.open) return;
+    const state = await this.host.getMenu({ folded: this.folded() });
+    this.render(state);
   }
 
   toggle(name, state) {
     this.confirmForget = false;
+    this.fixNote = '';
     this.expanded = this.expanded === name ? null : name;
     this.render(state);
   }
