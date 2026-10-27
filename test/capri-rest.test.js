@@ -373,3 +373,18 @@ test('with motion on, she slides up to the bar and ends exactly on it, even when
     reducedMotion.matches = was;
   }
 });
+
+test('the box dragged with her on it: she rides along in the same pose', async () => {
+  const { boxSeat } = await import('../src/renderer/js/poses.js');
+  const c = await make();
+  const ledge = { x: 1400, y: 220, w: 420, h: 180, top: 220 };
+  c.messageBox = () => ledge;
+  const seat = boxSeat(ledge, 'lieB', { scale: 0.6 });
+  await c.teleport({ x: seat.x, y: seat.y }, { stance: 'lie', perch: { kind: 'box', pose: 'lieB', dx: seat.dx } });
+  ledge.x = 600; ledge.y = 500; ledge.top = 500;
+  c.followBox();
+  assert.equal(c.pos.x, 600 + seat.dx);
+  assert.equal(c.pos.y, 501);
+  assert.equal(c.perch.pose, 'lieB');
+  assert.equal(c.stance, 'lie');
+});

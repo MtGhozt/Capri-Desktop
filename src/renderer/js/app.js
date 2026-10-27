@@ -138,11 +138,11 @@ async function boot() {
   };
   const onChip = () => Boolean(chip.visible && mouse && chip.contains(mouse.x, mouse.y, 0));
   const refreshHit = () => {
-    if (folding || capri.dragging || appMenu.visible) return setInteractive(true);
+    if (folding || capri.dragging || bubble.dragging || appMenu.visible) return setInteractive(true);
     if (!mouse) return setInteractive(false);
     const r = panel.rect();
     const onPanel = r && mouse.x >= r.left && mouse.x <= r.right && mouse.y >= r.top && mouse.y <= r.bottom;
-    const onBubble = bubble.hitInput(mouse.x, mouse.y);
+    const onBubble = bubble.hitInput(mouse.x, mouse.y) || bubble.hitGrab(mouse.x, mouse.y);
     const m = appMenu.rect();
     const onMenu = m && mouse.x >= m.left && mouse.x <= m.right && mouse.y >= m.top && mouse.y <= m.bottom;
     const onDormant = dormant.contains(mouse.x, mouse.y);
@@ -271,6 +271,14 @@ async function boot() {
   bubble.onOpenChange = (open) => {
     if (open) panel.hide();
     refreshHit();
+  };
+  // the box dragged by its tab: she rides along if she's on it
+  bubble.onMoved = () => capri.followBox();
+  // you moved her (not onto the box): once she has landed, the box pops over to above her
+  capri.onDropped = async () => {
+    for (let i = 0; i < 40 && capri.busy; i++) await sleep(50);
+    if (!bubble.open || capri.onBox() || capri.dragging) return;
+    bubble.popAbove(capri.head());
   };
   bubble.onPerchChange = (phase) => {
     capri.nextMove = Math.min(capri.nextMove, performance.now() + (phase === 'open' ? 4000 : 25000));

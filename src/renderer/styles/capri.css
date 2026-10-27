@@ -515,6 +515,29 @@ body {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--capri-violet) 80%, #fff);
 }
 
+.bubble__tab,
+.bubble__head {
+  pointer-events: auto; /* its handle: drag the box by it (app.js lets the pointer through elsewhere) */
+  cursor: grab;
+  user-select: none;
+}
+
+.bubble.is-dragging .bubble__tab,
+.bubble.is-dragging .bubble__head {
+  cursor: grabbing;
+}
+
+.bubble.is-pop {
+  animation: bubble-pop 260ms steps(6, end);
+}
+
+@keyframes bubble-pop {
+  0% { opacity: 0; clip-path: inset(48% 0 48% 0); filter: drop-shadow(-4px 0 0 var(--capri-pink)) drop-shadow(4px 0 0 #5cecff); }
+  35% { opacity: 1; clip-path: inset(20% 0 30% 0); }
+  60% { clip-path: inset(0 0 0 0); filter: drop-shadow(3px 0 0 var(--capri-pink)) drop-shadow(-3px 0 0 #5cecff); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+
 .bubble__title {
   display: block;
   font-size: 9px;

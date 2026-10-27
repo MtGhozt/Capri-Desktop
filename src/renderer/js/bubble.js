@@ -1,9 +1,10 @@
 // Folder-shaped message box. Streaming text types out on the main line; a short colour log
 // sits under it. The box itself never takes a click — only the text field does.
 
-import { clamp, reducedMotion, sleep } from './util.js';
+import { reducedMotion, sleep } from './util.js';
 import { EventLog, DEFAULT_LOG_LIMIT } from './event-log.js';
 import { messageBadge } from './message-status.js';
+import { boxAbove, clampBox } from './box-place.js';
 
 const NOISE = '▚▞▙▟░▒#%&/\\<>01XZ';
 const DECODE_STEP_MS = 28;
@@ -37,6 +38,11 @@ export class Bubble {
     this.meterEl = el.querySelector('.bubble__meter');
     this.meterBar = this.meterEl?.querySelector('i');
     this.bodyEl = el.querySelector('.bubble__body');
+    // the tab and the header are its handle: the only parts of it besides the field that take the pointer
+    this.grabEls = [el.querySelector('.bubble__tab'), el.querySelector('.bubble__head')].filter(Boolean);
+    this.at = null; // { left, top } while open; null: next time it opens above her
+    this.dragging = null;
+    this.onMoved = null; // the box moved (dragged or popped): whoever is on it goes along
     this.anchor = { x: 0, y: 0 };
     this.view = { w: innerWidth, h: innerHeight };
     this.open = false;
@@ -73,6 +79,62 @@ export class Bubble {
       }
     });
     this.setFx(true);
+    this.bindDrag();
+  }
+
+  bindDrag() {
+    for (const grab of this.grabEls) {
+      grab.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 || !this.open || !this.at) return;
+        e.preventDefault(); // keep the text field's focus, no image drag
+        this.dragging = { dx: e.clientX - this.at.left, dy: e.clientY - this.at.top };
+        this.el.classList.add('is-dragging');
+      });
+    }
+    window.addEventListener('mousemove', (e) => {
+      if (!this.dragging) return;
+      if (!(e.buttons & 1)) return this.endDrag(); // let go somewhere it couldn't hear it
+      this.moveTo({ left: e.clientX - this.dragging.dx, top: e.clientY - this.dragging.dy });
+    });
+    window.addEventListener('mouseup', () => this.endDrag());
+    this.el.addEventListener('animationend', (e) => {
+      if (e.animationName === 'bubble-pop') this.el.classList.remove('is-pop');
+    });
+  }
+
+  endDrag() {
+    if (!this.dragging) return;
+    this.dragging = null;
+    this.el.classList.remove('is-dragging');
+    this.onMoved?.();
+  }
+
+  boxSize() {
+    return { w: this.el.offsetWidth || 320, h: this.el.offsetHeight || 180 };
+  }
+
+  moveTo(pos) {
+    this.at = clampBox(pos, this.view, this.boxSize());
+    this.el.style.transform = `translate3d(${this.at.left}px, ${this.at.top}px, 0)`;
+    this.onMoved?.();
+  }
+
+  // You moved her: the box blinks out and back in above her, like the old chat bubble followed her.
+  popAbove(anchor = this.anchor) {
+    if (!this.open || this.dragging) return;
+    this.moveTo(boxAbove(anchor, this.view, this.boxSize()));
+    if (reducedMotion.matches) return;
+    this.el.classList.remove('is-pop');
+    void this.el.offsetWidth; // restart the animation
+    this.el.classList.add('is-pop');
+  }
+
+  hitGrab(x, y) {
+    if (!this.open || this.el.hidden) return false;
+    return this.grabEls.some((g) => {
+      const r = g.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    });
   }
 
   get visible() {
@@ -183,6 +245,8 @@ export class Bubble {
       this.onTalk?.(false);
     }
     this.el.hidden = true;
+    this.endDrag();
+    this.at = null;
     this.field.blur();
     if (this.machine.get() === 'LISTENING' || this.machine.get() === 'THINKING' || this.machine.get() === 'TALKING') {
       this.machine.set('ONLINE');
@@ -532,13 +596,10 @@ export class Bubble {
 
   place() {
     if (!this.open) return;
-    const { w, h } = this.view;
-    const margin = 16;
-    const bw = this.el.offsetWidth || 320;
-    const bh = this.el.offsetHeight || 180;
-    const left = clamp(w - bw - 28, margin, w - bw - margin);
-    const top = clamp(Math.round(h * 0.2), margin, h - bh - 80);
-    this.el.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+    // opened: above her; after that it stays where it is (dragged, or popped over her), just kept on screen
+    const size = this.boxSize();
+    this.at = this.at ? clampBox(this.at, this.view, size) : boxAbove(this.anchor, this.view, size);
+    this.el.style.transform = `translate3d(${this.at.left}px, ${this.at.top}px, 0)`;
   }
 
   rect() {
