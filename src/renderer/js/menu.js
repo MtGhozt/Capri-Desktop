@@ -385,6 +385,11 @@ export class AppMenu {
       labels: ['INACTIVO', 'ACTIVO'],
       onChange: (on) => this.act('comments', on),
     });
+    toggle('Animaciones de apps', {
+      on: cfg.appFx !== false,
+      labels: ['INACTIVO', 'ACTIVO'],
+      onChange: (on) => this.act('app-fx', on),
+    });
     selector('Tema', {
       options: THEME_OPTIONS,
       current: cfg.theme,
