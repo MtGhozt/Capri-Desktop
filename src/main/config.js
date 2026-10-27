@@ -35,6 +35,7 @@ const DEFAULTS = {
   fx: {
     glitch: true,
     intro: true,           // boot grab-the-screen intro; false skips to materialize
+    apps: true,            // her zap / spark when she closes / opens an app (Paso 4E)
   },
   ui: {
     theme: 'cyberpunk',    // overlay menu palette: 'cyberpunk' | 'capri'

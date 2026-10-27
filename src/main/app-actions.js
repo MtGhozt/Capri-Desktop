@@ -7,12 +7,16 @@
 //   spawn(file, args, opts) starts a program, detached; resolves once it started
 //   openExternal(url)       a URL or URI through the shell (Steam, Spotify, the browser…)
 //   openPath(path)          a shortcut (.lnk) through the shell
-//   probe(spec, skip)       { ids, names, left } of the app's processes, `skip` pids left out;
+//   probe(spec, skip)       { ids, names, left, rect } of the app's processes, `skip` pids left out;
 //                           spec { names, dir, title }: by exe name, by folder, by window title
 //   graceful(spec, skip)    WM_CLOSE to their windows, then waits ~4 s: { ids, names, left }
 //   explorerWindows(close)  File Explorer windows: { left } (closed first when `close`)
 //   kill(ids)               taskkill /F /T on those pids
 //   skipPids()              pids never touched: her own, the voice sidecar's
+//   zap(rect)               optional (Paso 4E): her zap at the window about to close (`rect` from
+//                           probe, physical pixels, or null); resolves when it hits, so the
+//                           close comes after it
+//   spark(app)              optional (Paso 4E): her spark for an app that just opened
 //
 // Never closed, whatever the table says: her, Windows' own pieces, the voice sidecar (Python)
 // and LM Studio (her model).
@@ -38,9 +42,22 @@ function isProtected(name) {
 function createAppActions(deps) {
   const env = deps.env || process.env;
   const skip = () => (deps.skipPids?.() || []).filter((p) => Number.isInteger(p) && p > 0);
+  // the effects never stand in the way: one that fails is as if it had played
+  const zap = async (rect) => {
+    try { await deps.zap?.(rect || null); } catch { /* the close goes on */ }
+  };
+  const spark = (app) => {
+    try { deps.spark?.(app); } catch { /* opened all the same */ }
+  };
 
   // { ok, error }
   async function open(app) {
+    const res = await launch(app);
+    if (res.ok) spark(app);
+    return res;
+  }
+
+  async function launch(app) {
     try {
       if (app.type === 'steam') {
         if (!/^\d+$/.test(app.target)) return { ok: false, error: 'id de Steam inválido' };
@@ -77,6 +94,7 @@ function createAppActions(deps) {
       if (!found.ids?.length) return { status: 'notRunning' };
       // found by folder or title: whatever it turned out to be, the same list holds
       if ((found.names || []).some(isProtected)) return { status: 'denied' };
+      await zap(found.rect);
       if (mode === 'force') {
         await deps.kill(found.ids);
         const after = await deps.probe(spec, skip());
@@ -94,6 +112,7 @@ function createAppActions(deps) {
     try {
       const found = await deps.explorerWindows(false);
       if (!found.left) return { status: 'notRunning' };
+      await zap(found.rect);
       const after = await deps.explorerWindows(true);
       return { status: after.left > 0 ? 'stillRunning' : 'closed', mode: 'windows', windows: found.left };
     } catch (err) {

@@ -39,6 +39,8 @@ const {
 } = require('./hearing');
 const { createAppFlow } = require('./app-flow');
 const { createAppActions, isProtected } = require('./app-actions');
+const { createAppFx } = require('./app-fx');
+const { toOverlayRect } = require('./rects');
 const appScan = require('./app-scan');
 const appHost = require('./app-host');
 const {
@@ -518,11 +520,30 @@ const allApps = () => appScan.mergeApps(appList(), scanned().items);
 const appLog = (text) => logEvent(voiceLogPath(), `[capri] ${text}`);
 let appFlow = null;
 
+// her zap before a close, her spark after an open (Paso 4E): off in her menu or with a game up
+const appFx = createAppFx({
+  send: (payload) => sendCommand('app-fx', payload),
+  enabled: () => Boolean(overlay && !overlay.isDestroyed())
+    && config.load().fx?.apps !== false
+    && !gameMode?.active?.(),
+  toOverlay: (rect) => {
+    const bounds = overlay.getBounds();
+    const r = toOverlayRect(rect, bounds, (box) => screen.screenToDipRect(null, box));
+    // off her screen (another monitor): she zaps toward the taskbar instead
+    if (!r || r.x >= bounds.width || r.x + r.w <= 0 || r.y >= bounds.height || r.y + r.h <= 0) return null;
+    return r;
+  },
+});
+
 function apps() {
   if (!appFlow) {
     appFlow = createAppFlow({
       apps: allApps,
-      actions: createAppActions(appHost.realDeps({ shell, skipPids: () => [process.pid, process.ppid] })),
+      actions: createAppActions({
+        ...appHost.realDeps({ shell, skipPids: () => [process.pid, process.ppid] }),
+        zap: (rect) => appFx.zap(rect),
+        spark: (app) => appFx.spark(app),
+      }),
       line: (kind, values) => fillLine(pickLine(kind), values),
       log: appLog,
     });
@@ -807,6 +828,7 @@ function applyMenuAction(id, value) {
     case 'forget': goForgetReply({ chat: false }); break;
     case 'gaming-mode': updateConfig({ gaming: { mode: value === 'off' ? 'off' : 'auto' } }); break;
     case 'comments': updateConfig({ comments: { enabled: Boolean(value) } }); break;
+    case 'app-fx': updateConfig({ fx: { apps: Boolean(value) } }); break;
     case 'persona-reload': {
       const r = llm.reloadPersona();
       sendCommand('line', {
@@ -973,6 +995,7 @@ function menuState(extra = {}) {
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
       gaming: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
       comments: cfg.comments?.enabled !== false,
+      appFx: cfg.fx?.apps !== false,
     },
     hearing: {
       fixes: cleanFixes(cfg.hearing?.fixes),
@@ -1141,7 +1164,8 @@ function createTray() {
 
 function registerIpc() {
   ipcMain.on('overlay:interactive', (_e, on) => setClickThrough(!on));
-  ipcMain.on('overlay:rearm', () => rearmOverlay()); // the pointer moved over her and she never heard of it
+  ipcMain.on('overlay:rearm', () => rearmOverlay());
+  ipcMain.on('appfx:hit', (_e, id) => appFx.hit(id)); // the pointer moved over her and she never heard of it
   ipcMain.on('overlay:folded', (_e, on) => {
     overlayFolded = Boolean(on);
     voice?.setSleeping?.(overlayFolded);
