@@ -8,6 +8,7 @@ const path = require('node:path');
 const readline = require('node:readline');
 const { spawn } = require('node:child_process');
 const { screen } = require('electron');
+const { toOverlayRect } = require('./rects');
 
 // in the installed app it sits next to the app archive (asarUnpack), where PowerShell can read it
 const SCRIPT = path.join(__dirname, 'windows.ps1').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
@@ -21,11 +22,6 @@ function startWindowWatch({ overlay, onUpdate }) {
 
   const handle = overlay.getNativeWindowHandle();
   const self = handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0));
-
-  const toOverlay = (win, bounds) => {
-    const dip = screen.screenToDipRect(null, { x: win.x, y: win.y, width: win.w, height: win.h });
-    return { id: win.id, x: dip.x - bounds.x, y: dip.y - bounds.y, w: dip.width, h: dip.height, max: win.max };
-  };
 
   const start = () => {
     child = spawn('powershell.exe', [
@@ -42,11 +38,20 @@ function startWindowWatch({ overlay, onUpdate }) {
       }
       if (overlay.isDestroyed()) return;
       const bounds = overlay.getBounds();
+      const dip = (box) => screen.screenToDipRect(null, box);
       const wins = snap.wins
-        .map((w) => toOverlay(w, bounds))
+        .map((w) => ({ id: w.id, ...toOverlayRect(w, bounds, dip), max: w.max }))
         // only what overlaps Capri's screen
         .filter((w) => w.x < bounds.width && w.x + w.w > 0 && w.y < bounds.height && w.y + w.h > 0);
-      onUpdate({ fg: snap.fg, taskbar: Boolean(snap.taskbar), wins });
+      // the bar of her monitor, in her coordinates: where it is, and whether it is up
+      const bar = toOverlayRect(snap.bar, bounds, dip);
+      onUpdate({
+        fg: snap.fg,
+        taskbar: Boolean(snap.taskbar),
+        start: Boolean(snap.start),
+        bar: bar ? { ...bar, shown: Boolean(snap.bar?.shown) } : null,
+        wins,
+      });
     });
     child.stderr.on('data', (d) => console.error('[capri] window watch:', String(d).trim()));
     child.on('exit', () => {

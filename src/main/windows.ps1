@@ -1,7 +1,9 @@
 # Watches the top-level windows so Capri can sit on them.
 # Prints one JSON line whenever something changes: the foreground window (its exe, its title
-# and whether it covers its monitor) and the visible windows in z-order (front first), as
-# physical-pixel frame bounds. Only the foreground title is read, never the other windows'.
+# and whether it covers its monitor), whether the Start menu or the search took the screen,
+# the taskbar of Capri's monitor (where it is, and whether it is up), and the visible windows
+# in z-order (front first), as physical-pixel frame bounds. Only the foreground title is read,
+# never the other windows'.
 #
 #   powershell -File windows.ps1 <capri hwnd> <capri pid> [-Once]
 
@@ -42,6 +44,8 @@ public static class CapriWindows {
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT value, int size);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int value, int size);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int max);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string title);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
 
   const int GWL_EXSTYLE = -20;
   const int WS_EX_TOOLWINDOW = 0x80;
@@ -110,18 +114,70 @@ public static class CapriWindows {
     return title.Length > 200 ? title.Substring(0, 200) : title;
   }
 
+  // The taskbar of Capri's monitor: the primary one, or the Shell_SecondaryTrayWnd that Windows
+  // puts on every other screen. Zero when that monitor has no bar of its own.
+  static IntPtr BarOf(IntPtr self) {
+    IntPtr monitor = MonitorFromWindow(self, MONITOR_DEFAULTTONEAREST);
+    IntPtr primary = FindWindow("Shell_TrayWnd", null);
+    if (primary != IntPtr.Zero && MonitorFromWindow(primary, MONITOR_DEFAULTTONEAREST) == monitor) return primary;
+    IntPtr after = IntPtr.Zero;
+    while (true) {
+      after = FindWindowEx(IntPtr.Zero, after, "Shell_SecondaryTrayWnd", null);
+      if (after == IntPtr.Zero) return IntPtr.Zero;
+      if (MonitorFromWindow(after, MONITOR_DEFAULTTONEAREST) == monitor) return after;
+    }
+  }
+
+  // Is that bar up? Auto-hide parks it just off its monitor (1-2 px still on screen), so the
+  // part of its rect inside the monitor is what counts.
+  static bool BarShown(IntPtr bar) {
+    RECT r;
+    if (bar == IntPtr.Zero || !GetWindowRect(bar, out r)) return false;
+    IntPtr monitor = MonitorFromWindow(bar, MONITOR_DEFAULTTONEAREST);
+    var info = new MONITORINFO();
+    info.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+    if (!GetMonitorInfo(monitor, ref info)) return false;
+    RECT m = info.rcMonitor;
+    int visible = Math.Min(r.Bottom, m.Bottom) - Math.Max(r.Top, m.Top);
+    return visible > 2;
+  }
+
+  static string FileName(string path) {
+    int cut = path.LastIndexOf('\\');
+    return cut >= 0 ? path.Substring(cut + 1) : path;
+  }
+
   public static string Snapshot(long self) {
     var sb = new StringBuilder();
     IntPtr fg = GetForegroundWindow();
     var fgClass = new StringBuilder(64);
     GetClassName(fg, fgClass, 64);
+    string fgClassText = fgClass.ToString();
+    string fgExe = fg == IntPtr.Zero ? "" : ExeOf(fg.ToInt64());
     // the taskbar clicked: it comes up over her (Windows has no levels among windows on top)
-    bool taskbar = fgClass.ToString() == "Shell_TrayWnd" || fgClass.ToString() == "Shell_SecondaryTrayWnd";
+    bool taskbar = fgClassText == "Shell_TrayWnd" || fgClassText == "Shell_SecondaryTrayWnd";
+    // Start or the search panel: they open above her too
+    string fgName = FileName(fgExe);
+    bool start = fgClassText == "Windows.UI.Core.CoreWindow"
+      && (String.Equals(fgName, "StartMenuExperienceHost.exe", StringComparison.OrdinalIgnoreCase)
+        || String.Equals(fgName, "SearchHost.exe", StringComparison.OrdinalIgnoreCase));
     sb.Append("{\"fg\":").Append(fg.ToInt64())
-      .Append(",\"fgExe\":").Append(Quote(fg == IntPtr.Zero ? "" : ExeOf(fg.ToInt64())))
+      .Append(",\"fgExe\":").Append(Quote(fgExe))
       .Append(",\"fgTitle\":").Append(Quote(TitleOf(fg)))
       .Append(",\"fgFull\":").Append(Fullscreen(fg) ? "true" : "false")
-      .Append(",\"taskbar\":").Append(taskbar ? "true" : "false").Append(",\"wins\":[");
+      .Append(",\"taskbar\":").Append(taskbar ? "true" : "false")
+      .Append(",\"start\":").Append(start ? "true" : "false")
+      .Append(",\"bar\":");
+    IntPtr bar = BarOf(new IntPtr(self));
+    RECT br;
+    if (bar != IntPtr.Zero && GetWindowRect(bar, out br)) {
+      sb.Append("{\"x\":").Append(br.Left).Append(",\"y\":").Append(br.Top)
+        .Append(",\"w\":").Append(br.Right - br.Left).Append(",\"h\":").Append(br.Bottom - br.Top)
+        .Append(",\"shown\":").Append(BarShown(bar) ? "true" : "false").Append('}');
+    } else {
+      sb.Append("null");
+    }
+    sb.Append(",\"wins\":[");
     int count = 0;
     EnumWindows((h, l) => {
       if (count >= 40) return false;
