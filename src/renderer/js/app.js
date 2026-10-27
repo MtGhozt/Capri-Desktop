@@ -44,8 +44,8 @@ async function boot() {
     intro,
   });
   fx.resize(innerWidth, innerHeight);
-  // how far the top of the taskbar is from the bottom of her window: she covers it too while she
-  // rests on it (the floor she stands on stays its top)
+  // how far the top of the taskbar is from the bottom of her window: her window covers it too
+  // while she rests on it (she stands on its top edge, see Capri.floor)
   let floorGap = config.floorGap ?? 0;
   const chip = new Chip(document.getElementById('chip'));
   chip.place(innerWidth, innerHeight - floorGap);
@@ -93,11 +93,24 @@ async function boot() {
     capri.homeX = home != null && Number.isFinite(Number(home)) ? Number(home) : null;
     const x = Number(cfg.position?.x);
     const y = Number(cfg.position?.y);
-    if (capri.locked && Number.isFinite(x) && Number.isFinite(y)
-      && (Math.abs(capri.pos.x - x) > 1 || Math.abs(capri.pos.y - y) > 1)) {
-      capri.pos = { x, y };
+    if (!capri.locked || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    // locked on the bottom edge: on it wherever the bar has it now (she still rides it)
+    const edge = Boolean(cfg.position?.edge);
+    const to = { x, y: edge ? capri.floor : y };
+    if (Math.abs(capri.pos.x - to.x) > 1 || Math.abs(capri.pos.y - to.y) > 1) {
+      capri.pos = to;
+      if (edge && capri.stance === 'stand' && !capri.busy) capri.setStance('stand');
       capri.place();
     }
+  };
+  // where she comes in: where FIJO keeps her, else where she rests
+  const entrance = () => {
+    const x = Number(config.position?.x);
+    const y = Number(config.position?.y);
+    if (capri.locked && Number.isFinite(x) && Number.isFinite(y)) {
+      return { x, y, floor: Boolean(config.position?.edge) };
+    }
+    return capri.restSpot();
   };
   applyPosition(config);
   // dropped somewhere new at the bottom of the screen: she rests there from now on
@@ -659,6 +672,7 @@ async function boot() {
             locked: Boolean(cmd.on),
             x: Math.round(capri.pos.x),
             y: Math.round(capri.pos.y),
+            edge: capri.grounded, // on the bottom edge: she keeps riding the bar up and down
           },
         });
         break;
@@ -742,8 +756,8 @@ async function boot() {
   // entrance: she grabs the screen, says hi, then dives down to her spot
   // (put away last time: she starts in her biochip; fx.intro false: skip the grab)
   if (config.visible === false) capri.stowNow();
-  else if (config.fx?.intro !== false && intro) await capri.intro(capri.spot('post'));
-  else await capri.materialize(capri.spot('post'));
+  else if (config.fx?.intro !== false && intro) await capri.intro(entrance());
+  else await capri.materialize(entrance());
   bumpIdle();
   const hello = async () => {
     const greet = await host.greet();

@@ -1,6 +1,6 @@
 'use strict';
 
-// The ledge she rests on when she sits on the taskbar: the top of the bar while it is up, the
+// The edge she stands on when she rests on the taskbar: the top of the bar while it is up, the
 // bottom of her window while it is hidden (auto-hide) or when her screen has no bar.
 
 const { test } = require('node:test');

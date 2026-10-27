@@ -91,8 +91,8 @@ function targetDisplay() {
   return screen.getAllDisplays().find((d) => d.id === displayId) || screen.getPrimaryDisplay();
 }
 
-// Her window: the work area, or the whole screen while she rests on the taskbar (her legs hang
-// over it), less its top row of pixels: a window on top covering the whole screen is a fullscreen
+// Her window: the work area, or the whole screen while she rests on the taskbar (she stands on its
+// top edge, or on the bottom of the screen while auto-hide keeps it down), less its top row of pixels: a window on top covering the whole screen is a fullscreen
 // app to Windows (animated wallpapers pause, notifications wait). `gap`: how much of her window is
 // below the top of the taskbar (0, or its height).
 function overlayArea() {
@@ -970,8 +970,8 @@ function main() {
       onUpdate: (data) => {
         const rest = config.load().rest === 'taskbar';
         // The bar coming up (the Windows key, the pointer at the bottom, a click on it) and Start
-        // or the search opening: Windows puts them over her, and with her legs over the bar she
-        // would vanish behind it. Back on top.
+        // or the search opening: Windows puts them over her, and standing on the bar she would
+        // vanish behind it. Back on top.
         const barUp = Boolean(rest && lastWindows && data.bar?.shown && !lastWindows.bar?.shown);
         const start = Boolean(lastWindows && data.start && !lastWindows.start);
         if (barUp || start || (rest && data.taskbar && !lastWindows?.taskbar)) raiseOverlay();

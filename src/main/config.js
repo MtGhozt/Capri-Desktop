@@ -12,7 +12,7 @@ const DEFAULTS = {
   displayId: null,   // null = primary display
   wander: true,      // random teleports when idle
   possess: true,     // now and then she dives into the window she sits on and takes it over
-  rest: 'taskbar',   // where she rests: 'taskbar' (sitting on it, legs over it) or 'corner'
+  rest: 'taskbar',   // where she rests: 'taskbar' (standing on its top edge, riding it up and down) or 'corner'
   visible: true,
   welcomed: false,   // she has introduced herself (her welcome panel)
   linked: false,     // a Claude Code event has reached her at least once
@@ -43,6 +43,7 @@ const DEFAULTS = {
     locked: false,         // menu: NORMAL / FIJO; when locked she stays at x,y
     x: null,
     y: null,
+    edge: false,           // locked while standing on the bottom edge: she still rides the taskbar
     homeX: null,           // where she rests on the taskbar, a fraction of the screen width (where you last dropped her)
   },
   shortcuts: {

@@ -55,12 +55,18 @@ async function make({ w = 1920, h = 1079, bar = null, ...rest } = {}) {
   c.onHome = (x) => c.homes.push(x);
   c.teleport = async (to, opts = {}) => {
     c.teleports.push({ to: { ...to }, opts });
-    c.pos = { ...to };
+    c.pos = { x: to.x, y: to.floor ? c.floor : to.y }; // as arrive() puts her
     c.setStance(opts.stance || 'stand', { perch: opts.perch });
   };
   c.setStance('stand');
   Object.assign(c, rest);
   return c;
+}
+
+// put her somewhere, standing, as a move would
+function at(c, pos) {
+  c.pos = { ...pos };
+  c.setStance('stand');
 }
 
 test('dropped at the bottom of the screen, she stays right there and it becomes her spot', async () => {
@@ -76,7 +82,7 @@ test('dropped at the bottom of the screen, she stays right there and it becomes 
 
 test('going home goes to her own spot when she has one', async () => {
   const c = await make({ homeX: 0.25 });
-  c.pos = { x: 1500, y: 300 };
+  at(c, { x: 1500, y: 300 });
   await c.goHome();
   assert.equal(c.teleports.length, 1);
   assert.equal(c.teleports[0].to.x, 480);
@@ -96,7 +102,7 @@ test('with no spot of her own she goes to the default one', async () => {
 
 test('a while after anything happens, she goes back to her spot', async () => {
   const c = await make({ homeX: 0.25 });
-  c.pos = { x: 1500, y: 300 };
+  at(c, { x: 1500, y: 300 });
   c.behave(performance.now());
   assert.equal(c.teleports.length, 1);
   assert.equal(c.teleports[0].to.x, 480);
@@ -104,9 +110,137 @@ test('a while after anything happens, she goes back to her spot', async () => {
 
 test('FIJO: she never goes back by herself', async () => {
   const c = await make({ homeX: 0.25, locked: true });
-  c.pos = { x: 1500, y: 300 };
+  at(c, { x: 1500, y: 300 });
   c.behave(performance.now());
   await c.goHome();
   assert.equal(c.teleports.length, 0);
   assert.deepEqual(c.pos, { x: 1500, y: 300 });
+});
+
+test('going home, she stands on the bottom edge at her spot', async () => {
+  const c = await make({ homeX: 0.25 });
+  at(c, { x: 1500, y: 300 });
+  await c.goHome();
+  assert.equal(c.stance, 'stand');
+  assert.equal(c.grounded, true);
+  assert.deepEqual(c.pos, { x: 480, y: 1079 });
+  await c.goHome(); // already there: no second trip
+  assert.equal(c.teleports.length, 1);
+});
+
+// ---------- standing on the bottom edge, riding the taskbar ----------
+
+const HIDDEN = { x: 0, y: 1077, w: 1920, h: 48, shown: false }; // auto-hide: parked off the screen
+const UP = { x: 0, y: 1031, w: 1920, h: 48, shown: true };
+
+test('the bar hidden, her feet are on the bottom of the screen', async () => {
+  const c = await make({ bar: HIDDEN });
+  await c.goHome();
+  assert.equal(c.stance, 'stand');
+  assert.equal(c.pos.y, 1079);
+});
+
+test('the bar up, her feet are on its top edge: none of her under it', async () => {
+  const c = await make({ bar: UP });
+  await c.goHome();
+  assert.equal(c.stance, 'stand');
+  assert.equal(c.pos.y, 1031);
+  // the lowest point of her drawing is her feet, with the float she does never sinking in
+  c.animate(performance.now());
+  assert.ok(c.bob <= 0);
+});
+
+test('the bar comes up and hides again: she rides it all the way, both ways', async () => {
+  const c = await make({ bar: HIDDEN });
+  at(c, { x: 900, y: 1079 });
+  assert.equal(c.grounded, true);
+  // halfway up first (the watcher saw it while it slid), then where it stops
+  c.setWindows({ fg: 0, wins: [], bar: { ...UP, y: 1055 } });
+  assert.equal(c.pos.y, 1055);
+  c.setWindows({ fg: 0, wins: [], bar: UP });
+  assert.equal(c.pos.y, 1031);
+  assert.equal(c.pos.x, 900);
+  c.setWindows({ fg: 0, wins: [], bar: HIDDEN });
+  assert.equal(c.pos.y, 1079);
+  assert.equal(c.stance, 'stand');
+});
+
+test('a bar change she missed while busy is caught up on the next beat', async () => {
+  const c = await make({ bar: HIDDEN });
+  at(c, { x: 900, y: 1079 });
+  c.busy = true;
+  c.setWindows({ fg: 0, wins: [], bar: UP });
+  assert.equal(c.pos.y, 1079); // in the middle of something: not now
+  c.busy = false;
+  c.behave(performance.now());
+  assert.equal(c.pos.y, 1031);
+});
+
+test('the bar coming up over her feet lifts her onto it', async () => {
+  const c = await make({ bar: HIDDEN });
+  at(c, { x: 900, y: 1079 });
+  c.grounded = false; // whatever happened, she's down there and not marked as on the edge
+  c.setWindows({ fg: 0, wins: [], bar: UP });
+  assert.equal(c.pos.y, 1031);
+  assert.equal(c.grounded, true);
+});
+
+test('up in the air she stays where she is when the bar moves', async () => {
+  const c = await make({ bar: HIDDEN });
+  at(c, { x: 900, y: 500 });
+  c.setWindows({ fg: 0, wins: [], bar: UP });
+  assert.equal(c.pos.y, 500);
+  assert.equal(c.grounded, false);
+});
+
+test('dropped at the bottom with the bar up, she stands on the bar there', async () => {
+  const c = await make({ bar: UP });
+  c.dragging = true;
+  at(c, { x: 640, y: 1030 });
+  c.dragging = false;
+  c.drop();
+  assert.equal(c.stance, 'stand');
+  assert.equal(c.grounded, true);
+  assert.deepEqual(c.pos, { x: 640, y: 1031 });
+  assert.ok(Math.abs(c.homeX - 640 / 1920) < 1e-9);
+});
+
+test('let go higher up, she falls to the bottom edge and that becomes her spot', async () => {
+  const c = await make({ bar: HIDDEN });
+  c.dragging = true;
+  at(c, { x: 1200, y: 600 });
+  c.dragging = false;
+  c.drop(); // reduced motion here: she lands at once
+  assert.equal(c.stance, 'stand');
+  assert.equal(c.pos.y, 1079);
+  assert.ok(Math.abs(c.homeX - 1200 / 1920) < 1e-9);
+  assert.equal(c.homes.length, 1);
+});
+
+test('the bottom edge under her feet lets the pointer through to the taskbar', async () => {
+  const c = await make({ bar: HIDDEN });
+  c.alphaMap = new Uint8ClampedArray(240 * 420 * 4).fill(255); // all of her drawing is solid
+  at(c, { x: 900, y: 1079 });
+  assert.equal(c.hit(900, 1078), false);
+  assert.equal(c.hit(900, 1060), true);
+});
+
+test('with motion on, she slides up to the bar and ends exactly on it, even when it moves mid-slide', async () => {
+  const { reducedMotion } = await import('../src/renderer/js/util.js');
+  const c = await make({ bar: HIDDEN });
+  at(c, { x: 900, y: 1079 });
+  const was = reducedMotion.matches;
+  reducedMotion.matches = false;
+  try {
+    c.setWindows({ fg: 0, wins: [], bar: { ...UP, y: 1055 } });
+    await new Promise((r) => setTimeout(r, 60));
+    assert.ok(c.pos.y < 1079 && c.pos.y > 1055, `on her way up: ${c.pos.y}`);
+    c.setWindows({ fg: 0, wins: [], bar: UP }); // where it stops
+    c.setWindows({ fg: 0, wins: [], bar: UP }); // the watcher saying it again once it has settled
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(c.pos.y, 1031);
+    assert.equal(c.rideTo, null);
+  } finally {
+    reducedMotion.matches = was;
+  }
 });
