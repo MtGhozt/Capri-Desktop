@@ -1,7 +1,7 @@
 # Watches the top-level windows so Capri can sit on them.
-# Prints one JSON line whenever something changes: the foreground window (with its exe and
-# whether it covers its monitor) and the visible windows in z-order (front first), as
-# physical-pixel frame bounds. No titles, no contents.
+# Prints one JSON line whenever something changes: the foreground window (its exe, its title
+# and whether it covers its monitor) and the visible windows in z-order (front first), as
+# physical-pixel frame bounds. Only the foreground title is read, never the other windows'.
 #
 #   powershell -File windows.ps1 <capri hwnd> <capri pid> [-Once]
 
@@ -41,6 +41,7 @@ public static class CapriWindows {
   static extern bool QueryFullProcessImageName(IntPtr process, uint flags, StringBuilder name, ref uint size);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT value, int size);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int value, int size);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int max);
 
   const int GWL_EXSTYLE = -20;
   const int WS_EX_TOOLWINDOW = 0x80;
@@ -99,6 +100,16 @@ public static class CapriWindows {
         && Math.Abs(r.Right - m.Right) <= 2 && Math.Abs(r.Bottom - m.Bottom) <= 2;
   }
 
+  // Title of the foreground window only (a browser tab says YouTube or Netflix). Capri never
+  // stores it: it is looked at to pick a line and thrown away with the snapshot.
+  static string TitleOf(IntPtr hwnd) {
+    if (hwnd == IntPtr.Zero) return "";
+    var sb = new StringBuilder(256);
+    GetWindowText(hwnd, sb, sb.Capacity);
+    string title = sb.ToString();
+    return title.Length > 200 ? title.Substring(0, 200) : title;
+  }
+
   public static string Snapshot(long self) {
     var sb = new StringBuilder();
     IntPtr fg = GetForegroundWindow();
@@ -108,6 +119,7 @@ public static class CapriWindows {
     bool taskbar = fgClass.ToString() == "Shell_TrayWnd" || fgClass.ToString() == "Shell_SecondaryTrayWnd";
     sb.Append("{\"fg\":").Append(fg.ToInt64())
       .Append(",\"fgExe\":").Append(Quote(fg == IntPtr.Zero ? "" : ExeOf(fg.ToInt64())))
+      .Append(",\"fgTitle\":").Append(Quote(TitleOf(fg)))
       .Append(",\"fgFull\":").Append(Fullscreen(fg) ? "true" : "false")
       .Append(",\"taskbar\":").Append(taskbar ? "true" : "false").Append(",\"wins\":[");
     int count = 0;
