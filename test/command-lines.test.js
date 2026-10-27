@@ -2,9 +2,9 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { POOLS, AVOID, pickLine, resetLines } = require('../src/main/lines-es');
+const { POOLS, AVOID, pickLine, fillLine, resetLines } = require('../src/main/lines-es');
 
-const KINDS = ['dormir', 'despertar', 'clip', 'mute', 'unmute', 'olvidar'];
+const KINDS = ['dormir', 'despertar', 'clip', 'mute', 'unmute', 'olvidar', 'corregir', 'corregirOtraVez', 'olvidarCorreccion', 'sinCorreccion'];
 
 test('every direct command has a pool of 8 to 10 lines', () => {
   for (const kind of KINDS) {
@@ -67,4 +67,14 @@ test('a pool smaller than the window still gives a line', () => {
 
 test('an unknown command is a mistake, not a silent line', () => {
   assert.throws(() => pickLine('banana'), /unknown command line pool/);
+});
+
+test('fix lines name what she heard and what you meant', () => {
+  for (const kind of ['corregir', 'corregirOtraVez', 'olvidarCorreccion', 'sinCorreccion']) {
+    for (const line of POOLS[kind]) {
+      const said = fillLine(line, { heard: 'jarbis', meant: 'Jarvis' });
+      assert.ok(!/[{}]/.test(said), `${kind}: ${said}`);
+    }
+  }
+  assert.equal(fillLine('«{heard}» es «{meant}» {other}', { heard: 'a', meant: 'b' }), '«a» es «b» {other}');
 });

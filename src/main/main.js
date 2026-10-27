@@ -20,7 +20,9 @@ const { isClipCommand } = require('./clip-command');
 const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { isWakeCommand } = require('./wake-command');
-const { pickLine } = require('./lines-es');
+const { pickLine, fillLine } = require('./lines-es');
+const { addFix, removeFix, cleanFixes } = require('./fixes');
+const { parseFixCommand, readTranscript } = require('./fix-command');
 const { GREETINGS, pickGreeting } = require('./greetings');
 const { windowContext } = require('./context');
 const { createComments } = require('./comments');
@@ -64,6 +66,8 @@ let chatOpen = false;
 let pendingSleep = false;
 let sleepTimer = null;
 let previousForeground = null;
+let menuKeyboard = false; // her menu has a text field open (Corregir lo último): it needs the keyboard
+let lastHeard = '';       // the last thing Whisper wrote, before her fixes (Corregir lo último)
 let gameMode = null;
 let gameWork = Promise.resolve();
 let gameWasFolded = false;
@@ -225,6 +229,27 @@ function closeChat() {
   overlay?.showInactive();
 }
 
+// Her menu's text fields (Corregir lo último): the keyboard while they're open, given back after.
+function menuKeyboardOn(on) {
+  if (!overlay) return;
+  if (on) {
+    if (!menuKeyboard && !chatOpen) previousForeground = captureForeground();
+    menuKeyboard = true;
+    overlay.setFocusable(true);
+    overlay.show();
+    overlay.focus();
+    return;
+  }
+  if (!menuKeyboard) return;
+  menuKeyboard = false;
+  if (chatOpen) return; // the chat still has it
+  const target = previousForeground;
+  previousForeground = null;
+  if (target != null) restoreForeground(target);
+  overlay.setFocusable(false);
+  overlay.showInactive();
+}
+
 function toggleChat() {
   if (chatOpen) closeChat();
   else openChat();
@@ -358,6 +383,45 @@ function clipFailLine(error) {
   return `No pude disparar el atajo del clip. Revisá NVIDIA o el atajo en config.${error ? ` (${error})` : ''}`;
 }
 
+// -- what she hears wrong (Paso 4A) --------------------------------------------------------
+
+const hearingFixes = () => cleanFixes(config.load().hearing?.fixes);
+
+// A transcript from the sidecar, read with her fixes. An order about the fixes themselves is left
+// as said: "cuando digo jarbis quiero decir Jarvis" must still say jarbis.
+function hearTranscript(payload) {
+  const said = String(payload?.text || '');
+  const read = readTranscript(said, hearingFixes());
+  if (!read.order && said.trim()) lastHeard = said.trim();
+  if (!read.heard) return payload;
+  logEvent(voiceLogPath(), `[capri] heard fix: ${JSON.stringify(said)} -> ${JSON.stringify(read.text)}`);
+  return { ...payload, text: read.text, heard: read.heard };
+}
+
+function saveFix(heard, meant) {
+  const result = addFix(hearingFixes(), heard, meant);
+  if (result.fix) config.save({ hearing: { fixes: result.fixes } });
+  return result;
+}
+
+function dropFix(heard) {
+  const result = removeFix(hearingFixes(), heard);
+  if (result.removed) config.save({ hearing: { fixes: result.fixes } });
+  return result;
+}
+
+function goFixReply(order, { chat = true } = {}) {
+  const opts = { chat, badge: 'OÍDO' };
+  if (order.action === 'remove') {
+    const { removed } = dropFix(order.heard);
+    const heard = removed?.heard || order.heard;
+    return { ok: Boolean(removed), line: announce(fillLine(pickLine(removed ? 'olvidarCorreccion' : 'sinCorreccion'), { heard }), opts) };
+  }
+  const { fix, updated } = saveFix(order.heard, order.meant);
+  if (!fix) return { ok: false };
+  return { ok: true, line: announce(fillLine(pickLine(updated ? 'corregirOtraVez' : 'corregir'), fix), opts) };
+}
+
 async function goClipReply({ chat = true } = {}) {
   const cfg = config.load();
   const result = await saveClip(cfg.clips?.saveHotkey || 'Alt+F10');
@@ -470,6 +534,9 @@ function applyMenuAction(id, value) {
       break;
     }
     case 'clip-save': goClipReply({ chat: false }); break;
+    case 'fix-add': saveFix(value?.heard, value?.meant); break;
+    case 'fix-remove': dropFix(value); break;
+    case 'menu-keyboard': menuKeyboardOn(Boolean(value)); break;
     case 'clips-dir': openClipsFolder(config.load()); break;
     case 'drag-lock':
       config.save({ position: { locked: Boolean(value) } });
@@ -553,6 +620,10 @@ function menuState(extra = {}) {
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
       gaming: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
       comments: cfg.comments?.enabled !== false,
+    },
+    hearing: {
+      fixes: cleanFixes(cfg.hearing?.fixes),
+      lastHeard,
     },
     clips: {
       hotkey: cfg.clips?.saveHotkey || 'Alt+F10',
@@ -767,6 +838,11 @@ function registerIpc() {
   ipcMain.handle('chat:send', async (_e, text) => {
     const line = String(text || '').trim();
     if (!line || !overlay) return { ok: false };
+    const fixOrder = parseFixCommand(line);
+    if (fixOrder) {
+      const done = goFixReply(fixOrder);
+      if (done.line) return done; // said something; a fix that can't be saved (too long) goes to the model
+    }
     if (isSleepCommand(line)) return goSleepReply();
     if (isClipCommand(line)) return goClipReply();
     if (isMuteCommand(line)) return goMicReply(false);
@@ -916,7 +992,8 @@ function main() {
     voice = createVoice({
       root: ROOT,
       loadConfig: () => config.load(),
-      onEvent: (payload) => {
+      onEvent: (event) => {
+        const payload = event?.type === 'transcript' ? hearTranscript(event) : event;
         if (payload?.type === 'tts_state') ttsLoading = payload.state === 'loading';
         if (payload?.type === 'talking') voiceTalking = true;
         if (payload?.type === 'talking_done' || payload?.type === 'stopped') voiceTalking = false;

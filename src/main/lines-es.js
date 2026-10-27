@@ -72,6 +72,48 @@ const POOLS = {
     'Memoria a cero. ¿Quién sos? … mentira, me acuerdo de vos.',
   ],
 
+  // Paso 4A: what she hears wrong. {heard} and {meant} are filled in (fillLine).
+  corregir: [
+    'Anotado: cuando digas «{heard}», entiendo «{meant}». De nada, humanito.',
+    'Ah, «{meant}». Podrías vocalizar un poquito, ¿eh? Ya lo guardé.',
+    'Listo. «{heard}» es «{meant}». Mi oído es perfecto, el problema es tu boca.',
+    'Guardado. La próxima vez que digas «{heard}», yo leo «{meant}».',
+    'Bueno, bueno. «{meant}», no «{heard}». Tomo nota, tontito.',
+    'Hecho. Ves que te entiendo mejor que nadie, ¿no?',
+    'Corrección guardada. Qué haría tu dicción sin mí.',
+    'Ok, «{heard}» ahora es «{meant}». No me lo agradezcas tanto.',
+  ],
+  corregirOtraVez: [
+    'Ah, ¿ahora «{heard}» es «{meant}»? Decidite, humanito. Cambiado.',
+    'Actualizado: «{heard}» ya es «{meant}». Qué indeciso.',
+    'Bueno, lo cambio. «{meant}» de ahora en adelante, ¿sí?',
+    'Otra vez esa palabra… listo, ahora es «{meant}».',
+    'Corregí la corrección. Esto ya es arte, ¿eh?',
+    'Cambiado. Si mañana es otra cosa, me avisás, tontito.',
+    'Hecho. «{heard}» ya no es lo que era: ahora es «{meant}».',
+    'Ok, ok. «{meant}». Anotado encima de lo otro.',
+  ],
+  olvidarCorreccion: [
+    'Listo, ya no cambio «{heard}». Que sea lo que Whisper quiera.',
+    'Corrección borrada. Volvés a sonar como antes, humanito.',
+    'Olvidado. «{heard}» vuelve a ser «{heard}».',
+    'Hecho. Si te vuelvo a entender mal, es culpa tuya, ¿eh?',
+    'Borrada. Qué valiente, confiar en tu pronunciación.',
+    'Ya está. Ni me acuerdo de qué corregía. Bueno, sí.',
+    'Fuera. Una corrección menos, un humano más confiado.',
+    'Listo, tontito. «{heard}» queda tal cual lo digas.',
+  ],
+  sinCorreccion: [
+    'No tengo ninguna corrección para «{heard}». Estás inventando, ¿eh?',
+    '¿«{heard}»? Eso nunca lo corregí, humanito.',
+    'Nada que borrar. «{heard}» nunca estuvo en mi lista.',
+    'Revisé y no: «{heard}» no lo cambio. Nunca lo cambié.',
+    'Mmm, no. Ahí no hay nada que olvidar, tontito.',
+    'No encuentro «{heard}» en mis correcciones. ¿Seguro que lo dijiste así?',
+    'Esa no la tengo. Mi memoria es perfecta, la tuya no tanto.',
+    'Nop. «{heard}» no está anotado en ningún lado.',
+  ],
+
   // Her own life (Paso 3I): one line now and then, and one when the window in front changes
   // to music, a game, a video or code. Nothing here is a reply: she just talks to the room.
   comentar: [
@@ -154,9 +196,14 @@ function pickLine(kind, random = Math.random) {
   return line;
 }
 
+/** `line` with its {placeholders} filled from `values` (what she heard, what you meant…). */
+function fillLine(line, values = {}) {
+  return String(line).replace(/\{(\w+)\}/g, (all, key) => (values[key] != null ? String(values[key]) : all));
+}
+
 /** Forget what she said last (tests, and a fresh start after a reload). */
 function resetLines() {
   recent.clear();
 }
 
-module.exports = { POOLS, AVOID, pickLine, resetLines };
+module.exports = { POOLS, AVOID, pickLine, fillLine, resetLines };
