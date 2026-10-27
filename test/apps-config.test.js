@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   expandEnv, splitArgs, processName, linkOk, linkTarget, normalizeApp, cleanApps, seedApps, defaultCandidates,
-  browserName, exeFromCommand,
+  browserName, exeFromCommand, newCandidates,
 } = require('../src/main/apps-config');
 
 test('environment variables expand, case-insensitive, unknown ones stay', () => {
@@ -52,14 +52,14 @@ test('seeding never overwrites or duplicates what you already have', () => {
 
 test('only what this PC has is seeded', () => {
   const env = { LOCALAPPDATA: 'L', APPDATA: 'R', 'ProgramFiles(x86)': 'P86', ProgramFiles: 'P' };
-  const none = defaultCandidates({ env, exists: () => false, found: {} }).map((a) => a.name);
+  const none = defaultCandidates({ env, exists: () => false, found: {} }).filter((a) => !a.since).map((a) => a.name);
   assert.deepEqual(none, ['YouTube', 'Google']);
   const files = new Set(['L\\Discord\\Update.exe', 'L\\Microsoft\\WindowsApps\\Spotify.exe', 'C:\\N\\namida.exe', 'c:/steam/steam.exe', 'C:\\O\\opera.exe']);
   const all = defaultCandidates({
     env,
     exists: (p) => files.has(p),
     found: { namidaExe: 'C:\\N\\namida.exe', steamExe: 'c:/steam/steam.exe', browser: { exe: 'C:\\O\\opera.exe', name: 'Opera GX', aliases: ['opera'] } },
-  });
+  }).filter((a) => !a.since);
   assert.deepEqual(all.map((a) => a.name), ['Discord', 'Spotify', 'Namida', 'Steam', 'Opera GX', 'YouTube', 'Google']);
   const spotify = all.find((a) => a.name === 'Spotify');
   assert.equal(spotify.type, 'link');
@@ -72,4 +72,39 @@ test('the default browser from its open command', () => {
   assert.equal(exe, 'C:\\Users\\M\\AppData\\Local\\Programs\\Opera GX\\opera.exe');
   assert.equal(browserName(exe).name, 'Opera GX');
   assert.equal(browserName('C:\\x\\chrome.exe').name, 'Chrome');
+});
+
+test('seed versions: an older table only gets the newer candidates', () => {
+  const { seededVersion, newCandidates, SEED_VERSION } = require('../src/main/apps-config');
+  assert.equal(seededVersion(true), 1);
+  assert.equal(seededVersion(false), 0);
+  assert.equal(seededVersion(undefined), 0);
+  assert.equal(seededVersion(2), 2);
+  assert.equal(SEED_VERSION, 2);
+  const all = defaultCandidates({ env: { WINDIR: 'C:\\Windows' }, exists: () => false });
+  assert.deepEqual(newCandidates(all, 1).map((a) => a.name), ['Grok', 'Explorador de archivos']);
+  assert.deepEqual(newCandidates(all, 2), []);
+  assert.equal(all.find((a) => a.name === 'Grok').target, 'https://grok.com'); // no desktop app: the site
+});
+
+test('seed 2 finds Grok, Cursor, Warp, Notion and Epic from their Start menu shortcuts', () => {
+  const targets = {
+    'Grok Bot': 'C:\\Software\\Grok\\Grok Bot\\Grok Bot.exe',
+    Cursor: 'C:\\Software\\Cursor\\cursor\\Cursor.exe',
+    Warp: 'C:\\Software\\Warp\\Warp\\warp.exe',
+    Notion: 'C:\\U\\Notion\\Notion.exe',
+    'Epic Games Launcher': 'C:\\PF86\\Epic Games\\Launcher\\Portal\\Binaries\\Win32\\EpicGamesLauncher.exe',
+  };
+  const files = new Set(Object.values(targets));
+  const found = newCandidates(defaultCandidates({ env: {}, exists: (p) => files.has(p), found: { shortcuts: targets } }), 1)
+    .map((raw) => normalizeApp(raw));
+  assert.deepEqual(found.map((a) => a.name), ['Grok', 'Cursor', 'Warp', 'Explorador de archivos', 'Notion', 'Epic Games']);
+  const by = Object.fromEntries(found.map((a) => [a.name, a]));
+  assert.equal(by.Grok.close, 'ask');
+  assert.deepEqual(by.Grok.processes, ['Grok Bot']);
+  assert.deepEqual(by['Epic Games'].processes, ['EpicGamesLauncher']);
+  const explorer = by['Explorador de archivos'];
+  assert.equal(explorer.windows, 'explorer');
+  assert.deepEqual(explorer.processes, []); // never explorer.exe
+  for (const alias of ['explorador', 'archivos', 'el explorador']) assert.ok(explorer.aliases.includes(alias), alias);
 });

@@ -510,7 +510,9 @@ export class AppMenu {
     field.append(build('span', 'appmenu__fix-label', 'Alias'), aliases);
     panel.append(field);
     let close = app.close;
-    if (app.processes.length) {
+    if (app.windows === 'explorer') {
+      panel.append(build('div', 'appmenu__hint', 'Al cerrar: solo sus ventanas. Windows sigue igual.'));
+    } else if (app.processes.length || app.dir || app.title) {
       // the selector helper appends to the menu body: build it into this panel instead
       const holder = build('div');
       selector('Al cerrar', {
@@ -522,7 +524,9 @@ export class AppMenu {
         },
       }, holder);
       panel.append(...holder.childNodes);
-      panel.append(build('div', 'appmenu__hint', `proceso: ${app.processes.join(', ')}`));
+      const what = app.processes.length ? `proceso: ${app.processes.join(', ')}`
+        : app.dir ? `lo que corra en: ${app.dir}` : `la ventana «${app.title}»`;
+      panel.append(build('div', 'appmenu__hint', what));
     } else {
       panel.append(build('div', 'appmenu__hint', 'Sin proceso: esta no la puedo cerrar.'));
     }

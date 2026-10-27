@@ -9,6 +9,9 @@
 // link:    target is a URL or a URI (https://…, spotify:)
 // processes: the exe names that are this app running ("Discord"), for closing it
 // close: 'graceful' (its windows get WM_CLOSE), 'force' (taskkill /F /T), 'ask' (she asks first)
+// optional: dir (its processes are whatever runs from that folder: games), title (its window's
+// title, when nothing else tells), windows: 'explorer' (only File Explorer windows close, never
+// explorer.exe itself)
 
 const path = require('node:path');
 
@@ -16,6 +19,8 @@ const TYPES = ['program', 'steam', 'link'];
 const CLOSE_MODES = ['graceful', 'force', 'ask'];
 const MAX_NAME = 40;
 const MAX_ALIASES = 12;
+// which first-run candidates a table already got: 1 = Paso 4C, 2 = Grok, Cursor, Warp, Explorer…
+const SEED_VERSION = 2;
 // never something to open from a phrase: local files and scripts through a "link"
 const BAD_SCHEMES = /^(?:file|javascript|vbscript|data|ms-msdt|search-ms|ms-officecmd|shell)$/i;
 
@@ -100,12 +105,13 @@ function normalizeApp(raw) {
   if (type === 'steam' && !/^\d+$/.test(target)) return null;
   if (type === 'link' && !linkOk(target)) return null;
   const aliases = cleanList(raw.aliases).filter((a) => plainKey(a) !== plainKey(name));
-  let processes = cleanList(raw.processes, { max: 8, map: processName });
-  if (!processes.length && type === 'program' && /\.exe$/i.test(target)) {
+  const windows = raw.windows === 'explorer' ? 'explorer' : null;
+  let processes = windows ? [] : cleanList(raw.processes, { max: 8, map: processName });
+  if (!windows && !processes.length && type === 'program' && /\.exe$/i.test(target)) {
     const exe = processName(target);
     if (!/^update$/i.test(exe)) processes = [exe]; // Discord's Update.exe is not Discord
   }
-  return {
+  const app = {
     name,
     aliases,
     type,
@@ -114,6 +120,10 @@ function normalizeApp(raw) {
     processes,
     close: CLOSE_MODES.includes(raw.close) ? raw.close : 'graceful',
   };
+  if (windows) app.windows = windows;
+  if (typeof raw.dir === 'string' && /^[a-z]:[\\/]/i.test(raw.dir.trim())) app.dir = raw.dir.trim();
+  if (typeof raw.title === 'string' && raw.title.trim()) app.title = raw.title.trim().slice(0, 80);
+  return app;
 }
 
 // The whole table: bad entries out, one entry per name (the first one wins).
@@ -153,10 +163,25 @@ function seedApps(existing, candidates) {
   return { list, added };
 }
 
+// How far a table's seeding got: true (before versions) is 1.
+function seededVersion(seeded) {
+  if (seeded === true) return 1;
+  const n = Number(seeded);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+// The candidates a table seeded up to `version` hasn't been offered yet.
+function newCandidates(candidates, version) {
+  return (candidates || []).filter((c) => (c.since || 1) > version);
+}
+
 // What can be seeded on this PC. `exists(path)` checks a path; `env` expands %VARS%;
-// `found` has what main.js looked up (steamExe, namidaExe, browser { name, exe }).
+// `found` has what main.js looked up (steamExe, namidaExe, browser { name, exe }, shortcuts:
+// Start menu shortcut name -> its target). Each candidate says since which seed version it is.
 function defaultCandidates({ env = process.env, exists = () => false, found = {} } = {}) {
   const has = (p) => Boolean(p) && exists(expandEnv(p, env));
+  const first = (...paths) => paths.find(has) || null;
+  const shortcut = (...names) => names.map((n) => found.shortcuts?.[n]).find(has) || null;
   const out = [];
   if (has('%LOCALAPPDATA%\\Discord\\Update.exe')) {
     out.push({
@@ -193,6 +218,29 @@ function defaultCandidates({ env = process.env, exists = () => false, found = {}
   }
   out.push({ name: 'YouTube', aliases: ['yutub', 'youtub', 'you tube', 'yutu'], type: 'link', target: 'https://www.youtube.com' });
   out.push({ name: 'Google', aliases: ['gugel', 'buscador'], type: 'link', target: 'https://www.google.com' });
+
+  // seed 2 (Paso 4D)
+  const grok = shortcut('Grok', 'Grok Bot') || first('%LOCALAPPDATA%\\Programs\\Grok\\Grok.exe', '%LOCALAPPDATA%\\Programs\\Grok Bot\\Grok Bot.exe');
+  out.push(grok
+    ? { since: 2, name: 'Grok', aliases: ['grok bot', 'grock', 'grook'], type: 'program', target: path.win32.normalize(grok), close: 'ask' }
+    : { since: 2, name: 'Grok', aliases: ['grock', 'grook'], type: 'link', target: 'https://grok.com' });
+  const cursor = shortcut('Cursor') || first('%LOCALAPPDATA%\\Programs\\cursor\\Cursor.exe');
+  if (cursor) out.push({ since: 2, name: 'Cursor', aliases: ['corsor', 'kursor'], type: 'program', target: path.win32.normalize(cursor), close: 'graceful' });
+  const warp = shortcut('Warp') || first('%LOCALAPPDATA%\\Programs\\Warp\\warp.exe', '%ProgramFiles%\\Warp\\warp.exe');
+  if (warp) out.push({ since: 2, name: 'Warp', aliases: ['guarp', 'uarp', 'terminal'], type: 'program', target: path.win32.normalize(warp), close: 'graceful' });
+  // explorer.exe is Windows itself: she opens a window, and closes only its windows
+  out.push({
+    since: 2, name: 'Explorador de archivos', aliases: ['explorador', 'archivos', 'el explorador', 'explorer', 'file explorer', 'mis archivos'],
+    type: 'program', target: '%WINDIR%\\explorer.exe', windows: 'explorer', close: 'graceful',
+  });
+  const notion = shortcut('Notion') || first('%LOCALAPPDATA%\\Programs\\Notion\\Notion.exe');
+  if (notion) out.push({ since: 2, name: 'Notion', aliases: ['nocion', 'noshon', 'notion app'], type: 'program', target: path.win32.normalize(notion), close: 'graceful' });
+  const epic = shortcut('Epic Games Launcher') || first(
+    '%ProgramFiles(x86)%\\Epic Games\\Launcher\\Portal\\Binaries\\Win64\\EpicGamesLauncher.exe',
+    '%ProgramFiles(x86)%\\Epic Games\\Launcher\\Portal\\Binaries\\Win32\\EpicGamesLauncher.exe',
+    '%ProgramFiles%\\Epic Games\\Launcher\\Portal\\Binaries\\Win64\\EpicGamesLauncher.exe',
+  );
+  if (epic) out.push({ since: 2, name: 'Epic Games', aliases: ['epic', 'epic games launcher', 'epic launcher', 'epik'], type: 'program', target: path.win32.normalize(epic), close: 'graceful' });
   return out;
 }
 
@@ -220,7 +268,7 @@ const TYPE_LABEL = { program: 'programa', steam: 'juego de Steam', link: 'enlace
 const CLOSE_LABEL = { graceful: 'con cuidado', force: 'a la fuerza', ask: 'preguntando' };
 
 module.exports = {
-  TYPES, CLOSE_MODES, TYPE_LABEL, CLOSE_LABEL,
+  TYPES, CLOSE_MODES, TYPE_LABEL, CLOSE_LABEL, SEED_VERSION, seededVersion, newCandidates,
   plainKey, expandEnv, splitArgs, processName, linkOk, linkTarget,
   normalizeApp, cleanApps, appKeys, seedApps, defaultCandidates, browserName, exeFromCommand,
 };

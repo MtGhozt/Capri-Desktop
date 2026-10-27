@@ -77,3 +77,16 @@ test('dry run does nothing', () => {
   assert.match(f.dryRun(''), /abre Discord/);
   assert.deepEqual(did, []);
 });
+
+test('File Explorer windows that stay are not offered a forced close', async () => {
+  const { cleanApps } = require('../src/main/apps-config');
+  const did = [];
+  const f = createAppFlow({
+    apps: () => cleanApps([{ name: 'Explorador de archivos', aliases: ['explorador'], type: 'program', target: 'C:\\Windows\\explorer.exe', windows: 'explorer' }]),
+    actions: { open: async () => ({ ok: true }), close: async (app, mode) => { did.push(mode); return { status: 'stillRunning' }; } },
+    line: (kind) => kind,
+  });
+  assert.equal((await f.command('cierra el explorador')).line, 'appFallo');
+  assert.equal(f.confirm.pending, null);
+  assert.deepEqual(did, ['graceful']);
+});

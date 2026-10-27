@@ -86,3 +86,36 @@ test('opening programs, shortcuts, links and Steam games', async () => {
   assert.equal((await actions.open({ type: 'steam', target: '1; calc' })).ok, false);
   assert.equal(f.calls.length, 4);
 });
+
+test('File Explorer: only its windows close, explorer.exe is never probed or killed', async () => {
+  const f = fake();
+  let windows = 2;
+  f.deps.explorerWindows = async (close) => {
+    f.calls.push(['explorer', close]);
+    if (close) windows = 0;
+    return { left: windows };
+  };
+  const actions = createAppActions(f.deps);
+  const explorer = { name: 'Explorador de archivos', processes: [], windows: 'explorer' };
+  assert.equal((await actions.close(explorer, 'force')).status, 'closed');
+  assert.deepEqual(f.calls, [['explorer', false], ['explorer', true]]);
+  assert.equal((await actions.close(explorer, 'graceful')).status, 'notRunning');
+  assert.ok(!f.calls.some((c) => c[0] === 'kill' || c[0] === 'probe'));
+  // the same app without the windows mark is refused by the denylist
+  assert.equal((await actions.close({ name: 'X', processes: ['explorer'] }, 'graceful')).status, 'denied');
+});
+
+test('apps found by folder or title: refused if what runs there is protected', async () => {
+  const f = fake();
+  f.deps.probe = async (spec) => {
+    f.calls.push(['probe', spec]);
+    return { ids: [7], names: spec.dir ? ['Game'] : ['powershell'] };
+  };
+  const actions = createAppActions(f.deps);
+  assert.equal((await actions.close({ name: 'Game', processes: [], dir: 'C:\\Games\\Game' }, 'graceful')).status, 'closed');
+  assert.deepEqual(f.calls[0][1], { names: [], dir: 'C:\\Games\\Game', title: '' });
+  assert.equal((await actions.close({ name: 'Shell', processes: [], title: 'Shell' }, 'force')).status, 'denied');
+  assert.ok(!f.calls.some((c) => c[0] === 'kill'));
+  assert.equal((await actions.close({ name: 'Nada', processes: [] })).status, 'notCloseable');
+  assert.ok(isProtected('powershell') && isProtected('pwsh.exe'));
+});

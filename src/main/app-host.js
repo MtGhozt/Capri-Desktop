@@ -27,13 +27,20 @@ function run(file, args, timeout = 15000) {
   });
 }
 
-async function closeScript(mode, names, skip) {
-  const out = await run('powershell.exe', [
-    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT,
-    '-Names', names.join(','), '-Skip', skip.join(','), '-Mode', mode, '-WaitMs', '4000',
-  ], 20000);
+// spec: { names, dir, title } (see close-app.ps1); only what is set is passed on
+async function closeScript(mode, spec = {}, skip = []) {
+  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-Mode', mode, '-WaitMs', '4000'];
+  if (spec.names?.length) args.push('-Names', spec.names.join(','));
+  if (spec.dir) args.push('-Dir', spec.dir);
+  if (spec.title) args.push('-Title', spec.title);
+  if (skip.length) args.push('-Skip', skip.join(','));
+  const out = await run('powershell.exe', args, 20000);
   const json = JSON.parse(out.split(/\r?\n/).filter(Boolean).pop() || '{}');
-  return { ids: [].concat(json.ids ?? []).map(Number).filter(Boolean), left: Number(json.left) || 0 };
+  return {
+    ids: [].concat(json.ids ?? []).map(Number).filter(Boolean),
+    names: [].concat(json.names ?? []).map(String).filter(Boolean),
+    left: Number(json.left) || 0,
+  };
 }
 
 function startDetached(file, args, { cwd } = {}) {
@@ -53,8 +60,9 @@ function realDeps({ shell, skipPids }) {
     spawn: startDetached,
     openExternal: (url) => shell.openExternal(url),
     openPath: (file) => shell.openPath(file), // '' when it worked, else the error
-    probe: (names, skip) => closeScript('probe', names, skip),
-    graceful: (names, skip) => closeScript('graceful', names, skip),
+    probe: (spec, skip) => closeScript('probe', spec, skip),
+    graceful: (spec, skip) => closeScript('graceful', spec, skip),
+    explorerWindows: (close) => closeScript(close ? 'explorer' : 'explorer-probe'),
     kill: (ids) => run('taskkill.exe', ['/F', '/T', ...ids.flatMap((id) => ['/PID', String(id)])]).catch(() => ''),
     skipPids,
   };
@@ -76,6 +84,8 @@ function readShortcut(shell, file) {
     return null;
   }
 }
+
+const SHORTCUTS = ['Grok', 'Grok Bot', 'Cursor', 'Warp', 'Notion', 'Epic Games Launcher'];
 
 // What the first-run table needs: { steamExe, namidaExe, browser: { exe } }
 async function lookups(shell, env = process.env) {
@@ -100,6 +110,18 @@ async function lookups(shell, env = process.env) {
       path.join(env.LOCALAPPDATA || '', 'Programs', 'Namida', 'namida.exe'),
       path.join(env.ProgramFiles || 'C:\\Program Files', 'Namida', 'namida.exe'),
     ].find(exists) || null;
+  }
+  // Start menu shortcuts her seeding knows by name (Cursor.lnk, Warp.lnk…): name -> target
+  found.shortcuts = {};
+  for (const name of SHORTCUTS) {
+    for (const dir of menus) {
+      const lnk = [path.join(dir, `${name}.lnk`), path.join(dir, name, `${name}.lnk`)].find(exists);
+      const target = lnk && readShortcut(shell, lnk)?.target;
+      if (target && /\.exe$/i.test(target) && exists(target)) {
+        found.shortcuts[name] = target;
+        break;
+      }
+    }
   }
   const progId = await regValue('HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice', 'ProgId');
   if (progId && /^[\w .-]+$/.test(progId)) {

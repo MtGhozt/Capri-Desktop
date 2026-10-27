@@ -43,7 +43,8 @@ function createAppFlow({ apps, actions, line, log = () => {}, confirm = createCo
       const use = mode || app.close || 'graceful';
       const res = await actions.close(app, use);
       log(`app close ${app.name} mode=${use} status=${res.status}${res.ids?.length ? ` pids=${res.ids.join(',')}` : ''}${res.error ? ` error: ${res.error}` : ''}`);
-      if (res.status === 'stillRunning') (use === 'force' ? by.failed : by.force).push(app);
+      // File Explorer has nothing to force: only its windows are ever closed
+      if (res.status === 'stillRunning') (use === 'force' || app.windows ? by.failed : by.force).push(app);
       else (by[res.status] || by.failed).push(app);
     }
     const lines = [];

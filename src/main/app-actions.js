@@ -7,8 +7,10 @@
 //   spawn(file, args, opts) starts a program, detached; resolves once it started
 //   openExternal(url)       a URL or URI through the shell (Steam, Spotify, the browser…)
 //   openPath(path)          a shortcut (.lnk) through the shell
-//   probe(names, skip)      { ids, left } of the processes called `names`, `skip` pids left out
-//   graceful(names, skip)   WM_CLOSE to their windows, then waits ~4 s: { ids, left }
+//   probe(spec, skip)       { ids, names, left } of the app's processes, `skip` pids left out;
+//                           spec { names, dir, title }: by exe name, by folder, by window title
+//   graceful(spec, skip)    WM_CLOSE to their windows, then waits ~4 s: { ids, names, left }
+//   explorerWindows(close)  File Explorer windows: { left } (closed first when `close`)
 //   kill(ids)               taskkill /F /T on those pids
 //   skipPids()              pids never touched: her own, the voice sidecar's
 //
@@ -25,6 +27,7 @@ const PROTECTED = new Set([
   'shellexperiencehost', 'textinputhost', 'applicationframehost', 'lockapp', 'logonui', 'userinit', 'spoolsv',
   'audiodg', 'conhost', 'dllhost', 'wudfhost', 'msmpeng', 'securityhealthservice', 'securityhealthsystray',
   'python', 'pythonw', 'py', 'lms', 'llmster', 'lm studio', 'lmstudio', 'lm-studio',
+  'powershell', 'pwsh', // her own helpers run in it (hotkeys, windows, this closing)
 ]);
 
 function isProtected(name) {
@@ -64,19 +67,35 @@ function createAppActions(deps) {
 
   // status: 'closed' | 'notRunning' | 'stillRunning' | 'denied' | 'notCloseable' | 'failed'
   async function close(app, mode = app.close) {
+    if (app.windows === 'explorer') return closeExplorer();
     const names = (app.processes || []).map(processName).filter(Boolean);
-    if (!names.length) return { status: 'notCloseable' };
+    const spec = { names, dir: app.dir || '', title: !names.length && !app.dir ? app.title || '' : '' };
+    if (!names.length && !spec.dir && !spec.title) return { status: 'notCloseable' };
     if (names.some(isProtected)) return { status: 'denied' };
     try {
-      const found = await deps.probe(names, skip());
+      const found = await deps.probe(spec, skip());
       if (!found.ids?.length) return { status: 'notRunning' };
+      // found by folder or title: whatever it turned out to be, the same list holds
+      if ((found.names || []).some(isProtected)) return { status: 'denied' };
       if (mode === 'force') {
         await deps.kill(found.ids);
-        const after = await deps.probe(names, skip());
+        const after = await deps.probe(spec, skip());
         return { status: after.ids?.length ? 'stillRunning' : 'closed', mode: 'force', ids: found.ids };
       }
-      const after = await deps.graceful(names, skip());
+      const after = await deps.graceful(spec, skip());
       return { status: after.left > 0 ? 'stillRunning' : 'closed', mode: 'graceful', ids: found.ids };
+    } catch (err) {
+      return { status: 'failed', error: err?.message || String(err) };
+    }
+  }
+
+  // "cierra el explorador": its windows, never explorer.exe (the taskbar and the desktop are it)
+  async function closeExplorer() {
+    try {
+      const found = await deps.explorerWindows(false);
+      if (!found.left) return { status: 'notRunning' };
+      const after = await deps.explorerWindows(true);
+      return { status: after.left > 0 ? 'stillRunning' : 'closed', mode: 'windows', windows: found.left };
     } catch (err) {
       return { status: 'failed', error: err?.message || String(err) };
     }

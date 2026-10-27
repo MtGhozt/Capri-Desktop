@@ -42,7 +42,7 @@ const { createAppActions } = require('./app-actions');
 const appHost = require('./app-host');
 const {
   TYPE_LABEL, CLOSE_LABEL, CLOSE_MODES, plainKey, cleanApps, normalizeApp, seedApps, defaultCandidates,
-  browserName, exeFromCommand, processName, linkTarget, linkOk,
+  browserName, exeFromCommand, processName, linkTarget, linkOk, SEED_VERSION, seededVersion, newCandidates,
 } = require('./apps-config');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
@@ -493,17 +493,19 @@ function appReply(result, { chat = true } = {}) {
   return { ok: true };
 }
 
-// First run only: what this PC has (Discord, Spotify, Namida, Steam, the browser) plus YouTube and
-// Google, added next to whatever is already in the table, never over it.
+// First run: what this PC has (Discord, Spotify, Namida, Steam, the browser, Grok, Cursor, Warp,
+// Notion, Epic…) plus YouTube, Google and the File Explorer, added next to whatever is already in
+// the table, never over it. A table seeded by an older version only gets the newer candidates.
 async function seedAppTable() {
-  if (config.load().apps?.seeded) return;
+  const version = seededVersion(config.load().apps?.seeded);
+  if (version >= SEED_VERSION) return;
   const found = await appHost.lookups(shell).catch(() => ({}));
   const exe = exeFromCommand(found.browserCommand);
   const browser = exe ? { exe, ...browserName(exe) } : null;
-  const candidates = defaultCandidates({ exists: appHost.exists, found: { ...found, browser } });
+  const candidates = newCandidates(defaultCandidates({ exists: appHost.exists, found: { ...found, browser } }), version);
   const { list, added } = seedApps(config.load().apps?.list, candidates);
-  config.save({ apps: { list, seeded: true } });
-  appLog(`apps seeded: ${added.length ? added.join(', ') : 'nothing new'}`);
+  config.save({ apps: { list, seeded: SEED_VERSION } });
+  appLog(`apps seeded v${SEED_VERSION}: ${added.length ? added.join(', ') : 'nothing new'}`);
 }
 
 function saveApps(list) {
@@ -589,6 +591,9 @@ function appsMenuState() {
     closeLabel: CLOSE_LABEL[a.close] || a.close,
     target: a.type === 'steam' ? `steam ${a.target}` : a.target,
     processes: a.processes,
+    windows: a.windows || null,
+    dir: a.dir || null,
+    title: a.title || null,
   }));
 }
 

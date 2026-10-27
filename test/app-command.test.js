@@ -87,3 +87,15 @@ test('dry run in Spanish', () => {
   assert.match(describePlan(plan('cierra los ojos')), /modelo|nada|no es/i);
   assert.equal(joinNames(['A', 'B', 'C']), 'A, B y C');
 });
+
+test('the File Explorer by any of its names', () => {
+  const { cleanApps } = require('../src/main/apps-config');
+  const apps = cleanApps([...APPS, {
+    name: 'Explorador de archivos', aliases: ['explorador', 'archivos', 'el explorador'],
+    type: 'program', target: '%WINDIR%\\explorer.exe', windows: 'explorer',
+  }]);
+  for (const text of ['abre el explorador', 'abre el explorador de archivos', 'abre archivos', 'cierra el explorador']) {
+    const p = planAppCommand(parseAppCommand(text, apps));
+    assert.deepEqual(p?.apps?.map((a) => a.name), ['Explorador de archivos'], text);
+  }
+});

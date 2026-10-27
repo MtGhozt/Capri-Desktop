@@ -74,7 +74,7 @@ const DEFAULTS = {
   },
   apps: {
     list: [],                // what "abre X" / "cierra X" reach (see apps-config.js); edited in her menu, APPS
-    seeded: false,           // her first-run table was filled in (only what this PC has, never over yours)
+    seeded: 0,               // how far her first-run seeding got (SEED_VERSION in apps-config.js)
   },
   voice: {
     enabled: true,
