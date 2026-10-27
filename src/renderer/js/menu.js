@@ -43,6 +43,10 @@ export class AppMenu {
     this.linkForm = false;  // Añadir enlace open
     this.testText = '';     // Probar comando
     this.testResult = '';
+    this.foundFilter = '';  // Encontrado en esta PC (Paso 4D)
+    this.foundOpen = null;
+    this.foundNote = '';
+    this.scanning = false;
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -145,6 +149,9 @@ export class AppMenu {
     this.linkForm = false;
     this.testText = '';
     this.testResult = '';
+    this.foundFilter = '';
+    this.foundOpen = null;
+    this.foundNote = '';
   }
 
   rect() {
@@ -458,6 +465,8 @@ export class AppMenu {
     if (this.linkForm) body.append(this.linkEditor(build));
     if (this.appNote) body.append(build('div', 'appmenu__hint appmenu__app-note', this.appNote));
 
+    this.foundView(state, { body, build, section, action });
+
     section('PROBAR COMANDO');
     const test = build('div', 'appmenu__fix appmenu__apps-test');
     const input = this.textInput(build, this.testText, 'abre Discord y YouTube', 80);
@@ -481,6 +490,89 @@ export class AppMenu {
     });
     test.append(input, result);
     body.append(test);
+  }
+
+  // What her scan found on this PC that isn't in the table: filter, add one, scan again.
+  foundView(state, { body, build, section, action }) {
+    const found = state.found || { items: [] };
+    const items = found.items || [];
+    section('ENCONTRADO EN ESTA PC');
+    const busy = this.scanning || found.scanning;
+    action('Volver a escanear', {
+      value: busy ? 'ESCANEANDO…' : found.at ? `HACE ${this.since(found.at)}` : 'NUNCA',
+      onClick: async () => {
+        if (this.scanning) return;
+        this.scanning = true;
+        this.foundNote = '';
+        this.rerender();
+        const res = await this.host.menuAction({ id: 'apps-rescan' }).catch(() => ({ ok: false, message: 'No se pudo escanear.' }));
+        this.scanning = false;
+        const c = res?.counts;
+        this.foundNote = res?.ok && c ? `STEAM ${c.steam} · EPIC ${c.epic} · GOG ${c.gog} · INICIO ${c.start}` : res?.message || '';
+        await this.refresh();
+      },
+    });
+    if (this.foundNote) body.append(build('div', 'appmenu__hint appmenu__app-note', this.foundNote));
+    if (!items.length) {
+      body.append(build('div', 'appmenu__hint', busy ? 'Buscando juegos y programas…' : 'Nada todavía: escanea para ver tus juegos y programas.'));
+      return;
+    }
+    const wrap = build('div', 'appmenu__fix appmenu__found');
+    const input = this.textInput(build, this.foundFilter, `Filtrar ${items.length}…`, 40);
+    const list = build('div', 'appmenu__apps-list appmenu__found-list');
+    const show = () => {
+      const q = this.foundFilter.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+      const hits = items.filter((it) => !q || `${it.name} ${it.sourceLabel}`.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().includes(q));
+      const rows = [];
+      for (const it of hits.slice(0, 80)) {
+        const open = this.foundOpen === it.name;
+        const row = build('button', 'appmenu__row appmenu__row--action appmenu__app');
+        row.type = 'button';
+        row.append(build('span', 'appmenu__label', it.name), build('span', `appmenu__meta appmenu__tag appmenu__tag--${it.source}`, `[${it.sourceLabel}]`));
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.foundOpen = open ? null : it.name;
+          show();
+        });
+        rows.push(row);
+        if (open) {
+          const panel = build('div', 'appmenu__fix appmenu__app-edit');
+          panel.append(build('div', 'appmenu__hint appmenu__app-target', `${it.typeLabel}: ${it.target}`));
+          const actions = build('div', 'appmenu__fix-actions');
+          const add = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'AÑADIR A MIS APPS');
+          add.type = 'button';
+          add.dataset.state = 'on';
+          add.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const res = await this.host.menuAction({ id: 'apps-promote', value: it.name }).catch(() => ({ ok: false, message: 'No se pudo.' }));
+            this.appNote = res?.ok ? `AÑADIDA: ${res.name}` : res?.message || 'No se pudo.';
+            this.foundOpen = null;
+            await this.refresh();
+          });
+          actions.append(add);
+          panel.append(actions);
+          rows.push(panel);
+        }
+      }
+      if (!hits.length) rows.push(build('div', 'appmenu__hint', 'Nada con ese nombre.'));
+      if (hits.length > 80) rows.push(build('div', 'appmenu__hint', `y ${hits.length - 80} más: filtra para verlos.`));
+      list.replaceChildren(...rows);
+    };
+    input.addEventListener('input', () => {
+      this.foundFilter = input.value;
+      show();
+    });
+    show();
+    wrap.append(input, list);
+    body.append(wrap);
+  }
+
+  // "5 MIN", "3 H", "2 DÍAS"
+  since(at) {
+    const min = Math.max(0, Math.round((Date.now() - at) / 60000));
+    if (min < 60) return `${min} MIN`;
+    const h = Math.round(min / 60);
+    return h < 48 ? `${h} H` : `${Math.round(h / 24)} DÍAS`;
   }
 
   // A text field that keeps its keys to itself (Esc still closes the menu).

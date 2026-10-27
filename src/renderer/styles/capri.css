@@ -1351,3 +1351,25 @@ button.appmenu__row {
 .appmenu__apps-test .appmenu__hint {
   margin-left: 0;
 }
+
+/* APPS, Encontrado en esta PC: the scan's games and programs (Paso 4D) */
+
+.appmenu__found {
+  padding-left: 0;
+}
+
+.appmenu__found-list {
+  max-height: 220px;
+}
+
+.appmenu__tag {
+  flex: none;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.appmenu__tag--steam,
+.appmenu__tag--epic,
+.appmenu__tag--gog {
+  color: var(--accent-on);
+}
