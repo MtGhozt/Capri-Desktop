@@ -67,6 +67,9 @@ const DEFAULTS = {
     minMinutes: 15,          // shortest wait between two lines
     maxMinutes: 40,          // longest wait between two lines
   },
+  hearing: {
+    fixes: [],               // what she hears wrong, read as what you meant: [{ heard, meant }] (see fixes.js)
+  },
   voice: {
     enabled: true,
     dir: null,               // null → repo voice/ in dev; set an absolute path for the installed exe
@@ -123,6 +126,7 @@ function load() {
       gaming: { ...DEFAULTS.gaming, ...(saved.gaming || {}) },
       greeting: { ...DEFAULTS.greeting, ...(saved.greeting || {}) },
       comments: { ...DEFAULTS.comments, ...(saved.comments || {}) },
+      hearing: { ...DEFAULTS.hearing, ...(saved.hearing || {}) },
       voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
       position: { ...DEFAULTS.position, ...(saved.position || {}) },
       shortcuts: { ...DEFAULTS.shortcuts, ...(saved.shortcuts || {}) },
@@ -161,6 +165,7 @@ function save(patch) {
     gaming: { ...DEFAULTS.gaming, ...(current.gaming || {}), ...(patch.gaming || {}) },
     greeting: { ...DEFAULTS.greeting, ...(current.greeting || {}), ...(patch.greeting || {}) },
     comments: { ...DEFAULTS.comments, ...(current.comments || {}), ...(patch.comments || {}) },
+    hearing: { ...DEFAULTS.hearing, ...(current.hearing || {}), ...(patch.hearing || {}) },
     voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
     position: { ...DEFAULTS.position, ...(current.position || {}), ...(patch.position || {}) },
     shortcuts: { ...DEFAULTS.shortcuts, ...(current.shortcuts || {}), ...(patch.shortcuts || {}) },
