@@ -433,6 +433,8 @@ function hearTranscript(payload) {
   const said = String(payload?.text || '');
   const read = readTranscript(said, hearingFixes());
   if (!read.order && said.trim()) lastHeard = said.trim();
+  // what Whisper wrote, so a command that went to the model can be traced (and fixed)
+  if (said.trim()) logEvent(voiceLogPath(), `[capri] heard: ${JSON.stringify(said.trim().slice(0, 200))}`);
   if (!read.heard) return payload;
   logEvent(voiceLogPath(), `[capri] heard fix: ${JSON.stringify(said)} -> ${JSON.stringify(read.text)}`);
   return { ...payload, text: read.text, heard: read.heard };
