@@ -57,6 +57,9 @@ const DEFAULTS = {
     mode: 'auto',            // 'auto' unloads the GPU while a fullscreen game runs; 'off' never
     apps: [],                // extra exe names or path fragments to treat as games
   },
+  greeting: {
+    last: null,              // id of the hello from last boot, never repeated
+  },
   comments: {
     enabled: true,           // her own lines: every so often, and when the context changes
     minMinutes: 15,          // shortest wait between two lines
@@ -116,6 +119,7 @@ function load() {
       fx: { ...DEFAULTS.fx, ...(saved.fx || {}) },
       ui: { ...DEFAULTS.ui, ...(saved.ui || {}) },
       gaming: { ...DEFAULTS.gaming, ...(saved.gaming || {}) },
+      greeting: { ...DEFAULTS.greeting, ...(saved.greeting || {}) },
       comments: { ...DEFAULTS.comments, ...(saved.comments || {}) },
       voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
       position: { ...DEFAULTS.position, ...(saved.position || {}) },
@@ -153,6 +157,7 @@ function save(patch) {
     fx: { ...DEFAULTS.fx, ...(current.fx || {}), ...(patch.fx || {}) },
     ui: { ...DEFAULTS.ui, ...(current.ui || {}), ...(patch.ui || {}) },
     gaming: { ...DEFAULTS.gaming, ...(current.gaming || {}), ...(patch.gaming || {}) },
+    greeting: { ...DEFAULTS.greeting, ...(current.greeting || {}), ...(patch.greeting || {}) },
     comments: { ...DEFAULTS.comments, ...(current.comments || {}), ...(patch.comments || {}) },
     voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
     position: { ...DEFAULTS.position, ...(current.position || {}), ...(patch.position || {}) },

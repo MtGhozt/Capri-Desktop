@@ -16,6 +16,7 @@ import numpy as np
 import sounddevice as sd
 import websockets
 
+from greet import greet_path, read_wav, write_wav
 from heavy import IMPORT_LOCK, import_whisper_model, preload_torch
 from tts import (
     NullTTS,
@@ -251,6 +252,11 @@ class Engine:
         self._want_tts = False
         self._session_tts = None
         self._tts_lock = threading.Lock()
+        self._synth_lock = threading.Lock()
+        self._greet_lock = threading.Lock()
+        self._greet_texts: dict[str, str] = {}
+        self._greet_busy = False
+        self._closed = False
         self._speak_q: Queue = Queue()
         self._prep_q: Queue = Queue()
         self._speak_stop = threading.Event()
@@ -766,7 +772,7 @@ class Engine:
                 item = self._speak_q.get()
             except Exception:
                 continue
-            kind, rid, text = item if isinstance(item, tuple) else ("speak", self._live_id, item)
+            kind, rid, payload = item if isinstance(item, tuple) else ("speak", self._live_id, item)
             if kind in ("stop", "flush"):
                 self._prep_q.put((kind, rid, None, 0, self._speak_gen))
                 continue
@@ -781,7 +787,11 @@ class Engine:
                 continue
             self._synth_busy = True
             t0 = time.perf_counter()
-            pcm, sr = self._synth(str(text))
+            if kind == "greet":
+                greet_id, text = payload if isinstance(payload, tuple) and len(payload) == 2 else ("", "")
+                pcm, sr = self._greet_audio(str(greet_id), str(text))
+            else:
+                pcm, sr = self._synth(str(payload))
             self._synth_busy = False
             ms = (time.perf_counter() - t0) * 1000
             log(f"synth id={rid} {ms:.0f}ms samples={pcm.size} sr={sr}")
@@ -1003,7 +1013,7 @@ class Engine:
         self._announce_tts("omnivoice", "ready")
         self._warn_low_vram()
 
-    def _synth(self, text: str) -> tuple[np.ndarray, int]:
+    def _synth(self, text: str, gain: bool = True) -> tuple[np.ndarray, int]:
         if self._omni_loading and self._omni is None:
             # OmniVoice is on its way: stay silent here, the UI answers with blips.
             return np.zeros(0, dtype=np.float32), 24000
@@ -1014,18 +1024,128 @@ class Engine:
         if engine is None:
             return np.zeros(0, dtype=np.float32), 24000
         try:
-            pcm, sr = engine.speak(text)
+            with self._synth_lock:
+                pcm, sr = engine.speak(text)
         except Exception as err:
             log(f"tts failed: {err}")
             return np.zeros(0, dtype=np.float32), 24000
         pcm = normalize_pcm(pcm)
+        # Greeting caches keep the raw samples: the volume is applied when they are played.
+        return (self._apply_gain(pcm) if gain else pcm), int(sr or 24000)
+
+    def _apply_gain(self, pcm: np.ndarray) -> np.ndarray:
         try:
             gain = float(self.cfg.get("volume") if self.cfg.get("volume") is not None else 0.7)
         except (TypeError, ValueError):
             gain = 0.7
         gain = max(0.0, min(1.0, gain))
-        pcm = np.clip(pcm * gain, -1.0, 1.0)
-        return pcm, int(sr or 24000)
+        return np.clip(pcm * gain, -1.0, 1.0)
+
+    def prepare_greetings(self, items) -> None:
+        """Cache the greetings that do not have a wav yet, once OmniVoice is ready."""
+        fresh = False
+        missing = []
+        with self._greet_lock:
+            for item in items if isinstance(items, list) else []:
+                if not isinstance(item, dict):
+                    continue
+                ident = str(item.get("id") or "").strip()
+                text = str(item.get("text") or "").strip()
+                if greet_path(MODELS, ident) is None or not text:
+                    continue
+                self._greet_texts[ident] = text
+            missing = self._greet_missing()
+            if missing and not self._greet_busy:
+                self._greet_busy = True
+                fresh = True
+        if fresh:
+            log(f"greet pregen queued={len(missing)}")
+            threading.Thread(target=self._greet_pregen, name="capri-greet", daemon=True).start()
+
+    def _greet_missing(self) -> list[tuple[str, str]]:
+        return [(ident, text) for ident, text in self._greet_texts.items() if not greet_path(MODELS, ident).is_file()]
+
+    def _greet_pregen(self) -> None:
+        try:
+            # At boot the engine is still loading: wait for it instead of skipping the cache.
+            if not self._await_omni():
+                return
+            done = 0
+            for ident, text in self._greet_missing():
+                if self._closed or not self._want_tts:
+                    break
+                if self._cache_greet(ident, text):
+                    done += 1
+            log(f"greet pregen done cached={done}")
+        finally:
+            with self._greet_lock:
+                self._greet_busy = False
+
+    def _await_omni(self, timeout: float = 120.0) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline and not self._closed:
+            if self._omni is not None:
+                return True
+            if not self._want_tts:
+                return False
+            with self._tts_lock:
+                loading = self._omni_loading
+                fallback = self._session_tts or self._tts
+            if fallback is not None:
+                # OmniVoice gave up and Kokoro is answering: don't bake its voice into the cache.
+                return False
+            if not loading:
+                self.start_tts()
+            time.sleep(0.5)
+        return False
+
+    def _cache_greet(self, ident: str, text: str) -> bool:
+        path = greet_path(MODELS, ident)
+        if path is None or path.is_file():
+            return False
+        pcm, sr = self._synth(text, gain=False)
+        if pcm.size == 0:
+            log(f"greet cache skip id={ident} reason=no-audio")
+            return False
+        try:
+            write_wav(path, pcm, sr)
+        except OSError as err:
+            log(f"greet cache failed id={ident}: {err}")
+            return False
+        log(f"greet cached id={ident} samples={pcm.size} sr={sr}")
+        return True
+
+    def _greet_audio(self, ident: str, text: str) -> tuple[np.ndarray, int]:
+        path = greet_path(MODELS, ident)
+        if path is not None:
+            cached = read_wav(path)
+            if cached is not None:
+                pcm, sr = cached
+                log(f"greet play id={ident} cached samples={pcm.size} sr={sr}")
+                return self._apply_gain(pcm), sr
+        pcm, sr = self._synth(str(text), gain=False)
+        if pcm.size == 0:
+            return pcm, sr
+        # Only OmniVoice greetings are worth keeping: never freeze a fallback voice in the cache.
+        if path is not None and self._omni is not None:
+            try:
+                write_wav(path, pcm, sr)
+                log(f"greet cached id={ident} samples={pcm.size} sr={sr}")
+            except OSError as err:
+                log(f"greet cache failed id={ident}: {err}")
+        return self._apply_gain(pcm), sr
+
+    def enqueue_greet(self, greet_id, text: str, reply_id=None) -> None:
+        ident = str(greet_id or "").strip()
+        line = str(text or "").strip()
+        if greet_path(MODELS, ident) is None or not line:
+            return
+        rid = self._as_id(reply_id) or self._live_id
+        if rid <= 0:
+            log(f"greet drop without reply id={ident}")
+            return
+        log(f"greet id={rid} cache={ident}")
+        self._speak_q.put(("greet", rid, (ident, line)))
 
     def _play(self, pcm: np.ndarray, sr: int, gen: int) -> bool:
         stream = None
@@ -1188,6 +1308,7 @@ class Engine:
         log(f"debug wav {path}")
 
     def close(self) -> None:
+        self._closed = True
         self.stop_speak()
         self.stop_stream()
 
@@ -1220,10 +1341,10 @@ async def session(ws, engine: Engine) -> None:
             if kind == "config":
                 engine.apply_cfg(msg)
                 if engine.cfg.get("enabled"):
-                    await asyncio.gather(
-                        asyncio.to_thread(engine.ensure_stt),
-                        asyncio.to_thread(engine.start_tts),
-                    )
+                    # STT loads in the background from boot: waiting here used to keep the
+                    # control loop from answering a cached greet until Whisper was ready.
+                    asyncio.get_running_loop().run_in_executor(None, engine.ensure_stt)
+                    await asyncio.to_thread(engine.start_tts)
             elif kind == "ptt_start":
                 await asyncio.to_thread(engine.request_ptt)
             elif kind == "ptt_stop":
@@ -1235,6 +1356,10 @@ async def session(ws, engine: Engine) -> None:
                 engine.arm_speak(msg.get("id"))
             elif kind == "speak":
                 engine.enqueue_speak(str(msg.get("text") or ""), msg.get("id"))
+            elif kind == "greet_prepare":
+                engine.prepare_greetings(msg.get("items"))
+            elif kind == "greet":
+                engine.enqueue_greet(msg.get("greetId"), str(msg.get("text") or ""), msg.get("id"))
             elif kind == "speak_flush":
                 engine.flush_speak(msg.get("id"))
             elif kind == "stop_speak":

@@ -42,6 +42,8 @@ function createVoice({ root, loadConfig, onEvent }) {
   let stopped = false;
   let retries = 0;
   let sleeping = false;
+  let greetItems = [];
+  let pendingGreet = null; // the boot hello when the socket was not open yet
   const logFile = voiceLogPath();
 
   function emit(payload) {
@@ -63,7 +65,7 @@ function createVoice({ root, loadConfig, onEvent }) {
 
   function send(payload) {
     const kind = payload?.type;
-    if (kind === 'speak' || kind === 'speak_start' || kind === 'speak_flush' || kind === 'stop_speak') {
+    if (kind === 'speak' || kind === 'speak_start' || kind === 'speak_flush' || kind === 'stop_speak' || kind === 'greet') {
       const extra = `${payload.id != null ? ` id=${payload.id}` : ''}${kind === 'speak' ? ` ${String(payload.text || '').length}c` : ''}`;
       if (!ws || ws.readyState !== 1) {
         logLines(logFile, `[capri] ws skip ${kind}${extra}`);
@@ -109,7 +111,15 @@ function createVoice({ root, loadConfig, onEvent }) {
       try { msg = JSON.parse(String(ev.data || '')); } catch { return; }
       if (!msg || typeof msg !== 'object') return;
       emit(msg);
-      if (msg.type === 'ready') send({ type: 'config', ...speakCfg() });
+      if (msg.type === 'ready') {
+        send({ type: 'config', ...speakCfg() });
+        if (greetItems.length) send({ type: 'greet_prepare', items: greetItems });
+        // only a fresh hello is worth saying: a sidecar that took 30 s to boot would talk over you
+        if (pendingGreet && Date.now() - pendingGreet.at < 15000) {
+          for (const payload of pendingGreet.messages) send(payload);
+        }
+        pendingGreet = null;
+      }
     });
     sock.addEventListener('close', () => {
       connecting = false;
@@ -196,6 +206,7 @@ function createVoice({ root, loadConfig, onEvent }) {
 
   function stop() {
     stopped = true;
+    pendingGreet = null;
     disconnect();
     killChild();
   }
@@ -223,6 +234,28 @@ function createVoice({ root, loadConfig, onEvent }) {
     stop,
     applyConfig,
     setSleeping,
+    prepareGreetings: (items) => {
+      greetItems = (Array.isArray(items) ? items : [])
+        .map((item) => ({ id: String(item?.id || ''), text: String(item?.text || '') }))
+        .filter((item) => item.id && item.text);
+      if (ws && ws.readyState === 1) send({ type: 'greet_prepare', items: greetItems });
+    },
+    greet: (greetId, text, id) => {
+      if (!ws || ws.readyState !== 1) {
+        // main already armed the reply; when the socket opens, replay the whole trio
+        pendingGreet = {
+          at: Date.now(),
+          messages: [
+            { type: 'speak_start', id },
+            { type: 'greet', id, greetId, text },
+            { type: 'speak_flush', id },
+          ],
+        };
+        logLines(logFile, `[capri] greet queued id=${greetId}`);
+        return;
+      }
+      send({ type: 'greet', id, greetId, text });
+    },
     pttStart: () => send({ type: 'ptt_start' }),
     pttStop: () => send({ type: 'ptt_stop' }),
     push: send,

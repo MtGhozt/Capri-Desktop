@@ -741,12 +741,16 @@ async function boot() {
   else if (config.fx?.intro !== false && intro) await capri.intro(capri.spot('post'));
   else await capri.materialize(capri.spot('post'));
   bumpIdle();
+  const hello = async () => {
+    const greet = await host.greet();
+    panel.say({ kind: 'info', badge: 'ONLINE', line: greet?.text || pick(brain.t.online), hold: 6000 });
+  };
   if (config.guide?.welcome) {
     const hooks = await host.hooksStatus();
     if (!config.welcomed || !hooks.installed) guide.welcome();
-    else panel.say({ kind: 'info', line: pick(brain.t.online), hold: 4000 });
+    else await hello();
   } else if ((await host.llmStatus()) !== 'booting') {
-    panel.say({ kind: 'info', line: pick(brain.t.online), hold: 4000 });
+    await hello();
   }
 }
 

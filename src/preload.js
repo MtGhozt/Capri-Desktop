@@ -42,4 +42,5 @@ contextBridge.exposeInMainWorld('host', {
   getMenu: (opts) => ipcRenderer.invoke('menu:get', opts || {}),
   setFolded: (on) => ipcRenderer.send('overlay:folded', Boolean(on)),
   menuAction: (payload) => ipcRenderer.invoke('menu:action', payload),
+  greet: () => ipcRenderer.invoke('greet'),
 });

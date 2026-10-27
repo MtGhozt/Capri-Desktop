@@ -21,6 +21,7 @@ const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { isWakeCommand } = require('./wake-command');
 const { pickLine } = require('./lines-es');
+const { GREETINGS, pickGreeting } = require('./greetings');
 const { windowContext } = require('./context');
 const { createComments } = require('./comments');
 const { createGameMode } = require('./game-mode');
@@ -403,11 +404,14 @@ async function gameLeave() {
 }
 
 function ttsOn() {
+  return voiceReplyOn() && !ttsLoading; // while OmniVoice boots the bubble answers with blips
+}
+
+// Same as ttsOn() without the loading check: a cached greeting is a wav, no engine needed.
+function voiceReplyOn() {
   const cfg = config.load();
   if (cfg.muted) return false;
-  const mode = String(cfg.voice?.replyMode || 'voice').toLowerCase();
-  if (mode !== 'voice') return false;
-  if (ttsLoading) return false; // OmniVoice is booting: the bubble answers with blips
+  if (String(cfg.voice?.replyMode || 'voice').toLowerCase() !== 'voice') return false;
   const kind = String(cfg.voice?.tts || 'auto').toLowerCase();
   return kind !== 'off' && kind !== 'none' && kind !== 'false';
 }
@@ -746,6 +750,19 @@ function registerIpc() {
     applyMenuAction(payload.id, payload.value);
     return { ok: true };
   });
+  // her hello at boot: the overlay shows it, and it plays from the cached wav if there is one
+  ipcMain.handle('greet', () => {
+    const picked = pickGreeting({ last: config.load().greeting?.last || null });
+    config.save({ greeting: { last: picked.id } });
+    if (voiceReplyOn() && speakQueue) {
+      const rid = speakQueue.start();
+      if (rid) {
+        voice?.greet?.(picked.id, picked.text, rid);
+        speakQueue.flush(rid);
+      }
+    }
+    return picked;
+  });
   ipcMain.handle('llm:status', () => lms?.status() || 'ready');
   ipcMain.handle('chat:send', async (_e, text) => {
     const line = String(text || '').trim();
@@ -938,6 +955,7 @@ function main() {
         sendCommand('line', { badge: COMMENT_BADGE[kind] || 'CAPRI', text: line });
       },
     });
+    voice.prepareGreetings(GREETINGS);
     voice.start();
     gameMode = createGameMode({
       enabled: () => config.load().gaming?.mode !== 'off',
