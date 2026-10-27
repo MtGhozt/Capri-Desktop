@@ -51,8 +51,34 @@ function screenRect(r) {
   return Object.values(out).every(Number.isFinite) && out.w > 0 && out.h > 0 ? out : null;
 }
 
+// The command line that starts a program through `cmd /c start`, so it isn't her child: closing her
+// with its process tree (Task Manager, taskkill /T) must not take what she opened with her (it
+// once took the Grok Bot app down). null when a value can't go safely through cmd (a quote, a %
+// that could expand, a line break): then it's started directly, as before.
+function startLine(file, args = [], cwd = '') {
+  const parts = [file, cwd, ...args].map((v) => String(v ?? ''));
+  if (!file || parts.some((v) => /["%\r\n\0]/.test(v))) return null;
+  const q = (v) => `"${v}"`;
+  const dir = cwd ? ` /d ${q(cwd)}` : '';
+  const rest = args.map((v) => ` ${q(String(v))}`).join('');
+  return `/d /s /c "start ""${dir} ${q(file)}${rest}"`;
+}
+
 function startDetached(file, args, { cwd } = {}) {
   return new Promise((resolve, reject) => {
+    if (process.platform === 'win32' && !fs.existsSync(file)) {
+      reject(Object.assign(new Error(`not found: ${file}`), { code: 'ENOENT' }));
+      return;
+    }
+    const line = process.platform === 'win32' ? startLine(file, args, cwd) : null;
+    if (line) {
+      const cmd = spawn(process.env.ComSpec || 'cmd.exe', [line], {
+        windowsVerbatimArguments: true, windowsHide: true, stdio: 'ignore',
+      });
+      cmd.once('error', reject);
+      cmd.once('exit', (code) => (code === 0 ? resolve() : reject(new Error(`start exited ${code}`))));
+      return;
+    }
     const child = spawn(file, args, { cwd, detached: true, stdio: 'ignore', windowsHide: false });
     child.once('error', reject);
     child.once('spawn', () => {
@@ -144,4 +170,4 @@ async function lookups(shell, env = process.env) {
   return found;
 }
 
-module.exports = { SCRIPT, screenRect, exists, realDeps, readShortcut, lookups, regValue, regQuery };
+module.exports = { SCRIPT, screenRect, startLine, exists, realDeps, readShortcut, lookups, regValue, regQuery };

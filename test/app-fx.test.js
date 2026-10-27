@@ -114,3 +114,16 @@ test('the spark only for an app that really opened', async () => {
   assert.equal(res.ok, false);
   assert.ok(!calls.some((c) => c[0] === 'spark'));
 });
+
+test('apps start through cmd start, so closing her never takes them with her', () => {
+  const { startLine } = require('../src/main/app-host');
+  assert.equal(
+    startLine('C:\\Software\\Grok\\Grok Bot\\Grok Bot.exe', [], 'C:\\Software\\Grok\\Grok Bot'),
+    '/d /s /c "start "" /d "C:\\Software\\Grok\\Grok Bot" "C:\\Software\\Grok\\Grok Bot\\Grok Bot.exe""',
+  );
+  assert.equal(startLine('C:\\S\\steam.exe', ['-applaunch', '367520']), '/d /s /c "start "" "C:\\S\\steam.exe" "-applaunch" "367520""');
+  // what cmd could misread: started directly instead
+  assert.equal(startLine('C:\\a%PATH%\\x.exe'), null);
+  assert.equal(startLine('C:\\x.exe', ['say "hi"']), null);
+  assert.equal(startLine(''), null);
+});
