@@ -1,0 +1,11 @@
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\GOG.com\Games\1207658924
+    gameName    REG_SZ    The Witcher
+    exe    REG_SZ    __WITCHER__
+    path    REG_SZ    __WITCHER_DIR__
+    launchParam    REG_SZ    -fast
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\GOG.com\Games\1
+    gameName    REG_SZ    Uninstalled Game
+    exe    REG_SZ    C:\nope\game.exe
+

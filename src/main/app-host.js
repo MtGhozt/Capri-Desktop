@@ -75,6 +75,11 @@ async function regValue(key, value) {
   return m ? m[1].trim() : null;
 }
 
+// `reg query <key> /s`, '' when the key isn't there
+function regQuery(key) {
+  return run('reg.exe', ['query', key, '/s'], 10000).catch(() => '');
+}
+
 // A shortcut's target (Electron reads .lnk files itself): { target, args } or null.
 function readShortcut(shell, file) {
   try {
@@ -131,4 +136,4 @@ async function lookups(shell, env = process.env) {
   return found;
 }
 
-module.exports = { SCRIPT, exists, realDeps, readShortcut, lookups };
+module.exports = { SCRIPT, exists, realDeps, readShortcut, lookups, regValue, regQuery };

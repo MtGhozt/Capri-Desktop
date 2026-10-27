@@ -1,0 +1,18 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"__ROOT__"
+		"label"		""
+		"apps"
+		{
+			"105600"		"803964902"
+			"228980"		"261764507"
+		}
+	}
+	"1"
+	{
+		"path"		"__LIB2__"
+		"label"		"Juegos"
+	}
+}

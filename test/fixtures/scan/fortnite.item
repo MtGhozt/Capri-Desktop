@@ -1,0 +1,9 @@
+{
+	"DisplayName": "Fortnite",
+	"AppName": "Fortnite",
+	"CatalogNamespace": "fn",
+	"CatalogItemId": "4fe75bbc5a674f4f9b356b5c90567da5",
+	"InstallLocation": "__FN__",
+	"LaunchExecutable": "FortniteGame/Binaries/Win64/FortniteBootstrapper.exe",
+	"AppCategories": ["public", "games", "applications"]
+}

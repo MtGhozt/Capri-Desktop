@@ -1,0 +1,7 @@
+{
+	"DisplayName": "Gone Game",
+	"AppName": "Gone",
+	"InstallLocation": "__NOPE__",
+	"LaunchExecutable": "Gone.exe",
+	"AppCategories": ["games"]
+}
