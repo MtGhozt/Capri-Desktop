@@ -968,8 +968,13 @@ function main() {
     windowWatch = startWindowWatch({
       overlay,
       onUpdate: (data) => {
-        // a click on the taskbar brings it up over her: sitting on it, her legs would vanish behind it
-        if (data.taskbar && !lastWindows?.taskbar && config.load().rest === 'taskbar') raiseOverlay();
+        const rest = config.load().rest === 'taskbar';
+        // The bar coming up (the Windows key, the pointer at the bottom, a click on it) and Start
+        // or the search opening: Windows puts them over her, and with her legs over the bar she
+        // would vanish behind it. Back on top.
+        const barUp = Boolean(rest && lastWindows && data.bar?.shown && !lastWindows.bar?.shown);
+        const start = Boolean(lastWindows && data.start && !lastWindows.start);
+        if (barUp || start || (rest && data.taskbar && !lastWindows?.taskbar)) raiseOverlay();
         lastWindows = data;
         gameMode?.update(data);
         comments?.observe(windowContext(data, { apps: config.load().gaming?.apps || [] }));
