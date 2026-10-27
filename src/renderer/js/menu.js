@@ -9,6 +9,12 @@ const REPLY_OPTIONS = [
   { id: 'silent', label: 'SILENCIO' },
 ];
 
+const CLOSE_OPTIONS = [
+  { id: 'graceful', label: 'CON CUIDADO' },
+  { id: 'ask', label: 'PREGUNTAR' },
+  { id: 'force', label: 'FORZAR' },
+];
+
 const THEME_OPTIONS = [
   { id: 'cyberpunk', label: 'CYBERPUNK' },
   { id: 'capri', label: 'CAPRI' },
@@ -30,6 +36,13 @@ export class AppMenu {
     this.capturing = false; // OÍDO › Tecla para hablar: waiting for the new combo
     this.talkNote = '';     // what came of the last combo (taken, saved...)
     this.lastState = null;
+    this.view = 'main';     // 'apps': her app table instead of the menu (Paso 4C)
+    this.appOpen = null;    // the app being edited
+    this.appNote = '';      // what came of the last add / save / delete
+    this.appDelete = null;  // BORRAR pressed once: the next press deletes
+    this.linkForm = false;  // Añadir enlace open
+    this.testText = '';     // Probar comando
+    this.testResult = '';
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -79,7 +92,9 @@ export class AppMenu {
     this.onOpenChange?.(true);
     try {
       const state = await this.host.getMenu({ folded: this.folded() });
-      this.expanded = expand;
+      this.expanded = expand === 'apps' ? null : expand;
+      this.view = expand === 'apps' ? 'apps' : 'main';
+      this.resetApps();
       this.confirmForget = false;
       this.fixNote = '';
       this.at = { x, y };
@@ -110,6 +125,8 @@ export class AppMenu {
     this.el.hidden = true;
     this.capturing = false;
     this.talkNote = '';
+    this.view = 'main';
+    this.resetApps();
     this.useKeyboard(false);
     this.onOpenChange?.(false);
   }
@@ -119,6 +136,15 @@ export class AppMenu {
     if (this.keyboard === on) return;
     this.keyboard = on;
     this.host.menuAction({ id: 'menu-keyboard', value: on }).catch(() => {});
+  }
+
+  resetApps() {
+    this.appOpen = null;
+    this.appNote = '';
+    this.appDelete = null;
+    this.linkForm = false;
+    this.testText = '';
+    this.testResult = '';
   }
 
   rect() {
@@ -187,7 +213,7 @@ export class AppMenu {
 
     const rail = build('div', 'appmenu__rail');
     rail.append(
-      build('span', 'appmenu__rail-text', 'CAPRI.SYS // OVERLAY CONFIG'),
+      build('span', 'appmenu__rail-text', this.view === 'apps' ? 'CAPRI.SYS // APPS' : 'CAPRI.SYS // OVERLAY CONFIG'),
       build('span', 'appmenu__rail-text', 'LOCAL LINK'),
     );
 
@@ -242,7 +268,7 @@ export class AppMenu {
       body.append(row);
     };
 
-    const selector = (label, { options, current, onChange }) => {
+    const selector = (label, { options, current, onChange }, into = body) => {
       const index = Math.max(0, options.findIndex((o) => String(o.id) === String(current)));
       const row = build('div', 'appmenu__row');
       row.append(build('span', 'appmenu__label', label));
@@ -267,8 +293,17 @@ export class AppMenu {
       });
       box.append(back, value, next);
       row.append(box);
-      body.append(row);
+      into.append(row);
     };
+
+    if (this.view === 'apps') {
+      this.appsView(state, { body, build, kbd, section, action, selector });
+      plate.append(rail, body, keys);
+      this.el.replaceChildren(plate);
+      if (this.open && this.at) this.place();
+      this.useKeyboard(true); // its text fields
+      return;
+    }
 
     // AUDIO
     section('AUDIO');
@@ -308,6 +343,18 @@ export class AppMenu {
     if (this.expanded === 'fixes') body.append(this.fixPanel(hearing, build));
     body.append(this.sensitivityRow(hearing, build));
     body.append(this.talkKeyRow(hearing, build, kbd));
+
+    // APPS: what "abre X" / "cierra X" reach, in a panel of its own
+    section('APPS');
+    action('Mis apps', {
+      value: `${(state.apps || []).length} APPS`,
+      chevron: 'apps',
+      onClick: () => {
+        this.view = 'apps';
+        this.resetApps();
+        this.render(state);
+      },
+    });
 
     // CLIPS
     section('CLIPS');
@@ -353,6 +400,214 @@ export class AppMenu {
     this.el.replaceChildren(plate);
     if (this.open && this.at) this.place();
     this.useKeyboard(this.expanded === 'fixes' || this.capturing);
+  }
+
+  // Her app table: the list (each one editable: aliases, how to close it, delete), adding a
+  // program or a link, and "Probar comando" (what she would do, done nothing).
+  appsView(state, { body, build, section, action, selector }) {
+    const list = state.apps || [];
+    action('◀ Volver al menú', {
+      onClick: () => {
+        this.view = 'main';
+        this.resetApps();
+        this.render(state);
+      },
+    });
+
+    section('APPS');
+    const items = build('div', 'appmenu__apps-list');
+    if (!list.length) items.append(build('span', 'appmenu__meta', 'SIN APPS TODAVÍA'));
+    for (const app of list) {
+      const open = this.appOpen === app.name;
+      const row = build('button', 'appmenu__row appmenu__row--action appmenu__app');
+      row.type = 'button';
+      row.append(build('span', 'appmenu__label', app.name), build('span', 'appmenu__meta', app.typeLabel.toUpperCase()));
+      const mark = build('span', 'appmenu__chevron', '›');
+      if (open) mark.classList.add('is-open');
+      row.append(mark);
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.appOpen = open ? null : app.name;
+        this.appDelete = null;
+        this.appNote = '';
+        this.rerender();
+      });
+      items.append(row);
+      items.append(build('div', 'appmenu__hint appmenu__app-aliases', app.aliases.length ? `alias: ${app.aliases.join(', ')}` : 'sin alias'));
+      if (open) items.append(this.appEditor(app, { build, selector }));
+    }
+    body.append(items);
+
+    section('AÑADIR');
+    action('Buscar programa…', {
+      value: 'EXE / LNK',
+      onClick: async () => {
+        const res = await this.host.menuAction({ id: 'apps-pick-program' }).catch(() => ({ ok: false, message: 'No se pudo.' }));
+        this.appNote = res?.ok ? `AÑADIDA: ${res.name}` : res?.message || '';
+        await this.refresh();
+      },
+    });
+    action('Añadir enlace', {
+      chevron: 'link',
+      onClick: () => {
+        this.linkForm = !this.linkForm;
+        this.appNote = '';
+        this.rerender();
+      },
+    });
+    if (this.linkForm) body.append(this.linkEditor(build));
+    if (this.appNote) body.append(build('div', 'appmenu__hint appmenu__app-note', this.appNote));
+
+    section('PROBAR COMANDO');
+    const test = build('div', 'appmenu__fix appmenu__apps-test');
+    const input = this.textInput(build, this.testText, 'abre Discord y YouTube', 80);
+    const result = build('div', 'appmenu__hint', this.testResult || 'Escribe una orden: te digo qué haría, sin hacerlo.');
+    let timer = null;
+    const check = async () => {
+      this.testText = input.value;
+      const res = await this.host.menuAction({ id: 'apps-test', value: input.value }).catch(() => null);
+      this.testResult = res?.text || '';
+      result.textContent = this.testResult || 'Escribe una orden: te digo qué haría, sin hacerlo.';
+    };
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(check, 250);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        check();
+      }
+    });
+    test.append(input, result);
+    body.append(test);
+  }
+
+  // A text field that keeps its keys to itself (Esc still closes the menu).
+  textInput(build, value, placeholder, max = 60) {
+    const input = build('input', 'appmenu__input');
+    input.type = 'text';
+    input.value = value || '';
+    input.placeholder = placeholder;
+    input.maxLength = max;
+    input.spellcheck = false;
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.hide();
+      }
+    });
+    for (const type of ['mousedown', 'click']) input.addEventListener(type, (e) => e.stopPropagation());
+    return input;
+  }
+
+  appEditor(app, { build, selector }) {
+    const panel = build('div', 'appmenu__fix appmenu__app-edit');
+    panel.append(build('div', 'appmenu__hint appmenu__app-target', app.target));
+    const field = build('label', 'appmenu__fix-field');
+    const aliases = this.textInput(build, app.aliases.join(', '), 'otros nombres, separados por comas', 200);
+    field.append(build('span', 'appmenu__fix-label', 'Alias'), aliases);
+    panel.append(field);
+    let close = app.close;
+    if (app.processes.length) {
+      // the selector helper appends to the menu body: build it into this panel instead
+      const holder = build('div');
+      selector('Al cerrar', {
+        options: CLOSE_OPTIONS,
+        current: close,
+        onChange: (id) => {
+          close = id;
+          this.saveApp(app, aliases.value, close);
+        },
+      }, holder);
+      panel.append(...holder.childNodes);
+      panel.append(build('div', 'appmenu__hint', `proceso: ${app.processes.join(', ')}`));
+    } else {
+      panel.append(build('div', 'appmenu__hint', 'Sin proceso: esta no la puedo cerrar.'));
+    }
+    const actions = build('div', 'appmenu__fix-actions');
+    const del = build('button', 'appmenu__toggle-btn appmenu__app-delete', this.appDelete === app.name ? 'CONFIRMAR' : 'BORRAR');
+    del.type = 'button';
+    if (this.appDelete === app.name) del.classList.add('is-danger');
+    del.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (this.appDelete !== app.name) {
+        this.appDelete = app.name;
+        this.rerender();
+        return;
+      }
+      await this.host.menuAction({ id: 'apps-remove', value: app.name });
+      this.appOpen = null;
+      this.appDelete = null;
+      this.appNote = `BORRADA: ${app.name}`;
+      await this.refresh();
+    });
+    const save = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'GUARDAR');
+    save.type = 'button';
+    save.dataset.state = 'on';
+    save.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.saveApp(app, aliases.value, close);
+    });
+    aliases.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.saveApp(app, aliases.value, close);
+      }
+    });
+    actions.append(del, save);
+    panel.append(actions);
+    return panel;
+  }
+
+  async saveApp(app, aliases, close) {
+    const res = await this.host.menuAction({ id: 'apps-update', value: { name: app.name, aliases, close } })
+      .catch(() => ({ ok: false, message: 'No se pudo guardar.' }));
+    this.appNote = res?.ok ? `GUARDADA: ${app.name}` : res?.message || 'No se pudo guardar.';
+    await this.refresh();
+  }
+
+  linkEditor(build) {
+    const panel = build('div', 'appmenu__fix');
+    const field = (label, placeholder) => {
+      const wrap = build('label', 'appmenu__fix-field');
+      const input = this.textInput(build, '', placeholder, label === 'URL' ? 300 : 40);
+      wrap.append(build('span', 'appmenu__fix-label', label), input);
+      panel.append(wrap);
+      return input;
+    };
+    const name = field('Nombre', 'Twitch');
+    const url = field('URL', 'https://www.twitch.tv');
+    const save = async () => {
+      if (!name.value.trim()) return name.focus();
+      if (!url.value.trim()) return url.focus();
+      const res = await this.host.menuAction({ id: 'apps-add-link', value: { name: name.value, url: url.value } })
+        .catch(() => ({ ok: false, message: 'No se pudo.' }));
+      this.appNote = res?.ok ? `AÑADIDA: ${res.name}` : res?.message || 'No se pudo.';
+      if (res?.ok) this.linkForm = false;
+      return this.refresh();
+    };
+    for (const input of [name, url]) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          save();
+        }
+      });
+    }
+    const actions = build('div', 'appmenu__fix-actions');
+    const btn = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'AÑADIR');
+    btn.type = 'button';
+    btn.dataset.state = 'on';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      save();
+    });
+    actions.append(btn);
+    panel.append(actions);
+    requestAnimationFrame(() => name.focus());
+    return panel;
   }
 
   rerender() {
