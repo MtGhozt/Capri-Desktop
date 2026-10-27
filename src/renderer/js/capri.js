@@ -7,6 +7,7 @@
 
 import { SpriteRenderer, SPRITE } from './sprite.js';
 import { ACTS, NEUTRAL, Player } from './acting.js';
+import { ledgeY } from './ledge.js';
 import { sleep, rand, pick, clamp, lerp, ease, tween, reducedMotion } from './util.js';
 
 const ON_TWOS = 1000 / 12;
@@ -46,6 +47,7 @@ export class Capri {
     this.perch = null;    // { id, dx }: the window she sits on, and where along it
     this.peekSide = null; // left | right | top
     this.windows = { fg: 0, wins: [] };
+    this.bar = null;      // the taskbar of her monitor, in her coordinates: { x, y, w, h, shown }
     this.busy = false;
     this.hidden = false;
     this.stowed = false;  // folded away in her biochip (Ctrl+Alt+C)
@@ -149,7 +151,7 @@ export class Capri {
       // the taskbar slid up or down under her: she rides it, legs still over its top
       const dx = clamp(this.perch.dx, 50, w - 60);
       this.perch.dx = dx;
-      this.pos = this.seat(this.ledge(), dx);
+      this.ride(this.seat(this.ledge(), dx));
     }
     this.place();
   }
@@ -184,7 +186,7 @@ export class Capri {
   // Is this screen point on her body? Uses the cut-out's alpha so empty space stays click-through.
   hit(x, y) {
     if (this.hidden || this.p.alpha < 0.5) return false;
-    if (this.perch?.id === 'taskbar' && y > this.view.floor) return false; // the taskbar under her legs stays clickable
+    if (this.perch?.id === 'taskbar' && y > this.ledge().y) return false; // the taskbar under her legs stays clickable
     const s = this.scale;
     const fy = this.pos.y + this.bob;
     if (this.upside) {
@@ -267,6 +269,7 @@ export class Capri {
 
   setWindows(data) {
     this.windows = data;
+    this.bar = data?.bar || null;
     if (this.stance !== 'sit' || this.busy || this.dragging) return;
     const win = this.perchWin(this.perch.id);
     const dx = win ? clamp(this.perch.dx, 50, win.w - 60) : 0;
@@ -275,10 +278,38 @@ export class Capri {
       return;
     }
     const to = this.seat(win, dx);
+    if (win.id === 'taskbar') {
+      if (to.x !== this.pos.x || to.y !== this.pos.y) this.ride(to); // the bar slid under her
+      return;
+    }
     if (to.x !== this.pos.x || to.y !== this.pos.y) {
       this.pos = to; // ride along with the window
       this.place();
     }
+  }
+
+  // The bar moved under her (auto-hide): a short catch-up on the same beat as the bar, from
+  // wherever the last one left her. Nothing if she has left the ledge in the meantime.
+  ride(to, ms = 150) {
+    const from = { x: this.pos.x, y: this.pos.y };
+    const token = (this.rideToken = (this.rideToken || 0) + 1);
+    const seated = () => this.stance === 'sit' && this.perch?.id === 'taskbar' && token === this.rideToken;
+    if (reducedMotion.matches || ms <= 0) {
+      if (seated()) {
+        this.pos = { ...to };
+        this.place();
+      }
+      return;
+    }
+    const at = performance.now();
+    const step = (now) => {
+      if (!seated()) return;
+      const t = Math.min(1, (now - at) / ms);
+      this.pos = { x: lerp(from.x, to.x, t), y: lerp(from.y, to.y, t) };
+      this.place();
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   // Where her feet go so that her hips rest on the window's top edge.
@@ -304,10 +335,12 @@ export class Capri {
     return false; // window not in the list any more
   }
 
-  // The top of the taskbar (the bottom of her screen), as a ledge to sit on like a window's: her
-  // legs hang down behind it.
+  // The taskbar as a ledge to sit on like a window's: its visible top edge while it is up, the
+  // bottom of her window while it is hidden (or when there is no bar on her screen). Her legs
+  // hang down behind it.
   ledge() {
-    return { id: 'taskbar', x: 0, y: this.view.floor, w: this.view.w, h: this.view.h - this.view.floor, max: false };
+    const y = ledgeY({ floor: this.view.floor, bar: this.bar });
+    return { id: 'taskbar', x: 0, y, w: this.view.w, h: this.view.h - y, max: false };
   }
 
   // What she's perched on, from its id: a window, or the taskbar.
