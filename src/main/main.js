@@ -584,6 +584,7 @@ function apps() {
       }),
       line: (kind, values) => fillLine(pickLine(kind), values),
       log: appLog,
+      event: (kind, text) => sendCommand('box-log', { kind, text }),
     });
   }
   return appFlow;
@@ -867,6 +868,7 @@ function applyMenuAction(id, value) {
     case 'gaming-mode': updateConfig({ gaming: { mode: value === 'off' ? 'off' : 'auto' } }); break;
     case 'comments': updateConfig({ comments: { enabled: Boolean(value) } }); break;
     case 'app-fx': updateConfig({ fx: { apps: Boolean(value) } }); break;
+    case 'scanlines': updateConfig({ fx: { scanlines: Boolean(value) } }); break;
     case 'persona-reload': {
       const r = llm.reloadPersona();
       sendCommand('line', {
@@ -1048,6 +1050,7 @@ function menuState(extra = {}) {
       gaming: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
       comments: cfg.comments?.enabled !== false,
       appFx: cfg.fx?.apps !== false,
+      scanlines: cfg.fx?.scanlines !== false,
     },
     hearing: {
       fixes: cleanFixes(cfg.hearing?.fixes),

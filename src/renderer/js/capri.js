@@ -7,14 +7,16 @@
 // At rest she stands on the bottom edge (grounded): her feet on the top of the taskbar while it
 // is up, on the bottom of the screen while it is hidden (auto-hide), riding it up and down.
 
-import { SpriteRenderer, SPRITE } from './sprite.js';
+import { SpriteRenderer, SPRITE, PoseLayer } from './sprite.js';
 import { ACTS, NEUTRAL, Player } from './acting.js';
 import { ledgeY } from './ledge.js';
+import { POSES, poseFile, poseScale, boxSeat, LIE_FPS } from './poses.js';
 import { sleep, rand, pick, clamp, lerp, ease, tween, reducedMotion } from './util.js';
 
 const ON_TWOS = 1000 / 12;
 const ON_ONES = 1000 / 24;
 const ASLEEP = 1000 / 6;
+const ON_FIVES = 1000 / LIE_FPS;
 const SLEEP_AFTER = 10 * 60 * 1000;
 const DOZE_AFTER = 20 * 1000; // asleep this long, she comes apart down to her mask
 const GRAVITY = 2600; // px/s²
@@ -33,12 +35,22 @@ const INK = [0.08, 0.06, 0.11];
 const RED = [1, 0.13, 0.32];
 
 export class Capri {
-  constructor({ root, canvas, image, fx, voice }) {
+  constructor({ root, canvas, image, fx, voice, poses = {} }) {
     this.root = root;
     this.canvas = canvas;
     this.sprite = new SpriteRenderer(canvas, image);
+    this.poseCanvas = document.createElement('canvas');
+    this.poseCanvas.className = 'capri__pose';
+    this.poseCanvas.hidden = true;
+    this.poseCanvas.setAttribute('aria-hidden', 'true');
+    root.appendChild(this.poseCanvas);
+    this.poseLayer = new PoseLayer(this.poseCanvas);
+    this.poseImages = poses;
+    this.poseMaps = {};
+    this.poseStart = 0;
     this.fx = fx;
     this.voice = voice;
+    this.messageBox = null; // () => ledge | null, set by app.js when the box is up
 
     this.scale = 0.6;
     this.view = { w: innerWidth, h: innerHeight, floor: innerHeight }; // floor: the bottom of the work area
@@ -103,6 +115,9 @@ export class Capri {
     this.onHome = null;   // (fraction of the screen width): you dropped her somewhere new to rest
 
     this.alphaMap = this.buildAlphaMap(image);
+    for (const [name, img] of Object.entries(poses)) {
+      if (img) this.poseMaps[name] = this.buildPoseMap(img);
+    }
     this.setScale(this.scale);
     this.bindPointer();
     this.loop = this.loop.bind(this);
@@ -130,9 +145,40 @@ export class Capri {
     return data;
   }
 
+  buildPoseMap(image) {
+    const w = image.naturalWidth || image.width;
+    const h = image.naturalHeight || image.height;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(image, 0, 0);
+    return { data: ctx.getImageData(0, 0, w, h).data, width: w, height: h };
+  }
+
+  get lying() {
+    return this.stance === 'lie';
+  }
+
+  onBox() {
+    return this.perch?.kind === 'box';
+  }
+
+  lieSpec() {
+    return POSES[this.perch?.pose] || POSES.lieA;
+  }
+
+  currentPoseFile() {
+    const pose = this.perch?.pose;
+    if (!pose || pose === 'stand') return null;
+    return poseFile(pose, this.lastDraw || 0, this.poseStart || 0);
+  }
+
   setScale(scale) {
     this.scale = scale;
     this.sprite.resize(scale);
+    const spec = this.lieSpec();
+    this.poseLayer.resize(poseScale(scale), spec);
     this.pivot();
     this.place();
   }
@@ -140,15 +186,24 @@ export class Capri {
   // Flip, lean and squash all pivot on her feet, or on her seat when she sits on a ledge
   // (so a squash presses her onto it instead of pulling her down through it).
   pivot() {
+    if (this.lying) {
+      const spec = this.lieSpec();
+      const s = poseScale(this.scale);
+      if (this.poseCanvas?.style) {
+        this.poseCanvas.style.transformOrigin = `${spec.contact.x * s}px ${spec.contact.y * s}px`;
+      }
+      return;
+    }
     const s = this.scale;
     const fx = (SPRITE.pad + SPRITE.feet.x) * s;
     const fy = (SPRITE.pad + (this.stance === 'sit' ? SPRITE.hip : SPRITE.feet.y)) * s;
-    this.canvas.style.transformOrigin = `${fx}px ${fy}px`;
+    if (this.canvas?.style) this.canvas.style.transformOrigin = `${fx}px ${fy}px`;
   }
 
   setView(w, h, floor = h) {
     this.view = { w, h, floor };
-    if (this.stance === 'stand') {
+    if (this.onBox()) this.followBox();
+    else if (this.stance === 'stand') {
       this.pos.x = clamp(this.pos.x, 60, w - 60);
       if (!this.followLedge()) this.pos.y = clamp(this.pos.y, SPRITE.height * this.scale, this.floor);
     }
@@ -160,6 +215,18 @@ export class Capri {
   }
 
   place() {
+    if (this.lying) {
+      const spec = this.lieSpec();
+      const s = poseScale(this.scale);
+      const left = this.pos.x - spec.contact.x * s;
+      const top = this.pos.y - spec.contact.y * s + this.bob;
+      this.root.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+      if (this.poseCanvas?.style) {
+        this.poseCanvas.style.transform = `scale(${(this.facing * this.sx).toFixed(3)}, ${this.sy.toFixed(3)})`;
+      }
+      this.onMove?.(this.head());
+      return;
+    }
     const s = this.scale;
     const left = this.pos.x - (SPRITE.pad + SPRITE.feet.x) * s;
     const top = this.pos.y - (SPRITE.pad + SPRITE.feet.y) * s + this.bob;
@@ -171,8 +238,15 @@ export class Capri {
 
   // her face on screen, plus `top`: the tips of her mane
   head(at = this.pos, facing = this.facing) {
-    const s = this.scale;
     const bob = at === this.pos ? this.bob : 0;
+    if (this.lying) {
+      const spec = this.lieSpec();
+      const s = poseScale(this.scale);
+      const dx = (spec.head.x - spec.contact.x) * s * facing;
+      const dy = (spec.contact.y - spec.head.y) * s;
+      return { x: at.x + dx, y: at.y - dy + bob, top: at.y - spec.contact.y * s + bob };
+    }
+    const s = this.scale;
     const dx = (SPRITE.head.x - SPRITE.feet.x) * s * facing;
     const dy = (SPRITE.feet.y - SPRITE.head.y) * s;
     if (at === this.pos && this.upside) {
@@ -187,6 +261,22 @@ export class Capri {
     if (this.hidden || this.p.alpha < 0.5) return false;
     // the edge under her feet stays the taskbar's: clickable, and auto-hide brings it up from there
     if (this.grounded && y >= this.floor - 2) return false;
+    if (this.lying) {
+      const spec = this.lieSpec();
+      const s = poseScale(this.scale);
+      const fy = this.pos.y + this.bob;
+      const sx = spec.contact.x + ((x - this.pos.x) / s) * this.facing;
+      const sy = spec.contact.y - (fy - y) / s;
+      const file = this.currentPoseFile();
+      const map = this.poseMaps[file];
+      if (!map) return Math.abs(x - this.pos.x) < spec.width * s * 0.35 && y < fy + 8 && y > fy - spec.height * s;
+      for (const [dx, dy] of [[0, 0], [4, 0], [-4, 0], [0, 4], [0, -4]]) {
+        const px = Math.round(sx + dx), py = Math.round(sy + dy);
+        if (px < 0 || py < 0 || px >= map.width || py >= map.height) continue;
+        if (map.data[(py * map.width + px) * 4 + 3] > 40) return true;
+      }
+      return false;
+    }
     const s = this.scale;
     const fy = this.pos.y + this.bob;
     if (this.upside) {
@@ -210,9 +300,20 @@ export class Capri {
 
   // Axis-aligned box around the cut-out, for placing the overlay menu beside her.
   bounds() {
-    const s = this.scale;
     const fy = this.pos.y + this.bob;
     const head = this.head();
+    if (this.lying) {
+      const spec = this.lieSpec();
+      const s = poseScale(this.scale);
+      const left = this.facing === 1
+        ? this.pos.x - spec.contact.x * s
+        : this.pos.x - (spec.width - spec.contact.x) * s;
+      const right = this.facing === 1
+        ? this.pos.x + (spec.width - spec.contact.x) * s
+        : this.pos.x + spec.contact.x * s;
+      return { left, right, top: head.top, bottom: fy + (spec.height - spec.contact.y) * s };
+    }
+    const s = this.scale;
     const left = this.facing === 1
       ? this.pos.x - SPRITE.feet.x * s
       : this.pos.x - (SPRITE.width - SPRITE.feet.x) * s;
@@ -274,6 +375,7 @@ export class Capri {
   setWindows(data) {
     this.windows = data;
     this.bar = data?.bar || null;
+    this.followBox();
     this.followLedge(); // the taskbar slid up or down under her feet
     if (this.stance !== 'sit' || this.busy || this.dragging) return;
     const win = this.perchWin(this.perch.id);
@@ -294,7 +396,7 @@ export class Capri {
   // hides. Also how she catches up when a move kept her from following, and how she gets back
   // on top when the bar comes up over her feet. Returns whether she is on the edge.
   followLedge(ms = 150) {
-    if (this.stance !== 'stand' || this.dragging || this.busy) return false;
+    if (this.onBox() || this.lying || this.stance !== 'stand' || this.dragging || this.busy) return false;
     const y = this.floor;
     if (!this.grounded && this.pos.y <= y + 0.5) return false; // up in the air: not hers to ride
     this.grounded = true;
@@ -422,7 +524,7 @@ export class Capri {
   goToBed() {
     if (this.locked || this.stowed || this.dormant) return Promise.resolve();
     const { to, face } = this.bedSpot();
-    if (this.stance === 'stand' && this.grounded && Math.abs(this.pos.x - to.x) < 2) return Promise.resolve();
+    if (this.stance === 'stand' && this.grounded && !this.onBox() && Math.abs(this.pos.x - to.x) < 2) return Promise.resolve();
     return this.teleport(to, { face });
   }
 
@@ -456,6 +558,7 @@ export class Capri {
   // ---------- frame loop ----------
 
   interval() {
+    if (this.lying) return ON_FIVES;
     if (this.busy || this.stance === 'fall' || this.act?.player.act.fps === 24) return ON_ONES;
     return this.mode === 'sleep' ? ASLEEP : ON_TWOS;
   }
@@ -471,8 +574,15 @@ export class Capri {
   drawFrame(now = performance.now()) {
     this.lastDraw = now;
     this.animate(now);
-    this.sprite.draw(this.p);
+    if (this.lying) this.drawLie();
+    else this.sprite.draw(this.p);
     this.place();
+  }
+
+  drawLie() {
+    const file = this.currentPoseFile();
+    const img = file && this.poseImages[file];
+    this.poseLayer.draw(img, { alpha: this.p.alpha, split: this.p.split || 0 });
   }
 
   // Pick the drawing: the stance's cycle underneath, the current act on top.
@@ -518,7 +628,9 @@ export class Capri {
     p.echo = pose.echo;
     // on a ledge she stays seated: no lifting off it, no sinking through it; on the bottom edge
     // she may float up off it, never sink into the bar
-    const bob = this.stance === 'sit' ? clamp(pose.bob, -3, 2) : this.grounded ? Math.min(0, pose.bob) : pose.bob;
+    const bob = this.lying || this.onBox()
+      ? 0
+      : this.stance === 'sit' ? clamp(pose.bob, -3, 2) : this.grounded ? Math.min(0, pose.bob) : pose.bob;
     this.bob = this.dragging ? 0 : bob;
     this.tilt = this.dragging ? 0 : pose.tilt;
     this.sx = pose.sx;
@@ -533,6 +645,7 @@ export class Capri {
       return;
     }
     if (this.busy || this.dragging) return;
+    this.followBox();
     this.followLedge(); // catch up with the bar if a move kept her from following it
 
     if (now > this.nextTwitch) {
@@ -580,11 +693,24 @@ export class Capri {
   // What she does with herself when nobody needs her.
   wanderStep() {
     if (this.locked) { // FIJO: she stays where you put her
-      this.flourish();
+      if (this.onBox()) this.switchBoxPose();
+      else this.flourish();
       return;
     }
     if (!this.wander || this.stance === 'peek') {
       if (this.stance !== 'peek') this.flourish();
+      return;
+    }
+    if (this.onBox()) {
+      const r = Math.random();
+      if (r < 0.4) this.switchBoxPose();
+      else if (r < 0.65) this.flourish();
+      else this.teleport(this.spot('random'));
+      return;
+    }
+    const box = typeof this.messageBox === 'function' ? this.messageBox() : null;
+    if (box && Math.random() < 0.45) {
+      this.perchOnBox(pick(['lieA', 'lieB', 'stand']));
       return;
     }
     if (this.stance === 'sit') {
@@ -604,6 +730,7 @@ export class Capri {
   }
 
   flourish() {
+    if (this.lying) return;
     if (this.stance === 'sit') this.perform(pick(['look', 'look', 'split']));
     else this.perform(pick(['spin', 'look', 'hop', 'curious', 'split']), this.towardCenter());
   }
@@ -612,7 +739,7 @@ export class Capri {
 
   // Play an act from acting.js. Resolves when it's over (or cut off by a stronger one).
   perform(name, dir = 0, { reach = 1 } = {}) {
-    if (this.stowed || this.dormant) return Promise.resolve(); // nobody to act: she's in her biochip, or just her mask
+    if (this.stowed || this.dormant || this.lying) return Promise.resolve(); // nobody to act: she's in her biochip, or just her mask
     const act = ACTS[name];
     if (reducedMotion.matches && act.fps === 24) {
       if (act.flip) this.facing *= -1;
@@ -637,12 +764,20 @@ export class Capri {
   setStance(stance, { perch = null, peekSide = null, dir = 0 } = {}) {
     this.stopRide();
     this.stance = stance;
-    // standing at the bottom: she's on the edge, and rides it from now on
-    this.grounded = stance === 'stand' && !this.dragging && this.pos.y >= this.floor - 2;
     this.perch = perch;
     this.peekSide = peekSide;
     this.p.sit = stance === 'sit' ? 1 : 0;
+    // standing at the bottom: she's on the edge, and rides it from now on. On the message box she stays there.
+    this.grounded = stance === 'stand' && !this.onBox() && !this.dragging && this.pos.y >= this.floor - 2;
     this.base = this.restBase(dir);
+    if (stance === 'lie') this.poseStart = performance.now();
+    if (this.canvas) this.canvas.hidden = stance === 'lie';
+    if (this.poseCanvas) this.poseCanvas.hidden = stance !== 'lie';
+    this.root.classList?.toggle('is-on-box', this.onBox()); // behind the box: what hangs past its edge is hidden
+    if (stance === 'lie') {
+      const spec = this.lieSpec();
+      this.poseLayer?.resize(poseScale(this.scale), spec);
+    }
     this.pivot();
   }
 
@@ -654,6 +789,7 @@ export class Capri {
   }
 
   baseAct() {
+    if (this.stance === 'lie') return 'stand';
     if (this.stance === 'sit') return 'sit';
     if (this.stance === 'peek') return 'peek';
     if (this.stance === 'fall') return 'fall';
@@ -1125,7 +1261,7 @@ export class Capri {
     this.fx.slices(head.x - 70 * s, head.y - 40 * s, 170 * s, 320 * s);
     await tween(p, { collapse: 1, glitch: 1, dissolve: 0.5, split: 9 }, 170, ease.in);
     p.alpha = 0;
-    const ground = from.y - (this.p.sit ? (SPRITE.feet.y - SPRITE.hip) * s : 0);
+    const ground = from.y - (this.p.sit && !this.lying ? (SPRITE.feet.y - SPRITE.hip) * s : 0);
     if (!this.upside) {
       // the void she leaves behind, like in the show: a black slit with a red line in it
       this.fx.slit(from.x - 10 * s * this.facing, head.top, ground, { width: 56 * s + 10 });
@@ -1341,6 +1477,44 @@ export class Capri {
 
   sitOn({ win, dx }) {
     return this.teleport(this.seat(win, dx), { stance: 'sit', perch: { id: win.id, dx }, face: this.facing });
+  }
+
+  followBox() {
+    if (!this.onBox() || this.busy || this.dragging) return false;
+    const ledge = typeof this.messageBox === 'function' ? this.messageBox() : null;
+    if (!ledge) {
+      // the box closed under her: off somewhere else (FIJO: she stays put, back on her feet)
+      if (!this.locked) this.teleport(this.spot('random'));
+      else this.setStance('stand');
+      return false;
+    }
+    const to = boxSeat(ledge, this.perch.pose || 'stand', { scale: this.scale, dx: this.perch.dx });
+    if (!to) return false;
+    if (Math.abs(to.x - this.pos.x) > 0.5 || Math.abs(to.y - this.pos.y) > 0.5) {
+      this.pos = { x: to.x, y: to.y };
+      this.place();
+    }
+    return true;
+  }
+
+  perchOnBox(pose = 'lieA') {
+    const ledge = typeof this.messageBox === 'function' ? this.messageBox() : null;
+    if (!ledge) return Promise.resolve();
+    const to = boxSeat(ledge, pose, { scale: this.scale });
+    const stance = pose === 'stand' ? 'stand' : 'lie';
+    return this.teleport({ x: to.x, y: to.y }, { stance, perch: { kind: 'box', pose, dx: to.dx }, face: 1 });
+  }
+
+  switchBoxPose() {
+    if (!this.onBox()) return Promise.resolve();
+    const next = pick(['lieA', 'lieB', 'stand'].filter((p) => p !== this.perch.pose));
+    const ledge = typeof this.messageBox === 'function' ? this.messageBox() : null;
+    if (!ledge) return Promise.resolve();
+    const to = boxSeat(ledge, next, { scale: this.scale });
+    this.pos = { x: to.x, y: to.y };
+    this.setStance(next === 'stand' ? 'stand' : 'lie', { perch: { kind: 'box', pose: next, dx: to.dx } });
+    this.drawFrame();
+    return Promise.resolve();
   }
 
   canPossess() {
@@ -1709,17 +1883,19 @@ export class Capri {
 
   bindPointer() {
     let down = null;
-    this.canvas.addEventListener('contextmenu', (e) => {
+    const onContext = (e) => {
       e.preventDefault();
       if (this.hit(e.clientX, e.clientY)) {
         e.stopPropagation();
         this.onMenu?.({ x: e.clientX, y: e.clientY }); // right-click: her menu
       }
-    });
-    this.canvas.addEventListener('mousedown', (e) => {
+    };
+    const onDown = (e) => {
       if (e.button !== 0 || this.busy || !this.hit(e.clientX, e.clientY)) return;
       down = { x: e.clientX, y: e.clientY, pos: { ...this.pos } };
-    });
+    };
+    this.root.addEventListener('contextmenu', onContext);
+    this.root.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', (e) => {
       this.mouse = { x: e.clientX, y: e.clientY }; // a window she's in watches it
       // the button let go where she couldn't hear it (another window, a dialog): she's let go too,
@@ -1768,6 +1944,15 @@ export class Capri {
 
   // Let go of her: onto a ledge if her hips are right at one, otherwise she falls.
   drop() {
+    const box = typeof this.messageBox === 'function' ? this.messageBox() : null;
+    if (box && Math.abs(this.pos.y - box.top) < 36 && this.pos.x > box.x + 24 && this.pos.x < box.x + box.w - 24) {
+      const pose = pick(['lieA', 'lieB', 'stand']);
+      const to = boxSeat(box, pose, { scale: this.scale, dx: this.pos.x - box.x });
+      this.pos = { x: to.x, y: to.y };
+      this.setStance(pose === 'stand' ? 'stand' : 'lie', { perch: { kind: 'box', pose, dx: to.dx } });
+      this.voice.play('land');
+      return;
+    }
     const s = this.scale;
     const hip = this.pos.y - (SPRITE.feet.y - SPRITE.hip) * s;
     for (const win of this.windows.wins) {

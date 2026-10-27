@@ -10,6 +10,7 @@ import { Voice } from './voice.js';
 import { Brain } from './brain.js';
 import { Guide } from './guide.js';
 import { LINES } from './lines.js';
+import { POSE_FILES } from './poses.js';
 import { pick, fmt, sleep, tween, reducedMotion } from './util.js';
 
 const host = window.host;
@@ -28,11 +29,12 @@ const CUTINS = ['grin', 'laugh', 'eyes', 'many', 'look'];
 const WATCH_MS = 2000; // how often she checks the pointer still reaches her
 
 async function boot() {
-  const [config, image, intro, ...cutins] = await Promise.all([
+  const [config, image, intro, posePairs, ...cutins] = await Promise.all([
     host.getConfig(),
     loadImage('../../assets/capri/capri-full.png'),
     Promise.all(GRAB_FRAMES.map((name) => loadImage(`../../assets/capri/intro-${name}.webp`).catch(() => null)))
       .then((cels) => (cels[0] ? Object.fromEntries(GRAB_FRAMES.map((name, i) => [name, cels[i]])) : null)),
+    Promise.all(POSE_FILES.map((name) => loadImage(`../../assets/capri/poses/${name}`).then((img) => [name, img]))),
     ...CUTINS.map((name) => loadImage(`../../assets/capri/cutin-${name}.png`)),
     document.fonts.load('600 16px "Chakra Petch"'),
     document.fonts.load('400 11px "JetBrains Mono"'),
@@ -63,6 +65,8 @@ async function boot() {
   const machine = new Machine('ONLINE');
   machine.dev = Boolean(config.dev);
   const bubble = new Bubble({ el: document.getElementById('bubble'), machine });
+  bubble.setFx(config.fx?.scanlines !== false);
+  bubble.setLogLimit(config.ui?.logLines ?? 4);
   const appMenu = new AppMenu({
     el: document.getElementById('app-menu'),
     host,
@@ -79,7 +83,9 @@ async function boot() {
     image,
     fx,
     voice,
+    poses: Object.fromEntries(posePairs),
   });
+  capri.messageBox = () => bubble.ledge();
   capri.wander = config.wander;
   capri.possessWindows = config.possess;
   capri.restOn = config.rest || 'taskbar';
@@ -136,8 +142,7 @@ async function boot() {
     if (!mouse) return setInteractive(false);
     const r = panel.rect();
     const onPanel = r && mouse.x >= r.left && mouse.x <= r.right && mouse.y >= r.top && mouse.y <= r.bottom;
-    const b = bubble.rect();
-    const onBubble = b && mouse.x >= b.left && mouse.x <= b.right && mouse.y >= b.top && mouse.y <= b.bottom;
+    const onBubble = bubble.hitInput(mouse.x, mouse.y);
     const m = appMenu.rect();
     const onMenu = m && mouse.x >= m.left && mouse.x <= m.right && mouse.y >= m.top && mouse.y <= m.bottom;
     const onDormant = dormant.contains(mouse.x, mouse.y);
@@ -266,6 +271,9 @@ async function boot() {
   bubble.onOpenChange = (open) => {
     if (open) panel.hide();
     refreshHit();
+  };
+  bubble.onPerchChange = (phase) => {
+    capri.nextMove = Math.min(capri.nextMove, performance.now() + (phase === 'open' ? 4000 : 25000));
   };
   appMenu.onOpenChange = (open) => {
     host.menuOpen(open);
@@ -515,6 +523,10 @@ async function boot() {
       await unfold({ chat: true });
       machine.set('LISTENING');
       bubble.setMeter(true);
+      if (evt.wake || evt.score != null) {
+        const pct = Math.round(Number(evt.score) || 0);
+        bubble.note('despierta', `${pct} %`);
+      }
       return;
     }
     if (type === 'level') {
@@ -574,10 +586,12 @@ async function boot() {
       bubble.holdVoice = false;
       bumpIdle();
       await unfold();
+      const line = evt.message || 'Voice sidecar is offline. Chat still works.';
+      bubble.note('sistema', line);
       panel.say({
         kind: 'error',
         badge: 'VOICE',
-        line: evt.message || 'Voice sidecar is offline. Chat still works.',
+        line,
         hold: 10000,
       });
     }
@@ -719,6 +733,8 @@ async function boot() {
     idleMs = Number(cfg.idle?.dormantAfterMs);
     glitchFx = cfg.fx?.glitch !== false;
     dormant.setFx(glitchFx);
+    bubble.setFx(cfg.fx?.scanlines !== false);
+    if (cfg.ui?.logLines) bubble.setLogLimit(cfg.ui.logLines);
     if (cfg.scale !== capri.scale) capri.setScale(cfg.scale);
     if (cfg.lang !== brain.lang) {
       brain.lang = cfg.lang;
@@ -784,6 +800,9 @@ async function boot() {
             edge: capri.grounded, // on the bottom edge: she keeps riding the bar up and down
           },
         });
+        break;
+      case 'box-log': // ABIERTO / CERRADO: an app she opened or closed, in the message box log
+        bubble.note(cmd.kind, cmd.text);
         break;
       case 'app-fx': // her zap before closing an app, her spark after opening one (Paso 4E)
         appFx(cmd);

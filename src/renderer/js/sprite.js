@@ -445,3 +445,44 @@ export class SpriteRenderer {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 }
+
+// Full drawings for lying poses (not the standing cut-out). Same canvas transform as Capri.place().
+export class PoseLayer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d', { alpha: true });
+    this.scale = 1;
+    this.size = { width: 721, height: 644 };
+  }
+
+  resize(scale, size = this.size) {
+    this.scale = scale;
+    this.size = size;
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.round(size.width * scale);
+    const height = Math.round(size.height * scale);
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
+    this.canvas.width = Math.round(width * dpr);
+    this.canvas.height = Math.round(height * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  draw(image, { alpha = 1, split = 0 } = {}) {
+    const { ctx, canvas, scale } = this;
+    const w = canvas.style.width ? parseFloat(canvas.style.width) : this.size.width * scale;
+    const h = canvas.style.height ? parseFloat(canvas.style.height) : this.size.height * scale;
+    ctx.clearRect(0, 0, w + 4, h + 4);
+    if (!image) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (split > 0) {
+      ctx.globalCompositeOperation = 'screen';
+      ctx.drawImage(image, split, 0, w, h);
+      ctx.drawImage(image, -split, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    ctx.drawImage(image, 0, 0, w, h);
+    ctx.restore();
+  }
+}

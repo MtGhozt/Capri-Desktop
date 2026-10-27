@@ -24,6 +24,7 @@ Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
 - [ ] **4F Música:** Namida/Spotify con teclas multimedia. Spotify con Client ID propio (PKCE, token local fuera de git) para "pon X"; sin Premium abre la búsqueda. "Pon música" usa Namida.
 - [ ] **4G Energía:** "apaga la compu", "reinicia la compu", "suspende la compu" con confirmación en voz alta (solo un "sí" claro ejecuta). Secuencia glitch a pantalla completa antes de apagar/reiniciar (más corta al suspender), con textos propios en español. "Bloquea la PC", "minimiza todo" y "devuélvelas" van directos.
 - [ ] **4H Modo dron:** un ojo con fragmentos de su pelo girando (magenta/violeta/verde neón), dibujado en canvas, diseño propio. En modo juego aparece en vez de desaparecer; también se activa a mano desde el menú.
+- [x] **4H caja + poses:** caja `CAPRI.SYS // MENSAJE` (carpeta, logs, typewriter) y Capri recostada/de pie en el borde (`lying_A` / `lying_B`).
 - [ ] **4I Extras:** modo compacto, "Hacer algo" en el menú, saludo grande al desbloquear la PC.
 - [ ] **4J Pulido para GitHub** (puede pasar a la Fase 6): submenú de voces (voz neural robótica por defecto, "Capri" solo local), proveedor por API key, `setup.bat` de un clic, README.
 - Quitar "módulo no conectado" de `persona.md` a medida que cada cosa funcione.

@@ -327,6 +327,33 @@ test('the bottom edge under her feet lets the pointer through to the taskbar', a
   assert.equal(c.hit(900, 1060), true);
 });
 
+test('on the message box she sits on the top edge, and sleep still sends her to a corner', async () => {
+  const { boxSeat } = await import('../src/renderer/js/poses.js');
+  const c = await make();
+  const ledge = { x: 1400, y: 220, w: 360, h: 180, top: 220 };
+  c.messageBox = () => ledge;
+  const seat = boxSeat(ledge, 'lieA', { scale: 0.6, dx: 140 });
+  await c.teleport({ x: seat.x, y: seat.y }, { stance: 'lie', perch: { kind: 'box', pose: 'lieA', dx: 140 } });
+  assert.equal(c.stance, 'lie');
+  assert.equal(c.onBox(), true);
+  assert.equal(c.grounded, false);
+  assert.equal(c.pos.y, ledge.top + 1);
+  await c.goToBed();
+  assert.equal(c.onBox(), false);
+  assert.equal(c.stance, 'stand');
+  assert.ok(c.grounded);
+});
+
+test('FIJO: she stays on the box instead of wandering off it', async () => {
+  const c = await make({ locked: true });
+  c.perch = { kind: 'box', pose: 'lieB', dx: 100 };
+  c.stance = 'lie';
+  c.switchBoxPose = async () => { c.switched = true; };
+  c.wanderStep();
+  assert.equal(c.teleports.length, 0);
+  assert.equal(c.switched, true);
+});
+
 test('with motion on, she slides up to the bar and ends exactly on it, even when it moves mid-slide', async () => {
   const { reducedMotion } = await import('../src/renderer/js/util.js');
   const c = await make({ bar: HIDDEN });
