@@ -51,6 +51,7 @@ IDLE_TALK_S = 2.0
 DEFAULT_IDLE_UNLOAD_MIN = 10.0
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
+FOLLOW_MAX_S = 30.0
 STT_PROMPT = "Capri, choom, Matias"
 SILERO_URL = (
     "https://github.com/snakers4/silero-vad/raw/v5.1.2/"
@@ -225,6 +226,10 @@ class Engine:
         self.stream = None
         self.capturing = False
         self.hold = False
+        # follow-up: she asked something, the mic opens without the wake word for follow_s seconds;
+        # no speech by then and it closes quietly (no transcript, no Whisper)
+        self.follow = False
+        self.follow_s = 0.0
         self.buffer = np.zeros(0, dtype=np.float32)
         self.vad_buf = np.zeros(0, dtype=np.float32)
         self.wake_buf = np.zeros(0, dtype=np.float32)
@@ -496,13 +501,24 @@ class Engine:
         self._set_speaking(False)
         self.broadcast({"type": "talking_done", "skipped": False})
 
+    def _listen_limit(self) -> float:
+        # a follow-up window gives the answer the usual time once it may have started
+        return LISTEN_TIMEOUT_S + (self.follow_s if self.follow else 0.0)
+
+    def _follow_quiet(self, elapsed: float) -> bool:
+        return self.follow and self.speech_ms < MIN_SPEECH_MS and elapsed >= self.follow_s
+
     def _maybe_listen_timeout(self) -> None:
         if not self.capturing or self.hold:
             return
-        if time.monotonic() - self.started_at < LISTEN_TIMEOUT_S:
+        elapsed = time.monotonic() - self.started_at
+        if self._follow_quiet(elapsed):
+            asyncio.run_coroutine_threadsafe(self.finish(reason="follow-quiet"), self.loop)
+            return
+        if elapsed < self._listen_limit():
             return
         log(
-            f"listen timeout after {LISTEN_TIMEOUT_S:.0f}s "
+            f"listen timeout after {self._listen_limit():.0f}s "
             f"speech_ms={self.speech_ms:.0f} silence_ms={self.silence_ms:.0f} samples={self.buffer.size}"
         )
         asyncio.run_coroutine_threadsafe(self.finish(reason="timeout"), self.loop)
@@ -585,7 +601,7 @@ class Engine:
                 pass
             self.stream = None
 
-    def begin_capture(self, hold: bool) -> None:
+    def begin_capture(self, hold: bool, follow: float = 0.0) -> None:
         if not self.cfg.get("enabled") or self.stream is None:
             return
         if self._speaking:
@@ -595,6 +611,8 @@ class Engine:
                 return
             self.capturing = True
             self.hold = hold
+            self.follow = follow > 0
+            self.follow_s = follow
             self.buffer = np.zeros(0, dtype=np.float32)
             self.vad_buf = np.zeros(0, dtype=np.float32)
             self.speech_ms = 0.0
@@ -602,7 +620,23 @@ class Engine:
             self.started_at = time.monotonic()
             if self._vad:
                 self._vad.reset()
-        self.broadcast({"type": "listening"})
+        if follow > 0:
+            log(f"follow-up listen {follow:.1f}s")
+        self.broadcast({"type": "listening", "followUp": follow > 0})
+
+    def begin_follow(self, seconds) -> None:
+        """She just asked something: listen for the answer without the wake word."""
+        try:
+            secs = float(seconds)
+        except (TypeError, ValueError):
+            secs = 0.0
+        if secs <= 0:
+            return
+        secs = min(secs, FOLLOW_MAX_S)
+        if self.capturing or self._speaking or self.cfg.get("sleeping") or bool(self.cfg.get("muted")):
+            log(f"follow-up skipped capturing={self.capturing} speaking={self._speaking}")
+            return
+        self.begin_capture(hold=False, follow=secs)
 
     def request_ptt(self) -> None:
         if self.capturing:
@@ -1232,9 +1266,14 @@ class Engine:
                     self.silence_ms = 0.0
                 else:
                     self.silence_ms += dt
+            if self._follow_quiet(elapsed):
+                asyncio.run_coroutine_threadsafe(self.finish(reason="follow-quiet"), self.loop)
+                return
+            limit = self._listen_limit()
+            max_s = MAX_SECONDS + (self.follow_s if self.follow else 0.0)
             should_cut = (
-                elapsed >= MAX_SECONDS
-                or (not self.hold and elapsed >= LISTEN_TIMEOUT_S)
+                elapsed >= max_s
+                or (not self.hold and elapsed >= limit)
                 or (
                     not self.hold
                     and self.speech_ms >= MIN_SPEECH_MS
@@ -1242,7 +1281,7 @@ class Engine:
                 )
             )
             if should_cut:
-                why = "max" if elapsed >= MAX_SECONDS else "timeout" if elapsed >= LISTEN_TIMEOUT_S else "vad"
+                why = "max" if elapsed >= max_s else "timeout" if (not self.hold and elapsed >= limit) else "vad"
                 asyncio.run_coroutine_threadsafe(self.finish(reason=why), self.loop)
 
     async def finish(self, reason: str = "vad") -> None:
@@ -1253,13 +1292,20 @@ class Engine:
             audio = self.buffer.copy()
             speech_ms = self.speech_ms
             silence_ms = self.silence_ms
+            follow = self.follow
+            self.follow = False
+            self.follow_s = 0.0
             self.buffer = np.zeros(0, dtype=np.float32)
         log(
             f"listen end reason={reason} speech_ms={speech_ms:.0f} "
             f"silence_ms={silence_ms:.0f} samples={audio.size}"
         )
         self.arm_wake()
-        self.broadcast({"type": "stopped"})
+        if reason == "follow-quiet":
+            # nobody answered: back to the wake word, nothing said, nothing transcribed
+            self.broadcast({"type": "stopped", "quiet": True, "followUp": True})
+            return
+        self.broadcast({"type": "stopped", "followUp": follow})
         if audio.size < SAMPLE_RATE * 0.2:
             log(f"listen drop too-short samples={audio.size} reason={reason}")
             return
@@ -1275,7 +1321,7 @@ class Engine:
             return
         text = (text or "").strip()
         if text:
-            self.broadcast({"type": "transcript", "text": text})
+            self.broadcast({"type": "transcript", "text": text, "followUp": follow})
         else:
             log("stt empty")
 
@@ -1347,6 +1393,8 @@ async def session(ws, engine: Engine) -> None:
                     await asyncio.to_thread(engine.start_tts)
             elif kind == "ptt_start":
                 await asyncio.to_thread(engine.request_ptt)
+            elif kind == "follow_up":
+                await asyncio.to_thread(engine.begin_follow, msg.get("seconds"))
             elif kind == "ptt_stop":
                 if engine.capturing:
                     await engine.finish()
