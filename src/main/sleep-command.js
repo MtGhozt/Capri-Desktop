@@ -35,6 +35,8 @@ const ORDER = [
   /^(?:ya\s+)?(?:es\s+)?hora\s+de\s+(?:ir\s+a\s+)?dormir$/,
   /^(?:momento\s+de|toca)\s+(?:ir\s+a\s+)?dormir$/,
   /^(?:duerme|duermete|dormite|dormi|duermito|duermase|duermanse)(?:\s+(?:un\s+rato|un\s+poco|un\s+toque))?$/,
+  // "duérmete" as Whisper hears it: "Duramete", "durámete", "dura mete" (only as the whole order)
+  /^(?:duramete|dura\s+mete)(?:\s+(?:un\s+rato|un\s+poco|un\s+toque))?$/,
   /^descansa(?:\s+(?:un\s+rato|un\s+poco|un\s+toque|tranquil[oa]))?$/,
   /^apagate$/,
   /^(?:go\s+to\s+sleep|sleep)$/,

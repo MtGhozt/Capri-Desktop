@@ -55,10 +55,16 @@ const sleepPhrases = [
   '¿te quieres dormir un rato?',
   '¿por qué no duermes un rato?',
   'Capri, ¿por qué no te echas una siestita?',
+  // "duérmete" misheard by Whisper
+  'Duramete',
+  'durámete, ¿sí?',
+  'Dura mete un rato',
 ];
 
 const notSleep = [
   'qué hora es',
+  'la vida es dura, mete ganas',
+  'esa puerta es dura',
   'hola capri',
   'contame un chiste',
   'no te duermas todavía',
