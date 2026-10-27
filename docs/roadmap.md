@@ -8,6 +8,8 @@ Upstream de referencia: mochiiwuff/capri-desktop v0.4.0 (`bde7b42`). Nunca push 
 - [x] 3D liberar recursos: descargar OmniVoice/Whisper en reposo (`64a855b`).
 - [x] 3E temas del menú: CYBERPUNK / CAPRI (`f247883`).
 - [x] 3F traído de upstream: volver tras suspensión (`473d270`), barra de tareas (`68fbbb4`), intro nueva (`e731a39`), "Iniciar con Windows" en el menú (`2df9004`).
+- [x] 3G comandos directos más amplios para dormir y la voz, sin pasar por el modelo (`583e419`).
+- [x] 3H torch fijado, modo juego y un solo escritor para el log (`7c8d3bd`..`60c2bd2`).
 - [x] 3I menú con degradado del tema, saludo desde wav en caché, comentarios propios y contexto de la ventana activa.
 - [x] 3J–3M descanso en la barra de tareas: se queda donde la sueltas, pies sobre el borde visible, sube y baja con la barra, deambula libre y duerme en una esquina de abajo.
 
