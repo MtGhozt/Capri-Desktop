@@ -57,6 +57,11 @@ const DEFAULTS = {
     mode: 'auto',            // 'auto' unloads the GPU while a fullscreen game runs; 'off' never
     apps: [],                // extra exe names or path fragments to treat as games
   },
+  comments: {
+    enabled: true,           // her own lines: every so often, and when the context changes
+    minMinutes: 15,          // shortest wait between two lines
+    maxMinutes: 40,          // longest wait between two lines
+  },
   voice: {
     enabled: true,
     dir: null,               // null → repo voice/ in dev; set an absolute path for the installed exe
@@ -111,6 +116,7 @@ function load() {
       fx: { ...DEFAULTS.fx, ...(saved.fx || {}) },
       ui: { ...DEFAULTS.ui, ...(saved.ui || {}) },
       gaming: { ...DEFAULTS.gaming, ...(saved.gaming || {}) },
+      comments: { ...DEFAULTS.comments, ...(saved.comments || {}) },
       voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
       position: { ...DEFAULTS.position, ...(saved.position || {}) },
       shortcuts: { ...DEFAULTS.shortcuts, ...(saved.shortcuts || {}) },
@@ -147,6 +153,7 @@ function save(patch) {
     fx: { ...DEFAULTS.fx, ...(current.fx || {}), ...(patch.fx || {}) },
     ui: { ...DEFAULTS.ui, ...(current.ui || {}), ...(patch.ui || {}) },
     gaming: { ...DEFAULTS.gaming, ...(current.gaming || {}), ...(patch.gaming || {}) },
+    comments: { ...DEFAULTS.comments, ...(current.comments || {}), ...(patch.comments || {}) },
     voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
     position: { ...DEFAULTS.position, ...(current.position || {}), ...(patch.position || {}) },
     shortcuts: { ...DEFAULTS.shortcuts, ...(current.shortcuts || {}), ...(patch.shortcuts || {}) },

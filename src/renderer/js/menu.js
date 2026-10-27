@@ -278,6 +278,11 @@ export class AppMenu {
       labels: ['OFF', 'AUTO'],
       onChange: (on) => this.act('gaming-mode', on ? 'auto' : 'off'),
     });
+    toggle('Comentarios', {
+      on: cfg.comments !== false,
+      labels: ['INACTIVO', 'ACTIVO'],
+      onChange: (on) => this.act('comments', on),
+    });
     selector('Tema', {
       options: THEME_OPTIONS,
       current: cfg.theme,
@@ -319,7 +324,7 @@ export class AppMenu {
     }
     this.confirmForget = false;
     const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock' || id === 'theme'
-      || id === 'startup' || id === 'gaming-mode';
+      || id === 'startup' || id === 'gaming-mode' || id === 'comments';
     await this.host.menuAction({ id, value });
     if (!keep) {
       this.hide();

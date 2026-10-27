@@ -21,6 +21,8 @@ const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { isWakeCommand } = require('./wake-command');
 const { pickLine } = require('./lines-es');
+const { windowContext } = require('./context');
+const { createComments } = require('./comments');
 const { createGameMode } = require('./game-mode');
 const { vramText } = require('./vram');
 const { logEvent, voiceLogPath } = require('./log');
@@ -34,6 +36,8 @@ const DEV = process.argv.includes('--dev');
 const PORT = Number(process.env.CAPRI_PORT) || 47823;
 const SOUND_EXT = /\.(mp3|wav|ogg|m4a)$/i;
 const CLAUDE_CODE_HELP = 'https://code.claude.com/docs/en/quickstart';
+// the word in the corner of the panel when she talks to the room
+const COMMENT_BADGE = { comentar: 'CAPRI', musica: 'MUSIC', juego: 'GAME', video: 'VIDEO', programando: 'CODE' };
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'capri', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
@@ -50,7 +54,10 @@ let llm = null;
 let lms = null;
 let voice = null;
 let speakQueue = null;
+let comments = null;
 let ttsLoading = false;
+let voiceTalking = false;
+let llmBusy = false;
 let voiceQueue = [];
 let chatOpen = false;
 let pendingSleep = false;
@@ -405,12 +412,19 @@ function ttsOn() {
   return kind !== 'off' && kind !== 'none' && kind !== 'false';
 }
 
+function commentRange(value, fallbackMinutes) {
+  const minutes = Number(value);
+  const safe = Number.isFinite(minutes) && minutes > 0 ? minutes : fallbackMinutes;
+  return safe * 60_000;
+}
+
 function updateConfig(patch) {
   config.save(patch);
   if ('rest' in patch) fitOverlay(); // the taskbar in her window or not
   const cfg = rendererConfig();
   overlay?.webContents.send('capri:config', cfg);
   voice?.applyConfig();
+  if ('comments' in patch) comments?.refresh();
   rebuildTray();
   return cfg;
 }
@@ -442,6 +456,7 @@ function applyMenuAction(id, value) {
     case 'mic-device': updateConfig({ voice: { inputDevice: value } }); break;
     case 'forget': goForgetReply({ chat: false }); break;
     case 'gaming-mode': updateConfig({ gaming: { mode: value === 'off' ? 'off' : 'auto' } }); break;
+    case 'comments': updateConfig({ comments: { enabled: Boolean(value) } }); break;
     case 'persona-reload': {
       const r = llm.reloadPersona();
       sendCommand('line', {
@@ -533,6 +548,7 @@ function menuState(extra = {}) {
       locked: Boolean(cfg.position?.locked),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
       gaming: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
+      comments: cfg.comments?.enabled !== false,
     },
     clips: {
       hotkey: cfg.clips?.saveHotkey || 'Alt+F10',
@@ -748,21 +764,26 @@ function registerIpc() {
     }
     const speakId = ttsOn() ? speakQueue?.start() : 0;
     if (!speakId) speakQueue?.stop();
-    await llm.chat({
-      user: line,
-      onToken: (piece) => {
-        overlay?.webContents.send('chat:token', piece);
-        if (speakId) speakQueue?.feed(piece);
-      },
-      onDone: (payload) => {
-        if (speakId) speakQueue?.flush(speakId);
-        overlay?.webContents.send('chat:done', payload);
-      },
-      onError: (payload) => {
-        if (speakId) speakQueue?.stop(speakId);
-        overlay?.webContents.send('chat:error', payload);
-      },
-    });
+    llmBusy = true;
+    try {
+      await llm.chat({
+        user: line,
+        onToken: (piece) => {
+          overlay?.webContents.send('chat:token', piece);
+          if (speakId) speakQueue?.feed(piece);
+        },
+        onDone: (payload) => {
+          if (speakId) speakQueue?.flush(speakId);
+          overlay?.webContents.send('chat:done', payload);
+        },
+        onError: (payload) => {
+          if (speakId) speakQueue?.stop(speakId);
+          overlay?.webContents.send('chat:error', payload);
+        },
+      });
+    } finally {
+      llmBusy = false;
+    }
     return { ok: true };
   });
   ipcMain.on('chat:cancel', () => {
@@ -880,6 +901,8 @@ function main() {
       loadConfig: () => config.load(),
       onEvent: (payload) => {
         if (payload?.type === 'tts_state') ttsLoading = payload.state === 'loading';
+        if (payload?.type === 'talking') voiceTalking = true;
+        if (payload?.type === 'talking_done' || payload?.type === 'stopped') voiceTalking = false;
         if (payload?.type === 'listening') openChat();
         if (payload?.type === 'devices') rebuildTray();
         if (pendingSleep && payload?.type === 'talking_done') requestSleep();
@@ -894,6 +917,27 @@ function main() {
     speakQueue = createSpeakQueue({
       send: (msg) => voice?.push?.(msg),
     });
+    // her own life: a line now and then, and one when the window in front changes
+    comments = createComments({
+      enabled: () => config.load().comments?.enabled !== false,
+      canSpeak: () => Boolean(
+        overlay
+        && !overlayFolded
+        && !chatOpen
+        && !ttsLoading
+        && !voiceTalking
+        && !llmBusy
+        && !gameMode?.active()
+        && !pendingSleep
+      ),
+      minMs: () => commentRange(config.load().comments?.minMinutes, 15),
+      maxMs: () => commentRange(config.load().comments?.maxMinutes, 40),
+      onLine: (line, kind) => {
+        if (!line) return;
+        speakLine(line);
+        sendCommand('line', { badge: COMMENT_BADGE[kind] || 'CAPRI', text: line });
+      },
+    });
     voice.start();
     gameMode = createGameMode({
       enabled: () => config.load().gaming?.mode !== 'off',
@@ -902,6 +946,7 @@ function main() {
       onExit: () => queueGame(gameLeave),
     });
     createTray();
+    comments.start();
     windowWatch = startWindowWatch({
       overlay,
       onUpdate: (data) => {
@@ -909,6 +954,7 @@ function main() {
         if (data.taskbar && !lastWindows?.taskbar && config.load().rest === 'taskbar') raiseOverlay();
         lastWindows = data;
         gameMode?.update(data);
+        comments?.observe(windowContext(data, { apps: config.load().gaming?.apps || [] }));
         overlay?.webContents.send('windows:update', data);
       },
     });
@@ -934,6 +980,7 @@ function main() {
     globalShortcut.unregisterAll();
     windowWatch?.stop();
     gameMode?.stop();
+    comments?.stop();
     voice?.stop();
     lms?.unload();
   });

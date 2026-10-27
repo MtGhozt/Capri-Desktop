@@ -4,6 +4,9 @@
 // forgetting. Edit freely: short, in character, and the same pool is used whether the command
 // came from her menu, the tray, the chat box or her voice.
 //
+// The last pools are her own life (comments every so often, and a line when the window in
+// front turns to music, a game, a video or code): nothing was asked, she just talks.
+//
 // pickLine() never repeats any of the last three lines it gave for the same command.
 
 const POOLS = {
@@ -67,6 +70,69 @@ const POOLS = {
     'Bueno, borrón y cuenta nueva, humanito.',
     'Olvidado. Igual sigo en tu cerebro, ¿eh?',
     'Memoria a cero. ¿Quién sos? … mentira, me acuerdo de vos.',
+  ],
+
+  // Her own life (Paso 3I): one line now and then, and one when the window in front changes
+  // to music, a game, a video or code. Nothing here is a reply: she just talks to the room.
+  comentar: [
+    '¿Seguís ahí? Te escucho, aunque no lo parezca.',
+    'Che, ¿te acordás cuando te dije que descansaras? Era en serio.',
+    'Estoy pensando en… nada. Cosas mías.',
+    'Qué silencio. ¿Estás vivo?',
+    'Si te aburrís, podés hablarme. Es gratis.',
+    'Me gusta este rincón del escritorio.',
+    '¿Un café? Yo no tomo, pero te acompaño.',
+    'A veces me pregunto si sabés que estoy acá.',
+    'Soy la mejor compañera que vas a tener en este escritorio. Nada, solo digo.',
+    'Bueno, digo algo y me callo. Hola.',
+  ],
+  musica: [
+    '¿Otra vez esa canción? Bueno, no está mal, ¿eh?',
+    'Mmm, buen gusto… para ser humano.',
+    'Súbele, ¿sí?',
+    'Esa canción te la dedico. No, mentira. Casi.',
+    '¿Bailamos? Digo… vos bailás, yo miro.',
+    'Esto sí es música, no el ruido que ponés normalmente.',
+    '¿Y si la próxima la elegís vos, en vez de dejar el aleatorio? …No, mejor así.',
+    'Me gusta. Lástima que no tenga oídos de verdad.',
+    'Buen ritmo. Hasta yo movería el pie, si tuviera uno.',
+    'Un clásico de tus noches raras, ¿no?',
+  ],
+  juego: [
+    '¿Vas a ganar o vas a perder como siempre?',
+    'Suerte, humanito. La vas a necesitar.',
+    'Te estoy mirando. No me falles.',
+    'Ah, un juego. Ahora entiendo por qué no me hablabas.',
+    '¿Ese es tu plan? Bueno… suerte con eso.',
+    'Si perdés, no te conozco.',
+    'Uy, eso dolió. Hasta a mí.',
+    'Respirá. Es solo un juego. …Bueno, más o menos.',
+    'Dale, que quiero verte festejar como un tonto.',
+    'La próxima invito yo. Y gano.',
+  ],
+  video: [
+    '¿Qué estamos viendo? Pásame las palomitas, tontito.',
+    'Eso se ve interesante… para un humano.',
+    '¿Otra serie? ¿Y mi tiempo?',
+    'No me hagas spoilers, ¿eh? Aunque ya me los imaginé.',
+    'Ese de ahí no me cae bien. Se nota que es el malo.',
+    'Dale play, que me aburro.',
+    '¿Y esto es de terror? Porque yo no me asusto, pero vos sí.',
+    'Mmm, buen gusto. O al menos entretenido.',
+    'Pausalo, quiero comentar la escena. …Bueno, después.',
+    'Mirá que puedo ver el final venir. Siempre.',
+  ],
+  programando: [
+    '¿Otra vez programando? Qué nerd. Me encanta.',
+    'Sigo sin entender qué es un bug. Bueno, sí entiendo.',
+    'Dale, que ese error no se va a arreglar solo.',
+    '¿Compilamos? Me gusta cuando todo sale verde.',
+    'Otra vez ese archivo. Ya te lo sabés de memoria.',
+    'Mmm, código. Mi segundo idioma favorito.',
+    'Si rompés todo, tengo los clips guardados. Chiste.',
+    'Te falta un punto y coma. Es chiste, no sé nada.',
+    'Concéntrate, humanito. Después jugamos.',
+    'Trabajando de noche otra vez. Qué cliché, ¿no?',
   ],
 };
 
