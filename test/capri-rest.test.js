@@ -1,7 +1,7 @@
 'use strict';
 
-// Where Capri rests at the bottom of the screen: the spot you drop her on, going back to it,
-// and FIJO keeping her where she is. The real Capri class, without its drawing (no WebGL here).
+// Where Capri rests at the bottom of the screen: the spot you drop her on, roaming free (no
+// walking back to it), and FIJO keeping her where she is. The real Capri class, without its drawing (no WebGL here).
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -39,7 +39,6 @@ async function make({ w = 1920, h = 1079, bar = null, ...rest } = {}) {
     locked: false,
     dragging: false,
     homeX: null,
-    nextHome: 0,
     p: { sit: 0, alpha: 1, glitch: 0, split: 0, glitchSeed: 0 },
     bob: 0, tilt: 0, sx: 1, sy: 1,
     act: null,
@@ -100,12 +99,17 @@ test('with no spot of her own she goes to the default one', async () => {
   assert.equal(c.homeSpot(), Math.min(c.spot('post').x, Math.max(1920 * 0.6, 1920 - 440)));
 });
 
-test('a while after anything happens, she goes back to her spot', async () => {
+test('idle, she stays wherever she roamed to: no walking back to her spot', async () => {
   const c = await make({ homeX: 0.25 });
   at(c, { x: 1500, y: 300 });
-  c.behave(performance.now());
-  assert.equal(c.teleports.length, 1);
-  assert.equal(c.teleports[0].to.x, 480);
+  const now = performance.now();
+  for (const ago of [7000, 20000, 60000, 5 * 60000]) {
+    c.lastActivity = now - ago;
+    c.behave(now);
+  }
+  assert.equal(c.teleports.length, 0);
+  assert.deepEqual(c.pos, { x: 1500, y: 300 });
+  assert.equal(c.mode, 'idle');
 });
 
 test('FIJO: she never goes back by herself', async () => {
@@ -115,6 +119,14 @@ test('FIJO: she never goes back by herself', async () => {
   await c.goHome();
   assert.equal(c.teleports.length, 0);
   assert.deepEqual(c.pos, { x: 1500, y: 300 });
+});
+
+test('work with no window to sit on: standing, she stays where she is', async () => {
+  const c = await make({ homeX: 0.25 });
+  at(c, { x: 1500, y: 300 });
+  c.goToWork();
+  assert.equal(c.teleports.length, 0);
+  assert.equal(c.mode, 'work');
 });
 
 test('going home, she stands on the bottom edge at her spot', async () => {

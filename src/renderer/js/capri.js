@@ -58,8 +58,7 @@ export class Capri {
     this.wander = true;
     this.possessWindows = true; // tray: "Possess my windows"
     this.restOn = 'taskbar'; // where she rests when nothing's going on: on the taskbar, or her corner
-    this.nextHome = 0;
-    this.homeX = null;    // her own rest spot, as a fraction of the screen width (where you last dropped her)
+    this.homeX = null;    // her spot at the bottom, as a fraction of the screen width (where you last dropped her): where she starts out
     this.locked = false;  // menu: FIJO, no dragging
     this.dragging = false;
 
@@ -375,7 +374,8 @@ export class Capri {
     return this.windows.wins.find((w) => w.id === id);
   }
 
-  // Where along the bottom of the screen she rests: where you last dropped her, else left of the
+  // Her spot along the bottom of the screen (where she starts out, and where work calls her down to
+  // off a window): where you last dropped her, else left of the
   // clock and the tray icons, right of the middle (the app icons, on Windows 11).
   homeSpot() {
     const { w } = this.view;
@@ -384,7 +384,7 @@ export class Capri {
     return clamp(w - 440, w * 0.6, this.spot('post').x);
   }
 
-  // You dropped her down there: that's her spot now.
+  // You dropped her down there: that's her spot now (she doesn't walk back to it by herself: she roams).
   chooseHome(x = this.pos.x) {
     const w = this.view.w || 1;
     const was = this.homeX;
@@ -531,14 +531,6 @@ export class Capri {
       return;
     }
 
-    // resting on the taskbar: a little while after anything happens, she goes back to her spot on it
-    if (this.restOn === 'taskbar' && this.mode === 'idle' && this.stance === 'stand' && !this.locked
-      && now - this.lastActivity > 6000 && now > this.nextHome) {
-      this.nextHome = now + 8000;
-      this.goHome();
-      return;
-    }
-
     if (this.mode === 'idle' && now > this.nextMove) {
       this.nextMove = now + rand(25000, 70000);
       this.wanderStep();
@@ -667,7 +659,7 @@ export class Capri {
       return;
     }
     if (this.restOn === 'taskbar') {
-      this.goHome();
+      if (this.stance !== 'stand') this.goHome(); // off a window or out of hiding: to her spot; standing, she stays put
       return;
     }
     const post = this.spot('post');
