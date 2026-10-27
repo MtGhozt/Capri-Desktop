@@ -214,8 +214,21 @@ if ($Once) {
 }
 $last = ''
 $tick = 0
+# The taskbar slides (auto-hide), and a poll can land mid-slide. Once it has stopped, the
+# snapshot is said again ~450 ms later even if nothing changed, so the last word on the bar is
+# always where it ended up.
+$lastBar = ''
+$settle = 0
 while ($true) {
   $snap = [CapriWindows]::Snapshot($Self)
+  $bar = if ($snap -match '"bar":(\{[^}]*\}|null)') { $Matches[1] } else { '' }
+  if ($bar -ne $lastBar) {
+    $lastBar = $bar
+    $settle = 3
+  } elseif ($settle -gt 0) {
+    $settle--
+    if ($settle -eq 0) { $last = '' }
+  }
   if ($snap -ne $last) {
     [Console]::Out.WriteLine($snap)
     [Console]::Out.Flush()
