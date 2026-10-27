@@ -9,6 +9,9 @@ const { sidecarConfig } = require('./voice-config');
 const { logLines, voiceLogPath } = require('./log');
 
 const PORT = 47824;
+const RESTART_MS = 3000;
+const CRASH_WINDOW_MS = 10 * 60_000;
+const MAX_CRASHES = 3; // this many in the window: she stops trying and says so
 
 function pythonExe(dir) {
   return path.join(dir, '.venv', process.platform === 'win32' ? 'Scripts' : 'bin', 'python.exe');
@@ -44,6 +47,9 @@ function createVoice({ root, loadConfig, onEvent }) {
   let sleeping = false;
   let greetItems = [];
   let pendingGreet = null; // the boot hello when the socket was not open yet
+  let forced = false; // started by game mode's end even with the mic off
+  let crashes = [];
+  let restartTimer = null;
   const logFile = voiceLogPath();
 
   function emit(payload) {
@@ -136,8 +142,29 @@ function createVoice({ root, loadConfig, onEvent }) {
 
   // `force` restarts the sidecar even when the mic is off in config: game mode unplugged it
   // entirely, and her voice (TTS) still has to come back when the game is over.
+  // The sidecar died on its own (a native crash, 0xC0000374 heap corruption, took it down
+  // mid-sentence once): whatever was playing or listening is over, so say so, and bring it back.
+  function crashed(code) {
+    emit({ type: 'talking_done', interrupted: true, crashed: true });
+    emit({ type: 'stopped', crashed: true });
+    const now = Date.now();
+    crashes = crashes.filter((at) => now - at < CRASH_WINDOW_MS);
+    crashes.push(now);
+    if (crashes.length > MAX_CRASHES) {
+      skip(`La voz se cayó ${crashes.length} veces seguidas (código ${code}). Escríbeme, o reiníciame para que vuelva a escuchar.`);
+      return;
+    }
+    logLines(logFile, `[capri] voice sidecar restart in ${RESTART_MS / 1000}s (crash ${crashes.length}/${MAX_CRASHES})`);
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      if (!stopped && !child) start({ force: forced });
+    }, RESTART_MS);
+  }
+
   function start({ force = false } = {}) {
     stopped = false;
+    forced = force;
     const cfg = loadConfig();
     if (!force && cfg.voice && cfg.voice.enabled === false) {
       logLines(logFile, '[capri] voice sidecar off (voice.enabled=false)');
@@ -191,21 +218,27 @@ function createVoice({ root, loadConfig, onEvent }) {
       process.stderr.write(line);
       logLines(logFile, line);
     });
-    child.on('exit', (code) => {
+    const proc = child;
+    proc.on('exit', (code) => {
       logLines(logFile, `[capri] voice sidecar exit ${code}`);
       console.log('[capri] voice sidecar exit', code);
-      child = null;
+      // killChild() lets go of it first: only a child still ours died on its own
+      const unexpected = child === proc && !stopped;
+      if (child === proc) child = null;
       disconnect();
+      if (unexpected) crashed(code);
     });
-    child.on('error', (err) => {
+    proc.on('error', (err) => {
       skip(`Voice sidecar error: ${err.message}`);
-      child = null;
+      if (child === proc) child = null;
     });
     setTimeout(connect, 800);
   }
 
   function stop() {
     stopped = true;
+    clearTimeout(restartTimer);
+    restartTimer = null;
     pendingGreet = null;
     disconnect();
     killChild();
