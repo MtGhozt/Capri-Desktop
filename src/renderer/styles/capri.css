@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------------
    Capri overlay
-   Flat, hard-edged, no gradients, no soft shadows: Trigger cel style.
+   Flat, hard-edged, no soft shadows: Trigger cel style.
    Every panel casts a violet misregistered copy, like her outline.
 ------------------------------------------------------------------- */
 
@@ -622,7 +622,8 @@ body {
 .appmenu {
   /* palette, swapped per [data-theme]; layout never changes */
   --bg: #0b1418;
-  --grid: rgba(94, 246, 255, 0.05);
+  --plate-hi: #163b45;
+  --plate-lo: #050c10;
   --label: #ff5a4f;
   --title: #fff;
   --accent-on: #5ef6ff;
@@ -655,7 +656,8 @@ body {
 
 .appmenu[data-theme='capri'] {
   --bg: #140a1f;
-  --grid: #2a1540;
+  --plate-hi: #2a1240;
+  --plate-lo: #0b0512;
   --label: #ff2d6f;
   --title: #fff;
   --accent-on: #3dff8f;
@@ -671,10 +673,7 @@ body {
   min-width: 0;
   min-height: 0;
   background-color: var(--bg);
-  background-image:
-    linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 22px 22px;
+  background-image: linear-gradient(158deg, var(--plate-hi) 0%, var(--bg) 46%, var(--plate-lo) 100%);
   clip-path: polygon(
     0 11px, 11px 0,
     70% 0, 71.5% 4px, 74% 0,
