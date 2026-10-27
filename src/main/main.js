@@ -917,6 +917,7 @@ function applyMenuAction(id, value) {
 
 let overlayFolded = false;
 let registeredShortcuts = [];
+let menuCloseCombo = ''; // the shortcut that closes her menu, as registered
 
 // The combos shown in her menu; edit shortcuts.* in config.json and restart to change them.
 function registerShortcuts() {
@@ -937,7 +938,19 @@ function registerShortcuts() {
   const s = config.load().shortcuts || {};
   bind(s.toggle, () => toggleVisible());
   bind(s.chat, () => toggleChat());
-  bind(s.menuClose, () => menuGuard.forceClose('shortcut'));
+  // Close her menu: the first of these that's free (another app may hold Ctrl+Alt+M)
+  menuCloseCombo = '';
+  for (const combo of [s.menuClose, 'Ctrl+Alt+Shift+M', 'Ctrl+Alt+F12']) {
+    if (!combo || menuCloseCombo) continue;
+    try {
+      if (globalShortcut.register(combo, () => menuGuard.forceClose('shortcut'))) {
+        registeredShortcuts.push(combo);
+        menuCloseCombo = combo;
+      }
+    } catch { /* a bad combo in config.json: the next one */ }
+  }
+  logEvent(voiceLogPath(), `[capri] close-menu shortcut: ${menuCloseCombo || 'none free'}`);
+  rebuildTray(); // the tray shows the combo that's really there
   talkCombo = '';
   const talk = talkHotkey(config.load());
   if (talk && registerTalk(talk)) talkCombo = talk;
@@ -1089,7 +1102,7 @@ function rebuildTray() {
     { label: s.online, enabled: false },
     { type: 'separator' },
     // always there: her menu stuck open can't hold the screen
-    { label: t.closeMenu, accelerator: config.load().shortcuts?.menuClose || undefined, click: () => menuGuard.forceClose('tray') },
+    { label: t.closeMenu, accelerator: menuCloseCombo || undefined, click: () => menuGuard.forceClose('tray') },
     { label: t.teleport, click: () => applyMenuAction('teleport') },
     ...(!s.folded ? [
       { label: t.satellite, click: () => applyMenuAction('satellite') },
