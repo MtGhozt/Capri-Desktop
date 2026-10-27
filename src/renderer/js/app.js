@@ -122,6 +122,7 @@ async function boot() {
   let interactive = false;
   let mouse = null;
   let folding = false;
+  let foldingAt = 0; // when the fold/unfold started: one that never ends can't hold the screen
   let lastLive = performance.now();
   const bumpIdle = () => { lastLive = performance.now(); };
   const setInteractive = (on) => {
@@ -292,6 +293,7 @@ async function boot() {
     if (folding || capri.stowed || machine.get() === 'DORMANT') return;
     if (!force && !canFold()) return;
     folding = true;
+    foldingAt = performance.now();
     appMenu.hide();
     panel.hide();
     if (bubble.open) bubble.hide();
@@ -331,6 +333,7 @@ async function boot() {
     }
     if (machine.get() === 'DORMANT') {
       folding = true;
+      foldingAt = performance.now();
       refreshHit();
       voice.wakeArp();
       const from = dormant.rect();
@@ -513,6 +516,7 @@ async function boot() {
     }
     if (type === 'level') {
       bumpIdle();
+      if (bubble.voicePlaying) bubble.voiceAt = Date.now();
       bubble.setLevel(evt.rms);
       return;
     }
@@ -533,6 +537,7 @@ async function boot() {
       bubble.voiceTimer = 0;
       bubble.stopThink();
       bubble.voicePlaying = true;
+      bubble.voiceAt = Date.now();
       machine.set('TALKING');
       bubble.onTalk?.(true);
       return;
@@ -543,6 +548,10 @@ async function boot() {
       bubble.voicePlaying = false;
       bubble.onTalk?.(false);
       bumpIdle();
+      if (evt?.crashed) { // her voice died mid-line: nothing more is coming, back to ONLINE
+        if (['TALKING', 'THINKING', 'LISTENING'].includes(machine.get()) && !bubble.busy) machine.set('ONLINE');
+        return;
+      }
       if (evt?.interrupted) {
         bubble.abortForListen();
         if (machine.get() === 'TALKING' || machine.get() === 'THINKING') machine.set('ONLINE');
@@ -570,6 +579,18 @@ async function boot() {
       });
     }
   });
+
+  setInterval(() => bubble.watchdog(), 5000); // never stuck in DECRYPTING or TALKING
+  // Click-through can't stay off by itself: a fold that never ended lets go, and what she asks
+  // main for is sent again (main may have lost it to a focus change).
+  setInterval(() => {
+    if (folding && performance.now() - foldingAt > 15000) {
+      console.error('[capri] fold/unfold stuck: letting go of the screen');
+      folding = false;
+    }
+    refreshHit();
+    host.setInteractive(interactive);
+  }, 3000);
 
   host.onClaudeEvent((evt) => brain.handle(evt));
   brain.onPulse = (evt) => {
@@ -684,6 +705,9 @@ async function boot() {
             edge: capri.grounded, // on the bottom edge: she keeps riding the bar up and down
           },
         });
+        break;
+      case 'menu-close': // another window came to the front
+        appMenu.hide();
         break;
       case 'rearmed': // a new mouse hook (main.js): click-through until the pointer comes over her again
         mouse = null;

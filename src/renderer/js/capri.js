@@ -1722,6 +1722,9 @@ export class Capri {
     });
     window.addEventListener('mousemove', (e) => {
       this.mouse = { x: e.clientX, y: e.clientY }; // a window she's in watches it
+      // the button let go where she couldn't hear it (another window, a dialog): she's let go too,
+      // or she'd hold the whole screen as if still dragged
+      if (down && !(e.buttons & 1)) window.dispatchEvent(new MouseEvent('mouseup'));
       if (down) {
         const dx = e.clientX - down.x, dy = e.clientY - down.y;
         if (!this.dragging && Math.hypot(dx, dy) > 5 && !this.busy && !this.locked) {

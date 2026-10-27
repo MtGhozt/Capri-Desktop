@@ -6,6 +6,8 @@ import { statusText } from './state.js';
 
 const NOISE = '▚▞▙▟░▒#%&/\\<>01XZ';
 const DECODE_STEP_MS = 28;
+const VOICE_STALE_MS = 90_000; // "talking" with no word from her voice for this long: it's over
+const REPLY_STALE_MS = 180_000; // no token and no answer for this long: the reply is lost
 const OFFLINE = [
   "Link's dead, choom. Fire up LM Studio before you ping me.",
   "No brain on the wire. LM Studio's offline — don't leave me hanging.",
@@ -173,7 +175,11 @@ export class Bubble {
 
   sendLine(text) {
     this.addLine('you', text);
+    // a new reply cuts whatever she was saying: the sidecar drops that line without a
+    // talking_done, so don't wait for one (it left her in DECRYPTING once)
+    this.voicePlaying = false;
     this.busy = true;
+    this.busyAt = Date.now();
     this.replyText = '';
     this.replyEl = this.addLine('capri', '');
     this.startThink();
@@ -204,6 +210,7 @@ export class Bubble {
 
   onToken(piece) {
     if (!this.busy) return;
+    this.busyAt = Date.now();
     this.stopThink();
     this.replyText += piece;
     if (this.replyEl) this.replyEl.textContent = this.replyText;
@@ -322,7 +329,14 @@ export class Bubble {
     clearTimeout(this.voiceTimer);
     this.voiceTimer = setTimeout(() => {
       this.voiceTimer = 0;
-      if (this.voicePlaying) return;
+      if (this.voicePlaying) {
+        // still talking: look again, but a voice that went quiet for a minute is not talking
+        if (Date.now() - (this.voiceAt || 0) < VOICE_STALE_MS) {
+          this.armVoiceWatch();
+          return;
+        }
+        this.voicePlaying = false;
+      }
       if (this.decodeTimer) {
         this.clearDecode();
         if (this.replyEl) this.replyEl.textContent = this.replyText;
@@ -332,6 +346,25 @@ export class Bubble {
         this.onTalk?.(false);
       }
     }, 2000);
+  }
+
+  // Never stuck: DECRYPTING with nothing pending, TALKING with no voice for a minute, or a
+  // reply that never came back. Called every few seconds.
+  watchdog(now = Date.now()) {
+    const state = this.machine.get();
+    if (this.busy) {
+      if (now - (this.busyAt || now) > REPLY_STALE_MS) {
+        window.host.cancelChat?.();
+        this.fail();
+      }
+      return;
+    }
+    if (this.voicePlaying && now - (this.voiceAt || 0) > VOICE_STALE_MS) this.voicePlaying = false;
+    if (this.voicePlaying || this.voiceTimer || this.decodeTimer || this.thinkTimer) return;
+    if (state === 'THINKING' || state === 'TALKING') {
+      this.setState('ONLINE');
+      this.onTalk?.(false);
+    }
   }
 
   startThink() {

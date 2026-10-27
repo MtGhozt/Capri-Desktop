@@ -132,7 +132,7 @@ function fitOverlay() {
 function rearmOverlay() {
   if (!overlay || overlay.isDestroyed()) return;
   overlay.setIgnoreMouseEvents(false);
-  overlay.setIgnoreMouseEvents(true, { forward: true });
+  setClickThrough(true);
   overlay.setAlwaysOnTop(true, 'screen-saver');
   fitOverlay();
   sendCommand('rearmed'); // click-through again: she waits for the pointer to be on her
@@ -191,6 +191,26 @@ function createOverlay() {
   });
   overlay.webContents.on('render-process-gone', (_e, details) => {
     console.error('[capri] renderer gone:', details.reason);
+    logEvent(voiceLogPath(), `[capri] renderer gone: ${details.reason}`);
+    setClickThrough(true); // nobody left to answer the clicks: they go to the windows under her
+  });
+  // a stalled page can't take clicks back from the screen: give them back to the other windows
+  overlay.webContents.on('unresponsive', () => {
+    logEvent(voiceLogPath(), '[capri] renderer unresponsive: click-through on');
+    setClickThrough(true);
+  });
+  overlay.webContents.on('responsive', () => logEvent(voiceLogPath(), '[capri] renderer responsive again'));
+  // another window came to the front (a click, Alt+Tab, the taskbar): her menu goes away
+  // (not when she hands the keyboard back herself: that's her menu changing page)
+  overlay.on('blur', () => {
+    if (Date.now() - handedBackAt < 1500) return;
+    sendCommand('menu-close');
+  });
+  // her errors in the log, so a stuck overlay can be traced
+  overlay.webContents.on('console-message', (e) => {
+    const { level, message, lineNumber, sourceId } = e;
+    if (level !== 'error' && level !== 3) return;
+    logEvent(voiceLogPath(), `[renderer] ${String(message).slice(0, 300)} (${String(sourceId).split('/').pop()}:${lineNumber})`);
   });
   if (DEV) {
     overlay.webContents.on('console-message', (e) => {
@@ -199,6 +219,17 @@ function createOverlay() {
     });
     if (process.env.CAPRI_DEVTOOLS) overlay.webContents.openDevTools({ mode: 'detach' });
   }
+}
+
+// Click-through, as she last asked for it: put back after anything that may touch the window's
+// styles (focusable, show, focus), and again on her heartbeat, so it can't stay off by itself.
+let clickThrough = true;
+let handedBackAt = 0; // when she last gave the keyboard back to the window before her
+function setClickThrough(on) {
+  clickThrough = Boolean(on);
+  if (!overlay || overlay.isDestroyed()) return;
+  if (clickThrough) overlay.setIgnoreMouseEvents(true, { forward: true });
+  else overlay.setIgnoreMouseEvents(false);
 }
 
 function sendCommand(name, payload = {}) {
@@ -225,6 +256,7 @@ function openChat() {
   overlay.setFocusable(true);
   overlay.show();
   overlay.focus();
+  setClickThrough(clickThrough);
   sendCommand('chat', { on: true });
 }
 
@@ -236,9 +268,11 @@ function closeChat() {
   const target = previousForeground;
   previousForeground = null;
   // Restore first while we still own focus, then drop keyboard on the overlay.
+  handedBackAt = Date.now();
   if (target != null) restoreForeground(target);
   overlay?.setFocusable(false);
   overlay?.showInactive();
+  setClickThrough(clickThrough);
 }
 
 // Her menu's text fields (Corregir lo último): the keyboard while they're open, given back after.
@@ -250,6 +284,7 @@ function menuKeyboardOn(on) {
     overlay.setFocusable(true);
     overlay.show();
     overlay.focus();
+    setClickThrough(clickThrough);
     return;
   }
   if (!menuKeyboard) return;
@@ -257,9 +292,11 @@ function menuKeyboardOn(on) {
   if (chatOpen) return; // the chat still has it
   const target = previousForeground;
   previousForeground = null;
+  handedBackAt = Date.now();
   if (target != null) restoreForeground(target);
   overlay.setFocusable(false);
   overlay.showInactive();
+  setClickThrough(clickThrough);
 }
 
 function toggleChat() {
@@ -1103,9 +1140,7 @@ function createTray() {
 }
 
 function registerIpc() {
-  ipcMain.on('overlay:interactive', (_e, on) => {
-    overlay?.setIgnoreMouseEvents(!on, { forward: true });
-  });
+  ipcMain.on('overlay:interactive', (_e, on) => setClickThrough(!on));
   ipcMain.on('overlay:rearm', () => rearmOverlay()); // the pointer moved over her and she never heard of it
   ipcMain.on('overlay:folded', (_e, on) => {
     overlayFolded = Boolean(on);

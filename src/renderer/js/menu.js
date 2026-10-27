@@ -76,14 +76,17 @@ export class AppMenu {
     // contextmenu, and after the first open the menu is often moved up (she's at the
     // bottom of the screen), so that mousedown looks "outside" and would hide the
     // menu and drop ignoreMouseEvents before contextmenu can reopen it.
+    // Seen first (capture), so nothing under the pointer can keep it from her: while the menu is
+    // up she takes the whole screen, and a click that doesn't close it would be a click lost.
     window.addEventListener('mousedown', (e) => {
-      if (!this.open || e.button !== 0) return;
+      if (!this.visible || e.button !== 0) return;
       if (performance.now() - this.openedAt < 400) return;
+      if (!this.open) return this.hide(); // still opening (or stuck at it): the click wins
       const r = this.el.getBoundingClientRect();
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
         this.hide();
       }
-    });
+    }, true);
   }
 
   get visible() {
@@ -860,6 +863,7 @@ export class AppMenu {
   async refresh() {
     if (!this.open) return;
     const state = await this.host.getMenu({ folded: this.folded() });
+    if (!this.open) return; // closed while it was asked: don't take the keyboard for a hidden menu
     this.render(state);
   }
 
