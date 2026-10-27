@@ -123,8 +123,9 @@ export class AppMenu {
     }
   }
 
-  hide() {
-    if (!this.open && !this.opening) return;
+  // force: whatever it thinks it is, it goes (a forced close, or drawn while it thought it was closed)
+  hide({ force = false } = {}) {
+    if (!force && !this.open && !this.opening && this.el.hidden) return;
     this.open = false;
     this.opening = false;
     this.expanded = null;

@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('host', {
   setInteractive: (on) => ipcRenderer.send('overlay:interactive', Boolean(on)),
   rearm: () => ipcRenderer.send('overlay:rearm'),
   appFxHit: (id) => ipcRenderer.send('appfx:hit', Number(id)),
+  menuOpen: (open) => ipcRenderer.send('overlay:menu', Boolean(open)),
+  beat: (state) => ipcRenderer.send('overlay:beat', state),
   cursor: () => ipcRenderer.invoke('overlay:cursor'),
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (patch) => ipcRenderer.invoke('config:set', patch),

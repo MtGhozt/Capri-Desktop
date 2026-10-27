@@ -51,6 +51,7 @@ const DEFAULTS = {
     toggle: 'Ctrl+Alt+C',  // put her away / bring her back
     chat: 'Ctrl+Alt+T',    // open the chat bubble
     talk: 'Ctrl+Alt+V',    // push to talk
+    menuClose: 'Ctrl+Alt+M', // her menu closed whatever state it's in, the clicks given back
   },
   clips: {
     saveHotkey: 'Alt+F10', // NVIDIA Instant Replay

@@ -40,6 +40,7 @@ const {
 const { createAppFlow } = require('./app-flow');
 const { createAppActions, isProtected } = require('./app-actions');
 const { createAppFx } = require('./app-fx');
+const { createMenuGuard } = require('./menu-guard');
 const { toOverlayRect } = require('./rects');
 const appScan = require('./app-scan');
 const appHost = require('./app-host');
@@ -188,6 +189,7 @@ function createOverlay() {
   overlay.once('ready-to-show', () => {
     fitOverlay();
     overlay.showInactive();
+    if (!menuGuardTimer) menuGuardTimer = setInterval(() => menuGuard.tick(), 2000);
     for (const payload of voiceQueue) overlay.webContents.send('voice:event', payload);
     voiceQueue = [];
   });
@@ -232,6 +234,42 @@ function setClickThrough(on) {
   if (!overlay || overlay.isDestroyed()) return;
   if (clickThrough) overlay.setIgnoreMouseEvents(true, { forward: true });
   else overlay.setIgnoreMouseEvents(false);
+}
+
+// Her menu can't hold the screen (menu-guard.js): heartbeat, forced close, Esc while it's open.
+const menuGuard = createMenuGuard({
+  clickThrough: () => clickThrough,
+  setClickThrough,
+  sendCommand: (name, payload) => {
+    sendCommand(name, payload);
+    // a frame of the menu left on screen by a stalled compositor goes too
+    setTimeout(() => overlay && !overlay.isDestroyed() && overlay.webContents.invalidate(), 150);
+  },
+  keyboardOff: () => menuKeyboardOn(false),
+  reload: () => {
+    if (!overlay || overlay.isDestroyed()) return;
+    overlay.webContents.reloadIgnoringCache();
+  },
+  onMenu: (open) => takeEscape(open),
+  log: (line) => logEvent(voiceLogPath(), line),
+});
+
+// Esc while her menu is open, wherever the keyboard is: the overlay rarely has it (it never takes
+// it by itself), so a key listener in her page alone can't be counted on.
+let escapeTaken = false;
+let menuGuardTimer = 0;
+function takeEscape(on) {
+  if (on === escapeTaken) return;
+  try {
+    if (on) escapeTaken = globalShortcut.register('Escape', () => menuGuard.forceClose('esc'));
+    else {
+      globalShortcut.unregister('Escape');
+      escapeTaken = false;
+    }
+  } catch (err) {
+    console.error(`[capri] Esc for the menu: ${err.message}`);
+    escapeTaken = false;
+  }
 }
 
 function sendCommand(name, payload = {}) {
@@ -899,6 +937,7 @@ function registerShortcuts() {
   const s = config.load().shortcuts || {};
   bind(s.toggle, () => toggleVisible());
   bind(s.chat, () => toggleChat());
+  bind(s.menuClose, () => menuGuard.forceClose('shortcut'));
   talkCombo = '';
   const talk = talkHotkey(config.load());
   if (talk && registerTalk(talk)) talkCombo = talk;
@@ -1049,6 +1088,8 @@ function rebuildTray() {
   const menu = Menu.buildFromTemplate([
     { label: s.online, enabled: false },
     { type: 'separator' },
+    // always there: her menu stuck open can't hold the screen
+    { label: t.closeMenu, accelerator: config.load().shortcuts?.menuClose || undefined, click: () => menuGuard.forceClose('tray') },
     { label: t.teleport, click: () => applyMenuAction('teleport') },
     ...(!s.folded ? [
       { label: t.satellite, click: () => applyMenuAction('satellite') },
@@ -1164,8 +1205,10 @@ function createTray() {
 
 function registerIpc() {
   ipcMain.on('overlay:interactive', (_e, on) => setClickThrough(!on));
-  ipcMain.on('overlay:rearm', () => rearmOverlay());
-  ipcMain.on('appfx:hit', (_e, id) => appFx.hit(id)); // the pointer moved over her and she never heard of it
+  ipcMain.on('overlay:rearm', () => rearmOverlay()); // the pointer moved over her and she never heard of it
+  ipcMain.on('appfx:hit', (_e, id) => appFx.hit(id));
+  ipcMain.on('overlay:menu', (_e, open) => menuGuard.menuChanged(Boolean(open)));
+  ipcMain.on('overlay:beat', (_e, state) => menuGuard.beat(state && typeof state === 'object' ? state : {}));
   ipcMain.on('overlay:folded', (_e, on) => {
     overlayFolded = Boolean(on);
     voice?.setSleeping?.(overlayFolded);
@@ -1313,6 +1356,14 @@ async function debugHandler(route, body) {
   if (!DEV) throw new Error('debug routes need --dev');
   if (route === 'command') {
     sendCommand(body.name, body);
+    return { ok: true };
+  }
+  if (route === 'eval') {
+    // what her page says about itself (menu, click-through...), for smoke tests
+    return { ok: true, value: await overlay.webContents.executeJavaScript(String(body.js || 'null')), clickThrough };
+  }
+  if (route === 'force-close-menu') {
+    menuGuard.forceClose('debug');
     return { ok: true };
   }
   if (route === 'reload') {

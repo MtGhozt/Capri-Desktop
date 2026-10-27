@@ -267,7 +267,10 @@ async function boot() {
     if (open) panel.hide();
     refreshHit();
   };
-  appMenu.onOpenChange = () => refreshHit();
+  appMenu.onOpenChange = (open) => {
+    host.menuOpen(open);
+    refreshHit();
+  };
   dormant.onOpenChange = () => refreshHit();
   capri.onMenu = (at) => openAppMenu(at?.x ?? capri.head().x, at?.y ?? capri.head().y, capri.bounds());
 
@@ -627,6 +630,36 @@ async function boot() {
   };
 
   setInterval(() => bubble.watchdog(), 5000); // never stuck in DECRYPTING or TALKING
+
+  // Her menu and her click-through, told to main every 2 s (menu-guard.js): main keeps the window in
+  // line with it, and takes the clicks back for the other windows if she stops answering.
+  function beat() {
+    if (!appMenu.visible && !appMenu.el.hidden) {
+      console.error('[capri] menu drawn while closed: hiding it');
+      appMenu.hide({ force: true });
+    }
+    host.beat({
+      menu: appMenu.visible,
+      shown: !appMenu.el.hidden,
+      interactive,
+      folding,
+      dragging: Boolean(capri.dragging),
+    });
+  }
+
+  setInterval(beat, 2000);
+  // Forced close: the menu goes, whatever it thinks it is, and nothing left holds the screen
+  // (a fold that never ended, a drag that lost its mouseup). Main has already put click-through on.
+  function forceFree() {
+    appMenu.hide({ force: true });
+    if (folding && performance.now() - foldingAt > 3000) folding = false;
+    if (capri.dragging) window.dispatchEvent(new MouseEvent('mouseup'));
+    mouse = null;
+    interactive = true; // so the false below is sent, whatever she thought before
+    refreshHit();
+    beat();
+  }
+
   // Click-through can't stay off by itself: a fold that never ended lets go, and what she asks
   // main for is sent again (main may have lost it to a focus change).
   setInterval(() => {
@@ -755,8 +788,12 @@ async function boot() {
       case 'app-fx': // her zap before closing an app, her spark after opening one (Paso 4E)
         appFx(cmd);
         break;
-      case 'menu-close': // another window came to the front
-        appMenu.hide();
+      case 'menu-close': // another window came to the front; force: the tray, Ctrl+Alt+M, Esc
+        if (!cmd.force) {
+          appMenu.hide();
+          break;
+        }
+        forceFree();
         break;
       case 'rearmed': // a new mouse hook (main.js): click-through until the pointer comes over her again
         mouse = null;

@@ -7,7 +7,7 @@ const TRAY = {
   fr: {
     name: 'Français',
     online: (port) => `Capri — à l'écoute sur ${port}`,
-    teleport: 'Téléporter', satellite: 'Regarder le satellite', demo: 'Lancer la démo', help: 'Comment ça marche ?',
+    closeMenu: 'Fermer le menu', teleport: 'Téléporter', satellite: 'Regarder le satellite', demo: 'Lancer la démo', help: 'Comment ça marche ?',
     show: 'La faire revenir', hide: 'La ranger', sleep: 'Dormir', wake: 'Réveiller',
     size: 'Taille', small: 'Petite', medium: 'Moyenne', large: 'Grande', sound: 'Son', mute: 'Muet',
     reply: 'Réponse', replyVoice: 'Voix', replyBlips: 'Blips', replySilent: 'Silence',
@@ -20,7 +20,7 @@ const TRAY = {
   en: {
     name: 'English',
     online: (port) => `Capri — listening on ${port}`,
-    teleport: 'Teleport', satellite: 'Look at the satellite', demo: 'Play demo', help: 'How does it work?',
+    closeMenu: 'Close the menu', teleport: 'Teleport', satellite: 'Look at the satellite', demo: 'Play demo', help: 'How does it work?',
     show: 'Bring her back', hide: 'Put her away', sleep: 'Sleep', wake: 'Wake up',
     size: 'Size', small: 'Small', medium: 'Medium', large: 'Large', sound: 'Sound', mute: 'Mute',
     reply: 'Reply', replyVoice: 'Voice', replyBlips: 'Blips', replySilent: 'Silent',
@@ -33,7 +33,7 @@ const TRAY = {
   es: {
     name: 'Español',
     online: (port) => `Capri — escuchando en ${port}`,
-    teleport: 'Teletransportar', satellite: 'Mirar el satélite', demo: 'Ver la demo', help: '¿Cómo funciona?',
+    closeMenu: 'Cerrar menú', teleport: 'Teletransportar', satellite: 'Mirar el satélite', demo: 'Ver la demo', help: '¿Cómo funciona?',
     show: 'Traerla de vuelta', hide: 'Guardarla', sleep: 'Dormir', wake: 'Despertar',
     size: 'Tamaño', small: 'Pequeña', medium: 'Mediana', large: 'Grande', sound: 'Sonido', mute: 'Silenciar',
     reply: 'Respuesta', replyVoice: 'Voz', replyBlips: 'Blips', replySilent: 'Silencio',
@@ -46,7 +46,7 @@ const TRAY = {
   pt: {
     name: 'Português (Brasil)',
     online: (port) => `Capri — ouvindo na porta ${port}`,
-    teleport: 'Teletransportar', satellite: 'Olhar o satélite', demo: 'Ver a demo', help: 'Como funciona?',
+    closeMenu: 'Fechar o menu', teleport: 'Teletransportar', satellite: 'Olhar o satélite', demo: 'Ver a demo', help: 'Como funciona?',
     show: 'Trazer de volta', hide: 'Guardar', sleep: 'Dormir', wake: 'Acordar',
     size: 'Tamanho', small: 'Pequena', medium: 'Média', large: 'Grande', sound: 'Som', mute: 'Sem som',
     reply: 'Resposta', replyVoice: 'Voz', replyBlips: 'Blips', replySilent: 'Silêncio',
@@ -59,7 +59,7 @@ const TRAY = {
   ru: {
     name: 'Русский',
     online: (port) => `Capri — слушаю порт ${port}`,
-    teleport: 'Телепортироваться', satellite: 'Посмотреть на спутник', demo: 'Запустить демо', help: 'Как это работает?',
+    closeMenu: 'Закрыть меню', teleport: 'Телепортироваться', satellite: 'Посмотреть на спутник', demo: 'Запустить демо', help: 'Как это работает?',
     show: 'Вернуть её', hide: 'Спрятать', sleep: 'Спать', wake: 'Разбудить',
     size: 'Размер', small: 'Маленькая', medium: 'Средняя', large: 'Большая', sound: 'Звук', mute: 'Без звука',
     reply: 'Ответ', replyVoice: 'Голос', replyBlips: 'Blips', replySilent: 'Тишина',
