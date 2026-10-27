@@ -1936,6 +1936,7 @@ export class Capri {
         tween(this.p, { glitch: 0, split: 0 }, 200, ease.out);
         this.onTeleport?.('end');
         this.drop();
+        this.onDropped?.(); // app.js: the message box pops over to her
       } else {
         this.onClick?.();
       }
