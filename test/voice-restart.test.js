@@ -18,8 +18,9 @@ function setup(t) {
   fs.writeFileSync(path.join(dir, '.venv', 'bin', 'python'), '');
   fs.writeFileSync(path.join(dir, 'server.py'), '');
   const children = [];
-  const spawn = () => {
+  const spawn = (cmd) => {
     const child = new EventEmitter();
+    if (cmd === 'taskkill') return child; // stop() on Windows: not a sidecar
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
     child.pid = 1000 + children.length;
