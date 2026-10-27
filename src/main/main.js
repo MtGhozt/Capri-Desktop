@@ -38,7 +38,8 @@ const {
   normalizeAccelerator, acceleratorFromKey, sameCombo,
 } = require('./hearing');
 const { createAppFlow } = require('./app-flow');
-const { createAppActions } = require('./app-actions');
+const { createAppActions, isProtected } = require('./app-actions');
+const appScan = require('./app-scan');
 const appHost = require('./app-host');
 const {
   TYPE_LABEL, CLOSE_LABEL, CLOSE_MODES, plainKey, cleanApps, normalizeApp, seedApps, defaultCandidates,
@@ -473,13 +474,15 @@ async function goClipReply({ chat = true } = {}) {
 // "abre Discord", "cierra Spotify": straight from her table (config apps.list), no model.
 
 const appList = () => cleanApps(config.load().apps?.list);
+// your table first, then what her scan found on this PC (Paso 4D)
+const allApps = () => appScan.mergeApps(appList(), scanned().items);
 const appLog = (text) => logEvent(voiceLogPath(), `[capri] ${text}`);
 let appFlow = null;
 
 function apps() {
   if (!appFlow) {
     appFlow = createAppFlow({
-      apps: appList,
+      apps: allApps,
       actions: createAppActions(appHost.realDeps({ shell, skipPids: () => [process.pid, process.ppid] })),
       line: (kind, values) => fillLine(pickLine(kind), values),
       log: appLog,
@@ -506,6 +509,77 @@ async function seedAppTable() {
   const { list, added } = seedApps(config.load().apps?.list, candidates);
   config.save({ apps: { list, seeded: SEED_VERSION } });
   appLog(`apps seeded v${SEED_VERSION}: ${added.length ? added.join(', ') : 'nothing new'}`);
+}
+
+// -- what is installed (Paso 4D) ------------------------------------------------------------
+// Steam, Epic and GOG games and the Start menu, cached in scan.json; scanned again at start when
+// a day old, and from her menu (APPS, Volver a escanear).
+
+const scanPath = () => path.join(app.getPath('userData'), 'scan.json');
+let scanCache;
+let scanRunning = null;
+
+function scanned() {
+  if (scanCache === undefined) {
+    try {
+      scanCache = JSON.parse(fs.readFileSync(scanPath(), 'utf8'));
+    } catch {
+      scanCache = null;
+    }
+  }
+  return scanCache && Array.isArray(scanCache.items) ? scanCache : { items: [] };
+}
+
+function runScan(reason) {
+  if (scanRunning) return scanRunning;
+  scanRunning = (async () => {
+    const places = await appScan.scanPlaces({ env: process.env, regValue: appHost.regValue });
+    const result = await appScan.scanAll({
+      places,
+      regQuery: appHost.regQuery,
+      readShortcut: (file) => appHost.readShortcut(shell, file),
+      isProtected,
+    });
+    const tmp = `${scanPath()}.tmp`;
+    await fs.promises.writeFile(tmp, JSON.stringify(result, null, 2), 'utf8');
+    await fs.promises.rename(tmp, scanPath());
+    scanCache = result;
+    const c = result.counts;
+    appLog(`apps scan (${reason}): steam=${c.steam} epic=${c.epic} gog=${c.gog} start=${c.start} in ${result.ms}ms`);
+    return result;
+  })().finally(() => {
+    scanRunning = null;
+  });
+  return scanRunning;
+}
+
+function scanIfStale() {
+  scanned();
+  if (!appScan.isStale(scanCache)) return;
+  runScan(scanCache ? 'stale' : 'first').catch((err) => appLog(`apps scan failed: ${err.message}`));
+}
+
+// What the scan found that isn't in your table: { name, source, … } as shown in her menu.
+function foundApps() {
+  const table = appList();
+  return appScan.mergeApps(table, scanned().items).slice(table.length);
+}
+
+function promoteApp(name) {
+  const found = foundApps().find((a) => sameName(a.name, name));
+  if (!found) return { ok: false, message: 'Ya no está en lo encontrado. Vuelve a escanear.' };
+  const { source, ...entry } = found;
+  return addApp(entry);
+}
+
+async function rescanApps() {
+  try {
+    const result = await runScan('menu');
+    return { ok: true, counts: result.counts };
+  } catch (err) {
+    appLog(`apps scan failed: ${err.message}`);
+    return { ok: false, message: `No se pudo escanear: ${err.message}` };
+  }
 }
 
 function saveApps(list) {
@@ -715,6 +789,8 @@ function applyMenuAction(id, value) {
     case 'apps-update': return updateApp(value);
     case 'apps-remove': return removeApp(value);
     case 'apps-test': return { ok: true, text: apps().dryRun(value) };
+    case 'apps-rescan': return rescanApps();
+    case 'apps-promote': return promoteApp(value);
     case 'clips-dir': openClipsFolder(config.load()); break;
     case 'drag-lock':
       config.save({ position: { locked: Boolean(value) } });
@@ -871,6 +947,18 @@ function menuState(extra = {}) {
       followUpSec: followUpSec(cfg),
     },
     apps: appsMenuState(),
+    found: {
+      at: scanned().at || null,
+      scanning: Boolean(scanRunning),
+      counts: scanned().counts || null,
+      items: foundApps().map((a) => ({
+        name: a.name,
+        source: a.source,
+        sourceLabel: appScan.SOURCE_LABEL[a.source] || a.source,
+        typeLabel: TYPE_LABEL[a.type] || a.type,
+        target: a.type === 'steam' ? `steam ${a.target}` : a.target,
+      })),
+    },
     clips: {
       hotkey: cfg.clips?.saveHotkey || 'Alt+F10',
       folder: clipFolderLabel(cfg),
@@ -1331,6 +1419,8 @@ function main() {
     });
     registerShortcuts();
     setTimeout(() => seedAppTable().catch((err) => appLog(`apps seed failed: ${err.message}`)), 5000);
+    setTimeout(scanIfStale, 20000); // after her voice is up: the disk is busy enough before
+
     screen.on('display-metrics-changed', fitOverlay);
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });
