@@ -20,11 +20,11 @@ $ErrorActionPreference = 'SilentlyContinue'
 if ($Mode -like 'explorer*') {
   $shellApp = New-Object -ComObject Shell.Application
   $folders = { @($shellApp.Windows() | Where-Object { $_.FullName -match '\\explorer\.exe$' }) }
-  $wins = & $folders
+  $wins = @(& $folders)
   if ($Mode -eq 'explorer') {
     foreach ($w in $wins) { $w.Quit() }
     $deadline = (Get-Date).AddMilliseconds([Math]::Min($WaitMs, 2000))
-    do { Start-Sleep -Milliseconds 200; $wins = & $folders } while ($wins.Count -gt 0 -and (Get-Date) -lt $deadline)
+    do { Start-Sleep -Milliseconds 200; $wins = @(& $folders) } while ($wins.Count -gt 0 -and (Get-Date) -lt $deadline)
   }
   [pscustomobject]@{ ids = @(); names = @(); left = $wins.Count } | ConvertTo-Json -Compress
   exit 0
