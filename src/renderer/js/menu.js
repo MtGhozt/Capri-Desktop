@@ -889,7 +889,7 @@ export class AppMenu {
     }
     this.confirmForget = false;
     const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock' || id === 'theme'
-      || id === 'startup' || id === 'gaming-mode' || id === 'comments';
+      || id === 'startup' || id === 'gaming-mode' || id === 'comments' || id === 'app-fx';
     await this.host.menuAction({ id, value });
     if (!keep) {
       this.hide();
