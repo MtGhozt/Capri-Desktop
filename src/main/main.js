@@ -13,6 +13,7 @@ const { TRAY, LANGS } = require('./labels');
 const { createBridge } = require('./bridge');
 const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
+const { PROVIDERS, providerOptions, isCloud } = require('./chat-providers');
 const { createLms } = require('./lms');
 const { createVoice } = require('./voice');
 const { createSpeakQueue } = require('./speak');
@@ -1073,6 +1074,10 @@ function applyMenuAction(id, value) {
     case 'music-player':
       updateConfig({ music: { player: ['namida', 'spotify', 'none'].includes(value) ? value : 'namida' } });
       break;
+    case 'model-provider': return setChatProvider(value);
+    case 'model-set': return setChatModel(value);
+    case 'model-key': return setChatKey(value);
+    case 'model-share': updateConfig({ llm: value }); break;
     case 'spotify-connect':
       updateConfig({ music: { spotify: { clientId: String(value || '').trim().slice(0, 100) } } });
       return connectSpotify(value);
