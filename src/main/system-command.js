@@ -71,7 +71,10 @@ const ASKS = new Set(['shutdown', 'restart', 'suspend']);
 const PROGRAMS = {
   shutdown: () => ['shutdown', ['/s', '/t', '0']],
   restart: () => ['shutdown', ['/r', '/t', '0']],
-  suspend: () => ['rundll32.exe', ['powrprof.dll,SetSuspendState', '0,1,0']],
+  // real sleep, never hibernate: rundll32 can't pass SetSuspendState its arguments, so with
+  // hibernation on it hibernates. WinForms asks for PowerState.Suspend explicitly.
+  suspend: () => ['powershell.exe', ['-NoProfile', '-Command',
+    "Add-Type -AssemblyName System.Windows.Forms; [void][System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)"]],
   lock: () => ['rundll32.exe', ['user32.dll,LockWorkStation']],
   minimize: () => ['powershell.exe', ['-NoProfile', '-Command', '(New-Object -ComObject Shell.Application).MinimizeAll()']],
 };

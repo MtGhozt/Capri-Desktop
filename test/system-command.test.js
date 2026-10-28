@@ -137,6 +137,8 @@ test('the real commands go at once: the waiting happened on her screen', () => {
   assert.match(src, /\['\/s', '\/t', '0'\]/);
   assert.match(src, /\['\/r', '\/t', '0'\]/);
   assert.doesNotMatch(src, /'\/t', '5'/);
+  assert.match(src, /SetSuspendState\('Suspend', \$false, \$false\)/); // sleep, not hibernate
+  assert.doesNotMatch(src, /powrprof/);
 });
 
 for (const [when, step] of [['while she talks', 'say'], ['during the animation', 'fx']]) {
