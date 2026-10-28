@@ -1510,3 +1510,76 @@ button.appmenu__row {
 .appmenu__tag--gog {
   color: var(--accent-on);
 }
+
+/* Paso 4G: the screen giving up before a shutdown / restart / suspend (system-fx.js) */
+.sysfx {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+  background: transparent;
+}
+
+.sysfx.is-crt {
+  background: #000;
+}
+
+.sysfx__screen {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+}
+
+.sysfx__stripes {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 2px, rgba(0, 0, 0, 0.35) 2px 3px),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 0, 80, 0.55) 0 6px,
+      rgba(150, 30, 255, 0.5) 6px 12px,
+      rgba(40, 0, 60, 0.85) 12px 22px
+    ),
+    linear-gradient(180deg, rgba(60, 0, 40, 0.9), rgba(25, 0, 50, 0.92));
+  box-shadow: inset 8px 0 0 rgba(0, 255, 255, 0.3), inset -8px 0 0 rgba(255, 0, 80, 0.3);
+}
+
+.sysfx.is-glitch .sysfx__stripes {
+  animation: vhs-tear 90ms steps(2, jump-none) infinite;
+}
+
+.sysfx.is-crt .sysfx__stripes {
+  background: linear-gradient(180deg, #fff, #f6d8ff);
+  box-shadow: none;
+}
+
+.sysfx__text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font: 700 clamp(28px, 6vw, 88px) / 1 'Consolas', 'Courier New', monospace;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: #fff;
+  text-shadow: 4px 0 rgba(255, 0, 80, 0.9), -4px 0 rgba(0, 255, 255, 0.85), 0 0 18px rgba(255, 0, 120, 0.6);
+}
+
+.sysfx__dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 18px 6px rgba(255, 255, 255, 0.8);
+  transform: translate(-50%, -50%);
+}
+
+.sysfx__dot[hidden] {
+  display: none;
+}

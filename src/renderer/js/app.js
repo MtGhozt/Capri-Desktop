@@ -11,6 +11,7 @@ import { Brain } from './brain.js';
 import { Guide } from './guide.js';
 import { LINES } from './lines.js';
 import { POSE_FILES } from './poses.js';
+import { SystemFx } from './system-fx.js';
 import { pick, fmt, sleep, tween, reducedMotion } from './util.js';
 
 const host = window.host;
@@ -296,18 +297,8 @@ async function boot() {
   let talkGlitch = 0;
   const useGlitch = () => glitchFx && !reducedMotion.matches;
   const showVhs = (on) => { vhs.hidden = !on; };
-  // The full-screen glitch before the PC goes down (Paso 4G): the same VHS tear her fold uses,
-  // over the whole overlay, longer for a shutdown or a restart.
-  let systemFxTimer = 0;
-  const systemGlitch = async (ms = 1100) => {
-    if (!useGlitch()) return;
-    clearTimeout(systemFxTimer);
-    showVhs(true);
-    capri.p.glitchSeed = Math.random() * 100;
-    await tween(capri.p, { glitch: 0.9, split: 9 }, Math.max(150, ms * 0.55));
-    await tween(capri.p, { glitch: 0, split: 0 }, Math.max(150, ms * 0.45));
-    systemFxTimer = setTimeout(() => showVhs(false), 120);
-  };
+  // The screen giving up before the PC goes down (Paso 4G): main waits for it to be over.
+  const systemFx = new SystemFx({ reducedMotion });
   const canFold = () => (
     Number.isFinite(idleMs) && idleMs > 0
     && !folding
@@ -828,7 +819,11 @@ async function boot() {
         appFx(cmd);
         break;
       case 'system-fx': // the screen tears itself apart before a shutdown / restart / suspend (Paso 4G)
-        systemGlitch(cmd.ms);
+        systemFx.play({ ms: cmd.ms }).then(() => host.systemFxDone?.(cmd.id));
+        break;
+      case 'system-fx-stop': // cancelled: give the screen back at once
+      case 'system-fx-clear': // preview over, the command failed, or back from sleep
+        systemFx.stop();
         break;
       case 'menu-close': // another window came to the front; force: the tray, Ctrl+Alt+M, Esc
         if (!cmd.force) {
