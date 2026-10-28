@@ -564,7 +564,16 @@ function systemFx(action) {
 }
 
 const systemFlow = createSystemFlow({
-  run: (action) => runSystem(action),
+  run: async (action) => {
+    // her mic and voice let go of the audio devices (and the GPU) before the PC sleeps;
+    // they come back on resume
+    if (action === 'suspend' && voice) {
+      logEvent(voiceLogPath(), '[capri] voice sidecar stopped before suspend');
+      voice.stop();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    return runSystem(action);
+  },
   line: (kind, values) => fillLine(pickLine(kind), values),
   say: (text) => sayAndWait(text),
   log: (text) => logEvent(voiceLogPath(), `[capri] ${text}`),
@@ -1742,6 +1751,19 @@ function main() {
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });
     // after sleep or a locked screen, once Windows has settled
     powerMonitor.on('resume', () => setTimeout(rearmOverlay, 2000));
+    // a sidecar that slept with the audio devices open can leave Windows with no sound at all:
+    // stop it as the PC goes down and start it fresh once Windows has its devices back
+    powerMonitor.on('suspend', () => {
+      if (!voice) return;
+      logEvent(voiceLogPath(), '[capri] voice sidecar stopped: PC suspending');
+      voice.stop();
+    });
+    powerMonitor.on('resume', () => setTimeout(() => {
+      if (!voice) return;
+      logEvent(voiceLogPath(), '[capri] voice sidecar restarted after resume');
+      voice.stop();
+      voice.start();
+    }, 4000));
     powerMonitor.on('unlock-screen', () => setTimeout(rearmOverlay, 1000));
   });
 
