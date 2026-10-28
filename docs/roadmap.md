@@ -27,6 +27,7 @@ Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
 - [x] **4H caja + poses:** caja `CAPRI.SYS // MENSAJE` (carpeta, logs, typewriter) y Capri recostada/de pie en el borde (`lying_A` / `lying_B`).
 - [ ] **4I Extras:** modo compacto, "Hacer algo" en el menú, saludo grande al desbloquear la PC.
 - [ ] **4J Pulido para GitHub** (puede pasar a la Fase 6): submenú de voces (voz neural robótica por defecto, "Capri" solo local), proveedor por API key, `setup.bat` de un clic, README.
+- [x] **4K Traído de upstream:** proveedores de chat en la nube (LM Studio, OpenRouter, Groq, Gemini, OpenAI, Mistral, DeepSeek) con clave cifrada y vuelta automática a Gemma, clic recuperado con el puntero encima, y opción "Pantalla" para PCs donde su ventana sale negra. Ver `docs/THIRD_PARTY.md`.
 - Quitar "módulo no conectado" de `persona.md` a medida que cada cosa funcione.
 
 ## Fase 5 — Vigilar agentes de código
