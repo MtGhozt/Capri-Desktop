@@ -23,6 +23,7 @@ const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
+const { createSystemFlow, runSystem, abortSystem } = require('./system-command');
 const { createMusic } = require('./music');
 const { createSpotify, createTokenStore, authorizeSpotify } = require('./spotify');
 const { pickLine, fillLine } = require('./lines-es');
@@ -276,6 +277,23 @@ function takeEscape(on) {
   }
 }
 
+// Esc during the shutdown / restart countdown (Paso 4G): the only key that stops it from anywhere.
+let systemEsc = false;
+function systemEscape(on) {
+  if (on) {
+    if (systemEsc || escapeTaken) return;
+    try {
+      if (globalShortcut.register('Escape', () => systemFlow.cancel('esc'))) systemEsc = true;
+    } catch (err) {
+      console.error(`[capri] Esc for the countdown: ${err.message}`);
+    }
+    return;
+  }
+  if (!systemEsc) return;
+  try { globalShortcut.unregister('Escape'); } catch { /* already gone */ }
+  systemEsc = false;
+}
+
 function sendCommand(name, payload = {}) {
   overlay?.webContents.send('capri:command', { name, ...payload });
 }
@@ -505,6 +523,25 @@ async function musicReply(parsed, { chat = true } = {}) {
     return { ok: false };
   }
 }
+
+// -- the PC's own power commands (Paso 4G) -------------------------------------------------
+// "apaga la compu", "bloquea la PC": straight from what you said, never the model. `systemFlow`
+// asks first for shutdown / restart / suspend and gives the countdown its Esc.
+
+const systemFlow = createSystemFlow({
+  run: (action) => runSystem(action),
+  cancel: () => abortSystem(),
+  line: (kind, values) => fillLine(pickLine(kind), values),
+  say: (text) => announce(text, { chat: true, badge: 'SISTEMA' }),
+  log: (text) => logEvent(voiceLogPath(), `[capri] ${text}`),
+  event: (text) => sendCommand('box-log', { kind: 'sistema', text }),
+  fx: (action) => {
+    // her menu's "Animaciones de apps" off: the screen stays as it is
+    if (!overlay || overlay.isDestroyed() || config.load().fx?.apps === false) return;
+    sendCommand('system-fx', { action, ms: action === 'suspend' ? 500 : 1100 });
+  },
+  escape: (on) => systemEscape(on),
+});
 
 function goSleepReply({ chat = true } = {}) {
   const line = pickLine('dormir');
@@ -1399,6 +1436,9 @@ function registerIpc() {
   ipcMain.handle('chat:send', async (_e, text) => {
     const line = String(text || '').trim();
     if (!line || !overlay) return { ok: false };
+    // her "¿seguro que apago la compu?" waiting for this answer (Paso 4G)
+    const powerAnswer = await systemFlow.answer(line);
+    if (powerAnswer) return { ok: true };
     // her "¿quisiste decir…?" / "¿seguro?" waiting for this answer (Paso 4C)
     const answered = await apps().answer(line);
     if (answered) return appReply(answered);
@@ -1407,6 +1447,8 @@ function registerIpc() {
       const done = goFixReply(fixOrder);
       if (done.line) return done; // said something; a fix that can't be saved (too long) goes to the model
     }
+    const powerOrder = await systemFlow.command(line);
+    if (powerOrder) return { ok: true };
     const musicOrder = parseMusicCommand(line);
     if (musicOrder) return musicReply(musicOrder);
     if (isSleepCommand(line)) return goSleepReply();
