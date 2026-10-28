@@ -342,9 +342,12 @@ class Engine:
     def _vram_budget(self) -> tuple[int, int, bool]:
         free = free_vram_mib()
         base = str(self.cfg.get("llmBaseUrl") or "http://localhost:1235/v1")
-        loaded = llm_has_model(base)
-        usable = usable_vram_mib(free, loaded)
-        reserve = 0 if loaded else GEMMA_RESERVE_MIB
+        # A cloud provider answers, so Gemma will never load here: the GPU is OmniVoice's (her own
+        # voice), and reserving memory for a model that never comes only forced Kokoro.
+        local_llm = self.cfg.get("localLlm", True) is not False
+        loaded = llm_has_model(base) if local_llm else False
+        usable = usable_vram_mib(free, loaded, GEMMA_RESERVE_MIB if local_llm else 0)
+        reserve = 0 if loaded or not local_llm else GEMMA_RESERVE_MIB
         log(f"vram free ~{free} MiB usable ~{usable} MiB llm_loaded={int(loaded)} reserve={reserve}")
         return free, usable, loaded
 
