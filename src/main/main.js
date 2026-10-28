@@ -487,8 +487,9 @@ const MUSIC_LINE = {
 async function musicReply(parsed, { chat = true } = {}) {
   try {
     const result = await music.command(parsed);
-    if (result?.error) {
-      showLine(result.error, { chat, badge: 'MUSIC' });
+    logEvent(voiceLogPath(), `[capri] music ${parsed.action} ${result?.ok ? 'ok' : `failed: ${result?.error || '?'}`}`);
+    if (!result?.ok) {
+      showLine(result?.error || 'No pude hacer eso con la música.', { chat, badge: 'MUSIC' });
       return { ok: false };
     }
     const line = result?.track
@@ -499,6 +500,7 @@ async function musicReply(parsed, { chat = true } = {}) {
     return { ok: true };
   } catch (err) {
     console.error('[capri] music command failed:', err.message);
+    logEvent(voiceLogPath(), `[capri] music ${parsed.action} failed: ${err.message}`);
     showLine('No pude controlar la música.', { chat, badge: 'MUSIC' });
     return { ok: false };
   }
@@ -619,10 +621,23 @@ async function connectSpotify(clientId) {
   }
 }
 const spotify = createSpotify({ token: () => spotifyAccessToken });
+// is that program up? (tasklist, so no extra script)
+function processRunning(name) {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') return resolve(false);
+    const child = spawn('tasklist', ['/FI', `IMAGENAME eq ${name}.exe`, '/NH'], { windowsHide: true });
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; });
+    child.once('error', () => resolve(false));
+    child.once('close', () => resolve(out.toLowerCase().includes(`${name}.exe`)));
+  });
+}
+
 const music = createMusic({
   config,
   apps: allApps,
   spotify,
+  isRunning: (name) => processRunning(name),
   sendKey: (action, script) => new Promise((resolve, reject) => {
     if (process.platform !== 'win32') return reject(new Error('media keys require Windows'));
     const child = spawn('powershell.exe', [
