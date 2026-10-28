@@ -334,6 +334,36 @@ export class AppMenu {
       onChange: (id) => this.act('reply-mode', id),
     });
 
+    section('MÚSICA');
+    selector('Reproductor', {
+      options: [
+        { id: 'namida', label: 'NAMIDA' },
+        { id: 'spotify', label: 'SPOTIFY' },
+        { id: 'none', label: 'NINGUNO' },
+      ],
+      current: cfg.musicPlayer || 'namida',
+      onChange: (id) => this.act('music-player', id),
+    });
+    const spotify = build('div', 'appmenu__fix');
+    const client = build('input', 'appmenu__input');
+    client.type = 'text';
+    client.placeholder = 'Client ID de Spotify';
+    client.value = state.music?.clientId || '';
+    client.maxLength = 100;
+    client.spellcheck = false;
+    const saveClient = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', state.music?.connected ? 'DESCONECTAR' : 'CONECTAR');
+    saveClient.type = 'button';
+    saveClient.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.host.menuAction({
+        id: state.music?.connected ? 'spotify-disconnect' : 'spotify-connect',
+        value: client.value.trim(),
+      }).then(() => this.refresh()).catch(() => {});
+    });
+    spotify.append(build('label', 'appmenu__fix-field', 'Client ID'), client, saveClient,
+      build('div', 'appmenu__hint', state.music?.connected ? 'CONECTADO' : 'SIN CONEXIÓN'));
+    body.append(spotify);
+
     // MEMORIA
     section('MEMORIA');
     action('Olvidar conversación', {
@@ -893,7 +923,8 @@ export class AppMenu {
       return;
     }
     this.confirmForget = false;
-    const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'drag-lock' || id === 'theme'
+    const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'music-player'
+      || id === 'spotify-connect' || id === 'spotify-disconnect' || id === 'drag-lock' || id === 'theme'
       || id === 'startup' || id === 'gaming-mode' || id === 'comments' || id === 'app-fx' || id === 'scanlines';
     await this.host.menuAction({ id, value });
     if (!keep) {

@@ -2,9 +2,10 @@
 
 const path = require('node:path');
 const fs = require('node:fs');
+const { spawn } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog,
+  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog, safeStorage,
 } = require('electron');
 
 const config = require('./config');
@@ -21,6 +22,9 @@ const { isClipCommand } = require('./clip-command');
 const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { isWakeCommand } = require('./wake-command');
+const { parseMusicCommand } = require('./music-command');
+const { createMusic } = require('./music');
+const { createSpotify, createTokenStore, authorizeSpotify } = require('./spotify');
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
 const { parseFixCommand, readTranscript } = require('./fix-command');
@@ -178,6 +182,10 @@ function createOverlay() {
       sandbox: true,
       backgroundThrottling: false,
       autoplayPolicy: 'no-user-gesture-required',
+    },
+    music: {
+      clientId: String(cfg.music?.spotify?.clientId || ''),
+      connected: Boolean(spotifyAccessToken),
     },
   });
 
@@ -468,6 +476,36 @@ function commandReply(kind, opts) {
   return announce(pickLine(kind), opts);
 }
 
+const MUSIC_LINE = {
+  pause: 'musicaPausa',
+  play: 'musicaPlay',
+  next: 'musicaSiguiente',
+  previous: 'musicaAnterior',
+  volumeUp: 'musicaVolumen',
+  volumeDown: 'musicaVolumen',
+  mute: 'musicaMute',
+  start: 'musicaInicio',
+  query: 'musicaPlay',
+};
+
+async function musicReply(parsed, { chat = true } = {}) {
+  try {
+    const result = await music.command(parsed);
+    if (result?.error) {
+      showLine(result.error, { chat, badge: 'MUSIC' });
+      return { ok: false };
+    }
+    const line = pickLine(MUSIC_LINE[parsed.action] || 'musicaPlay');
+    sendCommand('box-log', { kind: 'musica', text: parsed.action });
+    announce(line, { chat, badge: 'MUSIC' });
+    return { ok: true };
+  } catch (err) {
+    console.error('[capri] music command failed:', err.message);
+    showLine('No pude controlar la música.', { chat, badge: 'MUSIC' });
+    return { ok: false };
+  }
+}
+
 function goSleepReply({ chat = true } = {}) {
   const line = pickLine('dormir');
   const spoken = Boolean(speakLine(line));
@@ -555,6 +593,47 @@ async function goClipReply({ chat = true } = {}) {
 const appList = () => cleanApps(config.load().apps?.list);
 // your table first, then what her scan found on this PC (Paso 4D)
 const allApps = () => appScan.mergeApps(appList(), scanned().items);
+
+let spotifyAccessToken = null;
+const spotifyTokens = () => createTokenStore({
+  file: path.join(app.getPath('userData'), 'spotify-token'),
+  safeStorage,
+});
+function restoreSpotifyToken() {
+  const saved = spotifyTokens().read();
+  if (saved?.access_token) spotifyAccessToken = saved.access_token;
+}
+async function connectSpotify(clientId) {
+  const id = String(clientId || '').trim();
+  if (!id) return { ok: false, message: 'Falta el Client ID.' };
+  try {
+    const tokens = await authorizeSpotify({
+      clientId: id,
+      openExternal: (url) => shell.openExternal(url),
+      tokenStore: spotifyTokens(),
+    });
+    spotifyAccessToken = tokens.access_token;
+    rebuildTray();
+    return { ok: true };
+  } catch (err) {
+    console.error('[capri] Spotify connection failed:', err.message);
+    return { ok: false, message: 'No pude conectar Spotify.' };
+  }
+}
+const spotify = createSpotify({ token: () => spotifyAccessToken });
+const music = createMusic({
+  config,
+  apps: allApps,
+  spotify,
+  sendKey: (action, script) => new Promise((resolve, reject) => {
+    if (process.platform !== 'win32') return reject(new Error('media keys require Windows'));
+    const child = spawn('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Action', action,
+    ], { windowsHide: true });
+    child.once('error', reject);
+    child.once('close', (code) => code === 0 ? resolve() : reject(new Error(`media key exited ${code}`)));
+  }),
+});
 const appLog = (text) => logEvent(voiceLogPath(), `[capri] ${text}`);
 let appFlow = null;
 
@@ -851,6 +930,16 @@ function applyMenuAction(id, value) {
     case 'scale': updateConfig({ scale: Number(value) }); break;
     case 'muted': updateConfig({ muted: Boolean(value) }); break;
     case 'reply-mode': updateConfig({ voice: { replyMode: String(value || 'voice') } }); break;
+    case 'music-player':
+      updateConfig({ music: { player: ['namida', 'spotify', 'none'].includes(value) ? value : 'namida' } });
+      break;
+    case 'spotify-connect':
+      updateConfig({ music: { spotify: { clientId: String(value || '').trim().slice(0, 100) } } });
+      return connectSpotify(value);
+    case 'spotify-disconnect':
+      spotifyAccessToken = null;
+      spotifyTokens().clear();
+      break;
     case 'sounds-dir':
       fs.mkdirSync(userSoundsDir(), { recursive: true });
       shell.openPath(userSoundsDir());
@@ -1051,6 +1140,7 @@ function menuState(extra = {}) {
       comments: cfg.comments?.enabled !== false,
       appFx: cfg.fx?.apps !== false,
       scanlines: cfg.fx?.scanlines !== false,
+      musicPlayer: ['namida', 'spotify', 'none'].includes(cfg.music?.player) ? cfg.music.player : 'namida',
     },
     hearing: {
       fixes: cleanFixes(cfg.hearing?.fixes),
@@ -1300,6 +1390,8 @@ function registerIpc() {
       const done = goFixReply(fixOrder);
       if (done.line) return done; // said something; a fix that can't be saved (too long) goes to the model
     }
+    const musicOrder = parseMusicCommand(line);
+    if (musicOrder) return musicReply(musicOrder);
     if (isSleepCommand(line)) return goSleepReply();
     if (isClipCommand(line)) return goClipReply();
     if (isMuteCommand(line)) return goMicReply(false);
@@ -1451,6 +1543,7 @@ function main() {
   if (process.platform === 'win32') app.setAppUserModelId('capri.desktop');
 
   app.whenReady().then(() => {
+    restoreSpotifyToken();
     serveProtocol();
     registerIpc();
     llm = createLlm({
