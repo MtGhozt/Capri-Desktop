@@ -14,6 +14,7 @@ const { createBridge } = require('./bridge');
 const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
 const { PROVIDERS, providerOptions, isCloud } = require('./chat-providers');
+const { switchProvider, setProviderModel, modelForProvider } = require('./chat-models');
 const { parseRenderMode, renderSwitches } = require('./render-mode');
 const { createLms } = require('./lms');
 const { createVoice } = require('./voice');
@@ -1036,11 +1037,9 @@ function setChatProvider(id) {
   const cfg = config.load();
   const from = String(cfg.llm?.provider || 'local');
   if (id === from) return { ok: true };
-  const patch = {
-    provider: id,
-    model: id === 'local' ? cfg.llm?.localModel || PROVIDERS.local.model : PROVIDERS[id].model,
-  };
-  if (from === 'local') patch.localModel = cfg.llm?.model || PROVIDERS.local.model;
+  const next = switchProvider(cfg.llm || {}, id, PROVIDERS);
+  const patch = { provider: next.provider, model: next.model, models: next.models };
+  if (id === 'local') patch.localModel = next.model;
   updateConfig({ llm: patch });
   return { ok: true };
 }
@@ -1049,7 +1048,14 @@ function setChatModel(value) {
   const provider = String(config.load().llm?.provider || 'local');
   const model = String(value?.model ?? value ?? '').trim().slice(0, 120);
   if (!model) return { ok: false, message: 'Falta el nombre del modelo.' };
-  updateConfig({ llm: provider === 'local' ? { model, localModel: model } : { model } });
+  const next = setProviderModel(config.load().llm || {}, provider, model);
+  updateConfig({
+    llm: {
+      model: next.model,
+      models: next.models,
+      ...(provider === 'local' ? { localModel: model } : {}),
+    },
+  });
   return { ok: true, model };
 }
 

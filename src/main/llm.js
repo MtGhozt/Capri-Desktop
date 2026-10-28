@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const { PROVIDERS, isCloud, requestFor, explain } = require('./chat-providers');
+const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
 
 const HISTORY_LIMIT = 16;
@@ -76,8 +77,7 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
   // The model for the provider in use: LM Studio keeps its own, so going to the cloud and back
   // doesn't lose it (config.llm.localModel).
   function modelFor(cfg, id) {
-    if (id !== 'local') return String(cfg.llm?.model || PROVIDERS[id]?.model || '');
-    return String(cfg.llm?.localModel || cfg.llm?.model || PROVIDERS.local.model);
+    return modelForProvider(cfg.llm || {}, id, PROVIDERS);
   }
 
   function cancel() {

@@ -21,6 +21,7 @@ const DEFAULTS = {
     provider: 'local',       // 'local' (LM Studio) or a cloud one: see chat-providers.js
     model: 'google/gemma-4-e2b', // the model of the provider in use
     localModel: 'google/gemma-4-e2b', // LM Studio's, kept apart so going to the cloud and back doesn't lose it
+    models: {},
     shareScreen: false,      // send what is open on screen (cloud only): off by default
     shareMemory: false,      // send her memory of the conversation (cloud only): off by default
     baseUrl: 'http://localhost:1235/v1',
