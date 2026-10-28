@@ -76,6 +76,10 @@ const DEFAULTS = {
     followUpSec: 8,          // her answer ends with a question: listen this long without the wake word (0 = off)
     talkHotkey: null,        // push to talk from her menu; null → shortcuts.talk (Ctrl+Alt+V)
   },
+  music: {
+    player: 'namida', // 'namida' | 'spotify' | 'none'
+    spotify: { clientId: '' },
+  },
   apps: {
     list: [],                // what "abre X" / "cierra X" reach (see apps-config.js); edited in her menu, APPS
     seeded: 0,               // how far her first-run seeding got (SEED_VERSION in apps-config.js)
@@ -137,6 +141,11 @@ function load() {
       greeting: { ...DEFAULTS.greeting, ...(saved.greeting || {}) },
       comments: { ...DEFAULTS.comments, ...(saved.comments || {}) },
       hearing: { ...DEFAULTS.hearing, ...(saved.hearing || {}) },
+      music: {
+        ...DEFAULTS.music,
+        ...(saved.music || {}),
+        spotify: { ...DEFAULTS.music.spotify, ...((saved.music && saved.music.spotify) || {}) },
+      },
       apps: { ...DEFAULTS.apps, ...(saved.apps || {}) },
       voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
       position: { ...DEFAULTS.position, ...(saved.position || {}) },
@@ -177,6 +186,16 @@ function save(patch) {
     greeting: { ...DEFAULTS.greeting, ...(current.greeting || {}), ...(patch.greeting || {}) },
     comments: { ...DEFAULTS.comments, ...(current.comments || {}), ...(patch.comments || {}) },
     hearing: { ...DEFAULTS.hearing, ...(current.hearing || {}), ...(patch.hearing || {}) },
+    music: {
+      ...DEFAULTS.music,
+      ...(current.music || {}),
+      ...(patch.music || {}),
+      spotify: {
+        ...DEFAULTS.music.spotify,
+        ...(current.music && current.music.spotify),
+        ...(patch.music && patch.music.spotify),
+      },
+    },
     apps: { ...DEFAULTS.apps, ...(current.apps || {}), ...(patch.apps || {}) },
     voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
     position: { ...DEFAULTS.position, ...(current.position || {}), ...(patch.position || {}) },

@@ -4,7 +4,11 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { POOLS, AVOID, pickLine, fillLine, resetLines } = require('../src/main/lines-es');
 
-const KINDS = ['dormir', 'despertar', 'clip', 'mute', 'unmute', 'olvidar', 'corregir', 'corregirOtraVez', 'olvidarCorreccion', 'sinCorreccion'];
+const KINDS = [
+  'dormir', 'despertar', 'clip', 'mute', 'unmute', 'olvidar', 'corregir', 'corregirOtraVez',
+  'olvidarCorreccion', 'sinCorreccion', 'musicaPausa', 'musicaPlay', 'musicaSiguiente',
+  'musicaAnterior', 'musicaVolumen', 'musicaMute', 'musicaInicio',
+];
 
 test('every direct command has a pool of 8 to 10 lines', () => {
   for (const kind of KINDS) {

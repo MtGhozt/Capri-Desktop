@@ -61,6 +61,34 @@ const POOLS = {
     'Volvió el sonido. Cuidado con lo que decís, ¿eh?',
     'Micrófono abierto. Hablá tranquilo, humanito.',
   ],
+  musicaPausa: [
+    'Música en pausa.', 'Pausa puesta, choom.', 'Silencio musical.', 'La pista espera.',
+    'Pausada. Hasta el próximo beat.', 'Música detenida.', 'Le bajé el ritmo.', 'Pausa hecha.',
+  ],
+  musicaPlay: [
+    'Sigue la música.', 'Dale play, humanito.', 'Reanudada.', 'Volvió el beat.',
+    'Música en marcha.', 'Que ruede la pista.', 'Play. Ahora sí.', 'Sonando otra vez.',
+  ],
+  musicaSiguiente: [
+    'Siguiente pista.', 'Saltando al próximo beat.', 'Esa ya fue. Va la siguiente.', 'Next.',
+    'Cambiando de canción.', 'Otra pista, choom.', 'Pasando página musical.', 'La siguiente está lista.',
+  ],
+  musicaAnterior: [
+    'Volviendo a la anterior.', 'Regresé la pista.', 'La de antes, como pediste.', 'Previous.',
+    'Rebobinando el beat.', 'Otra vez esa.', 'Pista anterior lista.', 'Volvemos atrás.',
+  ],
+  musicaVolumen: [
+    'Volumen ajustado.', 'Diez por ciento más.', 'Diez por ciento menos.', 'Nivel de audio cambiado.',
+    'Más o menos ruido, listo.', 'Volumen bajo control.', 'Audio calibrado.', 'Hecho con el volumen.',
+  ],
+  musicaMute: [
+    'Audio silenciado.', 'Mute. Ni un beep.', 'Silencio total.', 'Le corté el sonido.',
+    'Muteado, choom.', 'Cero volumen.', 'El beat quedó en silencio.', 'Audio fuera.',
+  ],
+  musicaInicio: [
+    'Poniendo música.', 'Namida despierta el beat.', 'Música en camino.', 'Que empiece el ruido.',
+    'Abriendo la pista.', 'Dale, que suene.', 'Preparando música.', 'Play para ti.',
+  ],
   olvidar: [
     'Listo, borrado. ¿De qué estábamos hablando? Ni idea.',
     'Memoria limpia. Empezamos de cero, ¿sí?',
