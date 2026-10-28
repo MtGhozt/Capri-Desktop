@@ -264,6 +264,70 @@ const POOLS = {
     'No puedo cerrar {app} desde aquí. Una pestaña, humanito.',
   ],
 
+  // -- the PC's own power commands (Paso 4G) ------------------------------------------------
+  // {accion} is filled in: "apago la compu", "reinicio la compu", "suspendo la compu" in the
+  // questions and the countdown; the infinitive in the failure; what's left behind in "hecho".
+  sistemaConfirmar: [
+    '¿Seguro que {accion}?',
+    '¿{accion} de verdad?',
+    '¿Estás seguro de que {accion}?',
+    'Dime: ¿{accion}?',
+    '¿Y si mejor no {accion}?',
+    'Oye, ¿{accion} ahora mismo?',
+    'Antes de que te arrepientas: ¿{accion}?',
+    'Piénsalo bien, humanito: ¿{accion}?',
+  ],
+  sistemaCuenta: [
+    'Cinco segundos y {accion}. Di «cancela» si te arrepientes.',
+    'Ahí va: {accion} en cinco. Última chance para decir cancela.',
+    'Cinco… cuatro… y {accion}. Ya, ni modo.',
+    'Se acabó: {accion} en cinco segundos. Adiós, humanito.',
+    '{accion} en cinco. Más te vale haber guardado todo.',
+    'Cuenta regresiva: cinco, y luego {accion}.',
+    'Cinco segundos y {accion}. Qué dramático, la verdad.',
+    'En cinco {accion}. Si quieres, di cancela, rápido.',
+  ],
+  sistemaHecho: [
+    'Listo: {accion}.',
+    'Hecho, {accion}. De nada, humanito.',
+    '{accion}. Ahora sí, sigamos.',
+    'Ya está: {accion}.',
+    'Misión cumplida: {accion}.',
+    '{accion}. Te dije que podía.',
+    'Eso fue rápido: {accion}.',
+    'Listo, {accion}. No me lo agradezcas.',
+  ],
+  sistemaCancelado: [
+    'Bueno, no {accion}. Cancelado.',
+    'Cancelado. No {accion}, tranquilo.',
+    'Ok, me detengo: no {accion}.',
+    'Lo dejé así. No {accion}, humanito.',
+    'Cancelado. Respira, que no {accion}.',
+    'Nada de nada: no {accion}.',
+    'Bueno, te salvé. No {accion}.',
+    'Ya, ya: no {accion}. Qué indeciso.',
+  ],
+  sistemaFallo: [
+    'No pude {accion}. Te lo digo de frente.',
+    'Intenté {accion} y no salió. No te voy a mentir.',
+    'Falló: no pude {accion}.',
+    'Algo se atravesó. No pude {accion}.',
+    'No me dejó {accion}. Windows, supongo.',
+    'Quise {accion} y no pude. Lo siento, humanito.',
+    'No pude {accion}. Algo se rompió en el camino.',
+    'Nada: no pude {accion}. Ni modo.',
+  ],
+  sistemaNoCancelado: [
+    'No pude cancelar. Esto sigue en marcha, lo siento.',
+    'Intenté detenerlo y no me dejó. Va a pasar igual.',
+    'No me hizo caso: no pude cancelar.',
+    'Fallé al cancelar. Prepárate, humanito.',
+    'Quise pararlo y nada. Sigue en pie.',
+    'No se pudo cancelar. Culpa de Windows, no mía.',
+    'No pude echarlo atrás. Agárrate.',
+    'Cancelar falló. Ya no está en mis manos.',
+  ],
+
   // Her own life (Paso 3I): one line now and then, and one when the window in front changes
   // to music, a game, a video or code. Nothing here is a reply: she just talks to the room.
   comentar: [
