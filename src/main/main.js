@@ -183,10 +183,6 @@ function createOverlay() {
       backgroundThrottling: false,
       autoplayPolicy: 'no-user-gesture-required',
     },
-    music: {
-      clientId: String(cfg.music?.spotify?.clientId || ''),
-      connected: Boolean(spotifyAccessToken),
-    },
   });
 
   overlay.setAlwaysOnTop(true, 'screen-saver');
@@ -1154,6 +1150,10 @@ function menuState(extra = {}) {
       talkHotkey: talkCombo || talkHotkey(cfg),
       talkActive: Boolean(talkCombo),
       followUpSec: followUpSec(cfg),
+    },
+    music: {
+      clientId: String(cfg.music?.spotify?.clientId || ''),
+      connected: Boolean(spotifyAccessToken),
     },
     apps: appsMenuState(),
     found: {
