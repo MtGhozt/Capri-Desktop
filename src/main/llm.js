@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const { PROVIDERS, isCloud, requestFor, explain } = require('./chat-providers');
+const { createStreamCleaner } = require('./chat-text');
 
 const HISTORY_LIMIT = 16;
 const TIMEOUT_MS = 45000;
@@ -52,10 +53,12 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
     return `${get('weekday')}, ${get('month')} ${get('day')}, ${get('year')} ${get('hour')}:${get('minute')} (${LOCAL_TZ})`;
   }
 
-  function systemPrompt(cfg) {
+  function systemPrompt(cfg, cloud) {
     const base = personaText();
     const lang = String(cfg.lang || 'es');
     const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. Local date and time for Matias right now: ${localClock()}. If he asks the time or date, use that.`];
+    // her answer is shown in a terminal box and read out loud: markers would be spelled out
+    if (cloud) parts.push('Responde en texto plano, sin Markdown, sin asteriscos ni listas; frases cortas para ser leídas en voz alta. Nada de etiquetas de seguridad ni de tu razonamiento.');
     // off by default: only what she is told to send leaves this PC
     const screen = cfg.llm?.shareScreen ? String(screenContext?.() || '').trim() : '';
     if (screen) parts.push(`What is open on Matias' screen right now: ${screen}`);
@@ -64,7 +67,7 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
 
   // Her memory of the conversation travels to a cloud provider only when the switch says so.
   function messagesFor(cfg, cloud, user) {
-    const messages = [{ role: 'system', content: systemPrompt(cfg) }];
+    const messages = [{ role: 'system', content: systemPrompt(cfg, cloud) }];
     if (!cloud || cfg.llm?.shareMemory) messages.push(...history);
     messages.push({ role: 'user', content: user });
     return messages;
@@ -140,23 +143,47 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
       timedOut = true;
       controller.abort();
     }, TIMEOUT_MS);
+    const started = Date.now();
 
     const cfg = loadConfig();
     const id = String(cfg.llm?.provider || 'local');
     const cloud = isCloud(id);
     let streamed = false;
     let full = '';
-    const send = (piece) => {
+    const show = (piece) => {
       streamed = true;
       full += piece;
       onToken(piece);
     };
-    const ask = (target) => streamChat(requestFor(target, {
-      model: modelFor(cfg, target),
-      messages: messagesFor(cfg, isCloud(target), user),
-      key: apiKey?.(target) || '',
-      baseUrl: cfg.llm?.baseUrl,
-    }), send, signal);
+    // A cloud answer is cleaned as it arrives, sentence by sentence, so what she shows and what she
+    // says are the same plain text. The local model is left exactly as it was.
+    const ask = async (target) => {
+      const cleaner = isCloud(target)
+        ? createStreamCleaner({ onText: show })
+        : null;
+      const raw = await streamChat(requestFor(target, {
+        model: modelFor(cfg, target),
+        messages: messagesFor(cfg, isCloud(target), user),
+        key: apiKey?.(target) || '',
+        baseUrl: cfg.llm?.baseUrl,
+      }), (piece) => {
+        streamed = true; // she started answering, even if the cleaner still holds it: no fallback
+        if (cleaner) cleaner.push(piece);
+        else show(piece);
+      }, signal);
+      if (cleaner) {
+        cleaner.flush();
+        return full;
+      }
+      return raw;
+    };
+
+    const result = (outcome) => ({
+      provider: id,
+      model: modelFor(cfg, id),
+      outcome,
+      ms: Date.now() - started,
+    });
 
     const done = (text) => {
       clearTimeout(timer);
@@ -178,13 +205,13 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
     try {
       const text = await ask(cloud ? id : 'local');
       done(text);
-      return;
+      return result('ok');
     } catch (err) {
       error = err;
     }
     if (signal.aborted && !timedOut) {
       clearTimeout(timer); // you stopped her: nothing left to say
-      return;
+      return null;
     }
 
     // The cloud is down (no network, a limit, a dead key): the local model answers instead, and she
@@ -196,13 +223,14 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
         await ensureLocal?.();
         const text = await ask('local');
         done(text);
-        return;
+        return result('fallback');
       } catch {
         fail(error);
-        return;
+        return result('failed');
       }
     }
     fail(error);
+    return result('failed');
   }
 
   return { chat, cancel, reset, reloadPersona, personaText };

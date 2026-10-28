@@ -1590,8 +1590,9 @@ function registerIpc() {
     if (!speakId) speakQueue?.stop();
     llmBusy = true;
     let said = '';
+    let outcome = null;
     try {
-      await llm.chat({
+      outcome = await llm.chat({
         user: line,
         onToken: (piece) => {
           said += typeof piece === 'string' ? piece : piece?.text || '';
@@ -1611,6 +1612,8 @@ function registerIpc() {
       });
     } finally {
       llmBusy = false;
+      // who answered and how it went, with no key and no text of the answer (Paso 4K)
+      if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome}: ${outcome.ms}ms`);
     }
     return { ok: true };
   });
