@@ -23,7 +23,7 @@ const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
-const { createSystemFlow, runSystem, abortSystem } = require('./system-command');
+const { createSystemFlow, runSystem } = require('./system-command');
 const { createMusic } = require('./music');
 const { createSpotify, createTokenStore, authorizeSpotify } = require('./spotify');
 const { pickLine, fillLine } = require('./lines-es');
@@ -277,7 +277,7 @@ function takeEscape(on) {
   }
 }
 
-// Esc during the shutdown / restart countdown (Paso 4G): the only key that stops it from anywhere.
+// Esc while she says goodbye and the screen goes down (Paso 4G): the only key that stops it from anywhere.
 let systemEsc = false;
 function systemEscape(on) {
   if (on) {
@@ -528,18 +528,50 @@ async function musicReply(parsed, { chat = true } = {}) {
 // "apaga la compu", "bloquea la PC": straight from what you said, never the model. `systemFlow`
 // asks first for shutdown / restart / suspend and gives the countdown its Esc.
 
+// Her line, and a promise that settles when she's done saying it (talking_done), capped so a
+// stuck voice never holds the PC up. Voice off: the line stays in the box for a moment.
+const SYSTEM_SAY_CAP_MS = 4500;
+const speechWaiters = new Set();
+function sayAndWait(text, capMs = SYSTEM_SAY_CAP_MS) {
+  const spoken = Boolean(speakLine(text));
+  followUp.reply(text, { spoken });
+  showLine(text, { chat: true, badge: 'SISTEMA' });
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(timer); speechWaiters.delete(done); resolve(); };
+    const timer = setTimeout(done, spoken ? capMs : Math.min(capMs, 1800));
+    if (spoken) speechWaiters.add(done);
+  });
+}
+function speechOver() {
+  for (const done of [...speechWaiters]) done();
+}
+
+// The fall and the CRT power-off on her overlay. Settles when the renderer says it's over
+// (or a little after it should have been). Her menu's "Animaciones de apps" off: no show.
+const SYSTEM_FX_MS = { shutdown: 3600, restart: 3600, suspend: 1900 };
+let systemFxSeq = 0;
+const systemFxWaiters = new Map();
+function systemFx(action) {
+  if (!overlay || overlay.isDestroyed() || config.load().fx?.apps === false) return Promise.resolve();
+  const id = ++systemFxSeq;
+  const ms = SYSTEM_FX_MS[action] || 3600;
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(timer); systemFxWaiters.delete(id); resolve(); };
+    const timer = setTimeout(done, ms + 2500);
+    systemFxWaiters.set(id, done);
+    sendCommand('system-fx', { id, action, ms });
+  });
+}
+
 const systemFlow = createSystemFlow({
   run: (action) => runSystem(action),
-  cancel: () => abortSystem(),
   line: (kind, values) => fillLine(pickLine(kind), values),
-  say: (text) => announce(text, { chat: true, badge: 'SISTEMA' }),
+  say: (text) => sayAndWait(text),
   log: (text) => logEvent(voiceLogPath(), `[capri] ${text}`),
   event: (text) => sendCommand('box-log', { kind: 'sistema', text }),
-  fx: (action) => {
-    // her menu's "Animaciones de apps" off: the screen stays as it is
-    if (!overlay || overlay.isDestroyed() || config.load().fx?.apps === false) return;
-    sendCommand('system-fx', { action, ms: action === 'suspend' ? 500 : 1100 });
-  },
+  fx: (action) => systemFx(action),
+  stopFx: () => sendCommand('system-fx-stop'),
+  clearFx: () => sendCommand('system-fx-clear'),
   escape: (on) => systemEscape(on),
 });
 
@@ -1433,6 +1465,7 @@ function registerIpc() {
     return picked;
   });
   ipcMain.handle('llm:status', () => lms?.status() || 'ready');
+  ipcMain.on('systemfx:done', (_e, id) => systemFxWaiters.get(Number(id))?.());
   ipcMain.handle('chat:send', async (_e, text) => {
     const line = String(text || '').trim();
     if (!line || !overlay) return { ok: false };
@@ -1626,7 +1659,10 @@ function main() {
         }
         if (payload?.type === 'tts_state') ttsLoading = payload.state === 'loading';
         if (payload?.type === 'talking') voiceTalking = true;
-        if (payload?.type === 'talking_done' || payload?.type === 'stopped') voiceTalking = false;
+        if (payload?.type === 'talking_done' || payload?.type === 'stopped') {
+          voiceTalking = false;
+          speechOver(); // her goodbye before a power-off is over (Paso 4G)
+        }
         if (payload?.type === 'listening') openChat();
         if (payload?.type === 'devices') rebuildTray();
         goodnight.onVoiceEvent(payload); // her goodnight line over: now she folds
