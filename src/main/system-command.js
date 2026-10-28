@@ -2,15 +2,15 @@
 
 // Paso 4G: the PC's own power commands, straight from what you said (never the model).
 // Shutting down, restarting and suspending ask first, and only a clear "sí", "dale" or
-// "confirmo" within ten seconds runs them; shutting down and restarting then leave five
-// seconds to change your mind (shutdown /a, or Esc). Locking and minimizing go at once.
-// Nothing here touches the PC itself: `run` and `cancel` are handed in.
+// "confirmo" within ten seconds starts them: her line to the end, the screen falling apart and
+// a CRT power-off, and only then the real command. "cancela", "no" or Esc until then stops it
+// and nothing runs. Locking and minimizing go at once. Nothing here touches the PC itself:
+// `run` is handed in.
 
 const { normalizeCommandText } = require('./command-text');
 const { spawn } = require('node:child_process');
 
 const CONFIRM_MS = 10_000;
-const COUNTDOWN_MS = 5_000;
 
 // "la compu", "la computadora", "el PC" (and how Whisper writes them)
 const MACHINE = '(?:compu|computadora|computador|conputadora|pc|pece|pe ce|p c)';
@@ -30,6 +30,13 @@ const PATTERNS = [
   ['minimize', /^(?:minimiza|minimisa)(?:lo|me|r)? todo$/],
   ['minimize', /^(?:muestrame|mostrame|muestra|mostra|ensename) (?:el )?escritorio$/],
   ['minimize', /^esconde(?:me|lo)? todo$/],
+];
+
+// "Capri, prueba el apagado": the whole show, and nothing runs (Paso 4G preview)
+const PREVIEWS = [
+  ['shutdown', /^(?:prueba|probar|proba|muestrame|ensename) (?:el )?(?:apagado|apagao|apagon)$/],
+  ['restart', /^(?:prueba|probar|proba|muestrame|ensename) (?:el )?reinicio$/],
+  ['suspend', /^(?:prueba|probar|proba|muestrame|ensename) (?:la )?suspension$/],
 ];
 
 const YES = new Set(['si', 'sip', 'sii', 'dale', 'confirmo']);
@@ -59,13 +66,11 @@ const DONE = {
 };
 
 const ASKS = new Set(['shutdown', 'restart', 'suspend']);
-const COUNTS = new Set(['shutdown', 'restart']);
-const GLITCHES = new Set(['shutdown', 'restart', 'suspend']);
 
-// What each action runs. A countdown, five seconds, so "cancela" or Esc can still stop it.
+// What each action runs: at once (/t 0), because the waiting already happened on her screen.
 const PROGRAMS = {
-  shutdown: () => ['shutdown', ['/s', '/t', '5']],
-  restart: () => ['shutdown', ['/r', '/t', '5']],
+  shutdown: () => ['shutdown', ['/s', '/t', '0']],
+  restart: () => ['shutdown', ['/r', '/t', '0']],
   suspend: () => ['rundll32.exe', ['powrprof.dll,SetSuspendState', '0,1,0']],
   lock: () => ['rundll32.exe', ['user32.dll,LockWorkStation']],
   minimize: () => ['powershell.exe', ['-NoProfile', '-Command', '(New-Object -ComObject Shell.Application).MinimizeAll()']],
@@ -92,10 +97,6 @@ function runSystem(action) {
   return runProgram(...program());
 }
 
-function abortSystem() {
-  return runProgram('shutdown', ['/a']);
-}
-
 // "sí", "dale", "confirmo", with a little politeness around them; "no" and cancels; anything
 // else is 'other' (and, with a power command waiting, cancels it).
 function readAnswer(text) {
@@ -118,32 +119,34 @@ function parseSystemCommand(text) {
     n = shorter;
   }
   if (!n) return null;
+  for (const [action, re] of PREVIEWS) if (re.test(n)) return { action, preview: true };
   for (const [action, re] of PATTERNS) if (re.test(n)) return { action };
   return null;
 }
 
-// run(action)     -> { ok, error }  the PC does it
-// cancel()        -> { ok, error }  shutdown /a
-// line(kind, v)   -> a line from lines-es.js
-// say(text)       -> says and shows it
-// log(text)       -> "system shutdown asked"
-// event(text)     -> the SISTEMA line in the message box
-// fx(action)      -> the full-screen glitch (shutdown, restart, shorter for suspend)
-// escape(on)      -> take / give back Esc while the countdown runs
+// run(action)         -> { ok, error }  the PC does it (only after the animation is over)
+// line(kind, v)       -> a line from lines-es.js
+// say(text)           -> says and shows it; resolves when she's done talking (main caps it)
+// log(text)           -> "system shutdown asked"
+// event(text)         -> the SISTEMA line in the message box
+// fx(action, opts)    -> the full-screen fall and CRT power-off; resolves when it's over
+// stopFx()            -> drop the animation now (cancelled)
+// clearFx()           -> give the screen back (preview over, or the command failed)
+// escape(on)          -> take / give back Esc while the sequence runs
 function createSystemFlow({
   run,
-  cancel,
   line = (kind) => kind,
   say = () => {},
   log = () => {},
   event = () => {},
   fx = () => {},
+  stopFx = () => {},
+  clearFx = () => {},
   escape = () => {},
   confirmMs = CONFIRM_MS,
-  countdownMs = COUNTDOWN_MS,
 } = {}) {
-  let pending = null;   // { action, timer }
-  let countdown = null; // { action, timer }
+  let pending = null;  // { action, timer }: her question, waiting for your yes
+  let sequence = null; // { action, preview, stop }: line, animation, power-off, then the command
 
   const note = (action, state, detail) => log(`system ${action} ${state}${detail ? `: ${detail}` : ''}`);
 
@@ -161,44 +164,66 @@ function createSystemFlow({
     return action;
   }
 
-  function clearCountdown() {
-    if (!countdown) return null;
-    clearTimeout(countdown.timer);
-    const { action } = countdown;
-    countdown = null;
-    escape(false);
-    return action;
-  }
-
   function sayCancelled(action, why) {
     note(action, 'cancelled', why);
     event('cancelado');
     say(line('sistemaCancelado', { accion: PRESENT[action] || TERMS[action] }));
   }
 
-  async function start(action) {
-    if (GLITCHES.has(action)) fx(action);
-    const result = await run(action).catch((err) => ({ ok: false, error: err.message }));
+  async function runNow(action) {
+    const result = await Promise.resolve()
+      .then(() => run(action))
+      .catch((err) => ({ ok: false, error: err.message }));
     if (!result?.ok) {
       fail(action, result?.error);
       return { ok: false };
     }
     note(action, 'ok');
     event(TERMS[action]);
-    if (COUNTS.has(action)) {
-      escape(true);
-      countdown = {
-        action,
-        timer: setTimeout(() => {
-          countdown = null;
-          escape(false);
-        }, countdownMs),
-      };
-      say(line('sistemaCuenta', { accion: PRESENT[action] }));
-    } else {
-      say(line('sistemaHecho', { accion: DONE[action] }));
-    }
     return { ok: true };
+  }
+
+  // a. confirmed (or a preview)  b. her line, to the end  c-d. the fall and the CRT power-off
+  // e. only then the real command. "cancela", "no" or Esc anywhere in b-d stops it all.
+  async function play(action, { preview = false } = {}) {
+    let stop;
+    const stopped = new Promise((resolve) => { stop = resolve; });
+    const me = { action, preview, stop };
+    sequence = me;
+    escape(true);
+    const live = () => sequence === me;
+    await Promise.race([
+      Promise.resolve().then(() => say(line(preview ? 'sistemaPrueba' : 'sistemaAdios', { accion: PRESENT[action] }))),
+      stopped,
+    ]);
+    if (!live()) return { ok: true, cancelled: true };
+    await Promise.race([Promise.resolve().then(() => fx(action, { preview })), stopped]);
+    if (!live()) return { ok: true, cancelled: true };
+    sequence = null;
+    escape(false);
+    if (preview) {
+      clearFx();
+      note(action, 'preview done');
+      return { ok: true, preview: true };
+    }
+    const done = await runNow(action);
+    if (!done.ok || action === 'suspend') clearFx(); // back from sleep, or still here: give the screen back
+    return done;
+  }
+
+  function cancelSequence(why) {
+    const me = sequence;
+    if (!me) return null;
+    sequence = null;
+    escape(false);
+    stopFx();
+    me.stop();
+    if (me.preview) {
+      note(me.action, 'preview cancelled', why);
+      return { ok: true, cancelled: true };
+    }
+    sayCancelled(me.action, why);
+    return { ok: true, cancelled: true };
   }
 
   function ask(action) {
@@ -214,59 +239,60 @@ function createSystemFlow({
     };
   }
 
-  async function cancelCountdown(why) {
-    const action = clearCountdown();
-    if (!action) return null;
-    const result = await cancel().catch((err) => ({ ok: false, error: err.message }));
-    if (result?.ok) {
-      sayCancelled(action, why);
-      return { ok: true, cancelled: true };
-    }
-    note(action, 'failed', `cancel failed: ${result?.error || '?'}`);
-    event('no pude cancelar');
-    say(line('sistemaNoCancelado'));
-    return { ok: false };
-  }
-
   return {
     get pending() { return pending?.action || null; },
-    get countdown() { return countdown?.action || null; },
+    get running() { return sequence?.action || null; },
 
-    // An order for the machine: { ok, asked } or null when it's for the model.
+    // An order for the machine: { ok, asked } or null when it's for the model. The sequence
+    // runs on its own; this answers as soon as it has started.
     async command(text) {
       const parsed = parseSystemCommand(text);
       if (!parsed) return null;
       const { action } = parsed;
+      if (parsed.preview) {
+        if (sequence) return { ok: false, busy: true };
+        note(action, 'preview');
+        play(action, { preview: true });
+        return { ok: true, preview: true };
+      }
       if (ASKS.has(action)) {
+        if (sequence) return { ok: false, busy: true };
         ask(action);
         return { ok: true, asked: true };
       }
-      return start(action);
+      return runNow(action).then((r) => {
+        if (r.ok) say(line('sistemaHecho', { accion: DONE[action] }));
+        return r;
+      });
     },
 
-    // Your answer while she waits: yes runs it, anything else cancels it. During the countdown,
-    // "cancela" / "no" stops it (shutdown /a); anything else is a new message for the router.
+    // Your answer while she waits: yes starts the sequence, anything else cancels it. While the
+    // sequence runs, "cancela" / "no" stops it; anything else is a new message for the router.
     async answer(text) {
       const asking = clearPending();
       if (asking) {
         if (readAnswer(text) === 'yes') {
           note(asking, 'confirmed');
-          return start(asking);
+          play(asking);
+          return { ok: true, confirmed: true };
         }
         sayCancelled(asking, 'no');
         return { ok: true, cancelled: true };
       }
-      if (countdown && readAnswer(text) === 'no') return cancelCountdown('voz');
+      if (sequence && readAnswer(text) === 'no') return cancelSequence('voz');
       return null;
     },
 
-    // Esc during the countdown.
+    // Esc while the sequence runs.
     cancel(why = 'esc') {
-      return cancelCountdown(why);
+      return cancelSequence(why);
     },
+
+    // for tests: the running sequence, to await it
+    play,
   };
 }
 
 module.exports = {
-  CONFIRM_MS, COUNTDOWN_MS, parseSystemCommand, readAnswer, createSystemFlow, runSystem, abortSystem,
+  CONFIRM_MS, parseSystemCommand, readAnswer, createSystemFlow, runSystem,
 };

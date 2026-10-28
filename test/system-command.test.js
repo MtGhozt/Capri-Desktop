@@ -6,7 +6,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseSystemCommand, readAnswer, createSystemFlow, runSystem, CONFIRM_MS, COUNTDOWN_MS } = require('../src/main/system-command');
+const { parseSystemCommand, readAnswer, createSystemFlow, runSystem, CONFIRM_MS } = require('../src/main/system-command');
 const { POOLS, fillLine } = require('../src/main/lines-es');
 
 const ORDERS = [
@@ -65,51 +65,116 @@ test('only a clear yes runs it; no and anything else cancel it', () => {
   for (const other of ['ok', 'claro', 'ajá', 'cuéntame un chiste', '']) assert.equal(readAnswer(other), 'other', other);
 });
 
-function flow({ run, cancel, confirmMs, countdownMs } = {}) {
+// A fake PC: every step is a promise the test settles by hand, so it can check what ran when.
+function flow({ run } = {}) {
+  const order = []; // everything, in order
   const did = [];
-  const cancels = [];
   const logs = [];
   const events = [];
   const lines = [];
-  const fxs = [];
   const esc = [];
+  const fxs = [];
+  let endSpeech = () => {};
+  let endFx = () => {};
   const f = createSystemFlow({
-    run: async (action) => { did.push(action); return run ? run(action) : { ok: true }; },
-    cancel: async () => { cancels.push('a'); return cancel ? cancel() : { ok: true }; },
+    run: async (action) => { order.push(`run:${action}`); did.push(action); return run ? run(action) : { ok: true }; },
     line: (kind, values) => `${kind}${values?.accion ? `:${values.accion}` : ''}`,
-    say: (text) => lines.push(text),
+    say: (text) => {
+      lines.push(text);
+      order.push(`say:${text}`);
+      return new Promise((resolve) => { endSpeech = () => { order.push('said'); resolve(); }; });
+    },
     log: (text) => logs.push(text),
     event: (text) => events.push(text),
-    fx: (action) => fxs.push(action),
+    fx: (action, opts) => {
+      fxs.push(opts?.preview ? `${action}:preview` : action);
+      order.push(`fx:${action}`);
+      return new Promise((resolve) => { endFx = () => { order.push('fx-done'); resolve(); }; });
+    },
+    stopFx: () => order.push('fx-stop'),
+    clearFx: () => order.push('fx-clear'),
     escape: (on) => esc.push(on),
-    ...(confirmMs != null ? { confirmMs } : {}),
-    ...(countdownMs != null ? { countdownMs } : {}),
   });
-  return { f, did, cancels, logs, events, lines, fxs, esc };
+  const tick = () => new Promise((resolve) => setImmediate(resolve));
+  return {
+    f, did, logs, events, lines, esc, fxs, order, tick,
+    endSpeech: async () => { endSpeech(); await tick(); },
+    endFx: async () => { endFx(); await tick(); },
+  };
 }
 
-test('"apaga la compu" asks first, and a clear yes runs it with the countdown', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+test('"apaga la compu": asks, then her line, the animation, and only then the command', async () => {
   const h = flow();
   await h.f.command('apaga la compu');
   assert.deepEqual(h.did, []);
   assert.equal(h.logs[0], 'system shutdown asked');
   assert.equal(h.lines[0], 'sistemaConfirmar:apago la compu');
 
-  const res = await h.f.answer('sí, dale');
-  assert.equal(res.ok, true);
-  assert.deepEqual(h.did, ['shutdown']);
-  assert.deepEqual(h.logs, ['system shutdown asked', 'system shutdown confirmed', 'system shutdown ok']);
-  assert.deepEqual(h.fxs, ['shutdown']);
-  assert.deepEqual(h.events, ['apagar la compu']);
-  assert.equal(h.lines.at(-1), 'sistemaCuenta:apago la compu');
-  assert.equal(h.f.countdown, 'shutdown');
+  assert.deepEqual(await h.f.answer('sí, dale'), { ok: true, confirmed: true });
+  await h.tick();
+  assert.equal(h.lines.at(-1), 'sistemaAdios:apago la compu');
+  assert.deepEqual(h.did, [], 'nothing runs while she talks');
+  assert.deepEqual(h.fxs, [], 'the animation waits for her line');
   assert.deepEqual(h.esc, [true]);
 
-  // once the five seconds pass, Esc is hers again and nothing else happens
-  t.mock.timers.tick(COUNTDOWN_MS);
-  assert.equal(h.f.countdown, null);
+  await h.endSpeech();
+  assert.deepEqual(h.fxs, ['shutdown']);
+  assert.deepEqual(h.did, [], 'nothing runs during the animation');
+
+  await h.endFx();
+  await h.tick();
+  assert.deepEqual(h.did, ['shutdown']);
+  const at = (step) => h.order.indexOf(step);
+  assert.ok(at('said') < at('fx:shutdown') && at('fx-done') < at('run:shutdown'), h.order.join(' > '));
+  assert.deepEqual(h.logs, ['system shutdown asked', 'system shutdown confirmed', 'system shutdown ok']);
+  assert.deepEqual(h.events, ['apagar la compu']);
   assert.deepEqual(h.esc, [true, false]);
+  assert.equal(h.f.running, null);
+});
+
+test('the real commands go at once: the waiting happened on her screen', () => {
+  const src = require('node:fs').readFileSync(require.resolve('../src/main/system-command'), 'utf8');
+  assert.match(src, /\['\/s', '\/t', '0'\]/);
+  assert.match(src, /\['\/r', '\/t', '0'\]/);
+  assert.doesNotMatch(src, /'\/t', '5'/);
+});
+
+for (const [when, step] of [['while she talks', 'say'], ['during the animation', 'fx']]) {
+  test(`"cancela" ${when} stops it all and nothing runs`, async () => {
+    const h = flow();
+    await h.f.command('reinicia la compu');
+    await h.f.answer('dale');
+    await h.tick();
+    if (step === 'fx') await h.endSpeech();
+    assert.deepEqual(await h.f.answer('cancela'), { ok: true, cancelled: true });
+    await h.endSpeech();
+    await h.endFx();
+    await h.tick();
+    assert.deepEqual(h.did, []);
+    assert.ok(h.order.includes('fx-stop'));
+    assert.ok(h.logs.includes('system restart cancelled: voz'));
+    assert.equal(h.lines.at(-1), 'sistemaCancelado:reinicio la compu');
+    assert.deepEqual(h.esc, [true, false]);
+  });
+}
+
+test('Esc during the animation stops it and nothing runs', async () => {
+  const h = flow();
+  await h.f.command('apaga la compu');
+  await h.f.answer('sí');
+  await h.tick();
+  await h.endSpeech();
+  assert.deepEqual(h.f.cancel('esc'), { ok: true, cancelled: true });
+  await h.endFx();
+  await h.tick();
+  assert.deepEqual(h.did, []);
+  assert.ok(h.logs.includes('system shutdown cancelled: esc'));
+  assert.equal(h.f.cancel('esc'), null, 'nothing left to cancel');
+});
+
+test('"no" after the command is out is just a message for the router', async () => {
+  const h = flow();
+  assert.equal(await h.f.answer('no'), null);
 });
 
 test('silence cancels: she says so and never runs it', async (t) => {
@@ -139,51 +204,59 @@ test('no, or anything else, cancels without running it', async () => {
   assert.deepEqual(h.did, []);
 });
 
-test('suspending asks, and after a yes it goes at once (no countdown)', async () => {
+test('suspending plays the same sequence and gives the screen back after', async () => {
   const h = flow();
   await h.f.command('pon la compu a dormir');
   await h.f.answer('confirmo');
-  assert.deepEqual(h.did, ['suspend']);
+  await h.tick();
+  await h.endSpeech();
   assert.deepEqual(h.fxs, ['suspend']);
-  assert.equal(h.f.countdown, null);
-  assert.deepEqual(h.esc, []);
-  assert.equal(h.lines.at(-1), 'sistemaHecho:compu suspendida');
+  assert.deepEqual(h.did, []);
+  await h.endFx();
+  await h.tick();
+  assert.deepEqual(h.did, ['suspend']);
+  assert.equal(h.order.at(-1), 'fx-clear');
 });
 
-test('the countdown stops with "cancela" (shutdown /a)', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+test('"Capri, prueba el apagado" plays it all and never runs anything', async () => {
+  for (const [said, action] of [['Capri, prueba el apagado', 'shutdown'], ['prueba el reinicio', 'restart'], ['Prueba la suspensión.', 'suspend']]) {
+    assert.deepEqual(parseSystemCommand(said), { action, preview: true }, said);
+  }
   const h = flow();
+  assert.deepEqual(await h.f.command('Capri, prueba el apagado'), { ok: true, preview: true });
+  await h.tick();
+  assert.equal(h.lines.at(-1), 'sistemaPrueba:apago la compu');
+  await h.endSpeech();
+  assert.deepEqual(h.fxs, ['shutdown:preview']);
+  await h.endFx();
+  await h.tick();
+  assert.deepEqual(h.did, []);
+  assert.equal(h.order.at(-1), 'fx-clear');
+  assert.deepEqual(h.logs, ['system shutdown preview', 'system shutdown preview done']);
+});
+
+test('a preview can be stopped with Esc too', async () => {
+  const h = flow();
+  await h.f.command('prueba el apagado');
+  await h.tick();
+  assert.deepEqual(h.f.cancel('esc'), { ok: true, cancelled: true });
+  await h.endSpeech();
+  await h.endFx();
+  assert.deepEqual(h.did, []);
+  assert.ok(h.logs.includes('system shutdown preview cancelled: esc'));
+});
+
+test('a command that fails after the animation is told, and the screen comes back', async () => {
+  const h = flow({ run: () => ({ ok: false, error: 'exit 1190' }) });
   await h.f.command('apaga la compu');
   await h.f.answer('sí');
-  assert.deepEqual(await h.f.answer('cancela'), { ok: true, cancelled: true });
-  assert.deepEqual(h.cancels, ['a']);
-  assert.equal(h.f.countdown, null);
-  assert.deepEqual(h.esc, [true, false]);
-  assert.ok(h.logs.includes('system shutdown cancelled: voz'));
-  assert.equal(h.lines.at(-1), 'sistemaCancelado:apago la compu');
-});
-
-test('the countdown stops with Esc', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const h = flow();
-  await h.f.command('reinicia la compu');
-  await h.f.answer('dale');
-  assert.deepEqual(await h.f.cancel('esc'), { ok: true, cancelled: true });
-  assert.deepEqual(h.cancels, ['a']);
-  assert.ok(h.logs.includes('system restart cancelled: esc'));
-  // the countdown releases Esc itself
-  assert.deepEqual(h.esc, [true, false]);
-});
-
-test('a cancel that fails is said honestly', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const h = flow({ cancel: () => ({ ok: false, error: 'exit 5' }) });
-  await h.f.command('apaga la compu');
-  await h.f.answer('sí');
-  assert.deepEqual(await h.f.cancel('esc'), { ok: false });
-  assert.ok(h.logs.includes('system shutdown failed: cancel failed: exit 5'));
-  assert.equal(h.lines.at(-1), 'sistemaNoCancelado');
-  assert.deepEqual(h.events.at(-1), 'no pude cancelar');
+  await h.tick();
+  await h.endSpeech();
+  await h.endFx();
+  await h.tick();
+  assert.ok(h.logs.includes('system shutdown failed: exit 1190'));
+  assert.equal(h.lines.at(-1), 'sistemaFallo:apagar la compu');
+  assert.ok(h.order.includes('fx-clear'));
 });
 
 test('locking and minimizing go at once, and say it', async () => {
@@ -191,7 +264,7 @@ test('locking and minimizing go at once, and say it', async () => {
   assert.deepEqual(await h.f.command('bloquea la PC'), { ok: true });
   assert.deepEqual(await h.f.command('muéstrame el escritorio'), { ok: true });
   assert.deepEqual(h.did, ['lock', 'minimize']);
-  assert.deepEqual(h.fxs, []); // the glitch is only for shutdown / restart / suspend
+  assert.deepEqual(h.fxs, []); // the animation is only for shutdown / restart / suspend
   assert.deepEqual(h.lines, ['sistemaHecho:PC bloqueada', 'sistemaHecho:todo minimizado']);
   assert.deepEqual(h.events, ['bloquear la PC', 'minimizar todo']);
   assert.equal(await h.f.command('abre Discord'), null);
@@ -211,7 +284,7 @@ test('the executor refuses an action it does not know, and runs nothing', async 
 
 test('her power lines: 8 to 10 each, only the question asks', () => {
   const questions = ['sistemaConfirmar'];
-  const statements = ['sistemaCuenta', 'sistemaHecho', 'sistemaCancelado', 'sistemaFallo', 'sistemaNoCancelado'];
+  const statements = ['sistemaAdios', 'sistemaPrueba', 'sistemaHecho', 'sistemaCancelado', 'sistemaFallo'];
   for (const kind of [...questions, ...statements]) {
     assert.ok(POOLS[kind]?.length >= 8 && POOLS[kind].length <= 10, kind);
     for (const line of POOLS[kind]) {
