@@ -62,8 +62,8 @@ const POOLS = {
     'Micrófono abierto. Hablá tranquilo, humanito.',
   ],
   musicaPausa: [
-    'Música en pausa.', 'Pausa puesta, choom.', 'Silencio musical.', 'La pista espera.',
-    'Pausada. Hasta el próximo beat.', 'Música detenida.', 'Le bajé el ritmo.', 'Pausa hecha.',
+    'Música en pausa.', 'Pausa puesta, choom.', 'La pista queda en pausa.', 'Pausada. Hasta el próximo beat.',
+    'Música detenida.', 'La canción espera.', 'Pausa hecha.', 'El reproductor quedó pausado.',
   ],
   musicaPlay: [
     'Sigue la música.', 'Dale play, humanito.', 'Reanudada.', 'Volvió el beat.',

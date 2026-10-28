@@ -10,21 +10,27 @@ const PATTERNS = [
   ['play', new RegExp(`^(?:sigue|seguir|continua|reanuda|resume|despausa|despauza|despausala|despauzala|quita (?:la )?pausa|dale play|play)${SONG}$`)],
   ['next', new RegExp(`^(?:(?:pasa|pon|cambia|salta)(?: a)? (?:la |el )?(?:siguiente|otra|proxima)${SONG}|(?:la |el )?(?:siguiente|proxima)${SONG}|(?:pasa|cambia|salta)${SONG}|otra (?:cancion|rola)|skip)$`)],
   ['previous', new RegExp(`^(?:(?:pon|regresa|vuelve)(?: a)? (?:la |el )?(?:anterior|de antes)${SONG}|(?:la |el )?anterior${SONG}|la de antes)$`)],
-  ['volumeUp', /^(?:sube(?: el)? volumen|mas volumen)$/],
-  ['volumeDown', /^(?:baja(?: el)? volumen|menos volumen)$/],
-  ['mute', /^(?:silencio|mutea|mute)$/],
+  ['volumeUp', /^(?:sube(?: la musica| el volumen)?|subele|mas(?: alto| volumen))$/],
+  ['volumeDown', /^(?:baja(?: la musica| el volumen)?|bajale|menos(?: alto| volumen))$/],
+  ['mute', /^(?:silencio|silencia(?: la musica)?|mutea(?: la musica)?|mute|quita(?: el )?sonido)$/],
   ['start', /^(?:pon|ponme|pone|reproduce|reproduceme|toca|quiero|inicia)(?: algo de| un poco de)? musica(?: en namida)?$/],
   ['nowPlaying', /^(?:que (?:esta sonando|suena)|que cancion (?:es esta|es|suena))$/],
 ];
 
 function parseMusicCommand(text) {
+  const raw = String(text || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const parts = raw.split(',').map((part) => part.trim()).filter(Boolean);
+  if (parts.length > 1) {
+    const parsed = parts.map((part) => parseMusicCommand(part));
+    if (parsed.every((item) => item && item.action === parsed[0].action)) return parsed[0];
+  }
   const value = normalizeCommandText(text).replace(/\s+por favor$/, '').trim();
   if (!value) return null;
   for (const [action, re] of PATTERNS) if (re.test(value)) return { action };
   const spotify = /^(?:pon|ponme|reproduce|toca) (.+?) en spotify$/.exec(value);
   if (spotify) return { action: 'query', query: spotify[1], player: 'spotify' };
   const query = /^(?:pon|ponme|reproduce|reproduceme|toca) (?!un |una |el timer|la alarma)(.+)$/.exec(value);
-  if (query) return { action: 'query', query: query[1] };
+  if (query) return { action: 'query', query: query[1].replace(/^en\s+/, '') };
   return null;
 }
 
