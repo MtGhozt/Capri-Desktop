@@ -7,7 +7,7 @@
 // At rest she stands on the bottom edge (grounded): her feet on the top of the taskbar while it
 // is up, on the bottom of the screen while it is hidden (auto-hide), riding it up and down.
 
-import { SpriteRenderer, SPRITE, PoseLayer } from './sprite.js';
+import { SpriteRenderer, SPRITE, PoseLayer, SitPartsLayer } from './sprite.js';
 import { ACTS, NEUTRAL, Player } from './acting.js';
 import { ledgeY } from './ledge.js';
 import { POSES, poseFile, poseScale, boxSeat, LIE_FPS } from './poses.js';
@@ -39,6 +39,12 @@ export class Capri {
     this.root = root;
     this.canvas = canvas;
     this.sprite = new SpriteRenderer(canvas, image);
+    this.sitPartsCanvas = document.createElement('canvas');
+    this.sitPartsCanvas.className = 'capri__sitparts';
+    this.sitPartsCanvas.hidden = true;
+    this.sitPartsCanvas.setAttribute('aria-hidden', 'true');
+    root.appendChild(this.sitPartsCanvas);
+    this.sitParts = new SitPartsLayer(this.sitPartsCanvas);
     this.poseCanvas = document.createElement('canvas');
     this.poseCanvas.className = 'capri__pose';
     this.poseCanvas.hidden = true;
@@ -177,6 +183,7 @@ export class Capri {
   setScale(scale) {
     this.scale = scale;
     this.sprite.resize(scale);
+    this.sitParts?.resize(scale);
     const spec = this.lieSpec();
     this.poseLayer.resize(poseScale(scale), spec);
     this.pivot();
@@ -233,6 +240,7 @@ export class Capri {
     const turn = (this.upside ? 180 : 0) + this.tilt;
     this.root.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
     this.canvas.style.transform = `rotate(${turn.toFixed(2)}deg) scale(${(this.facing * this.sx).toFixed(3)}, ${this.sy.toFixed(3)})`;
+    if (this.sitPartsCanvas?.style) this.sitPartsCanvas.style.transform = this.canvas.style.transform;
     this.onMove?.(this.head());
   }
 
@@ -575,7 +583,10 @@ export class Capri {
     this.lastDraw = now;
     this.animate(now);
     if (this.lying) this.drawLie();
-    else this.sprite.draw(this.p);
+    else {
+      this.sprite.draw(this.p);
+      this.sitParts?.draw(this.p, this.stance === 'sit');
+    }
     this.place();
   }
 
@@ -773,6 +784,7 @@ export class Capri {
     if (stance === 'lie') this.poseStart = performance.now();
     if (this.canvas) this.canvas.hidden = stance === 'lie';
     if (this.poseCanvas) this.poseCanvas.hidden = stance !== 'lie';
+    if (this.sitPartsCanvas) this.sitPartsCanvas.hidden = stance !== 'sit';
     this.root.classList?.toggle('is-on-box', this.onBox()); // behind the box: what hangs past its edge is hidden
     if (stance === 'lie') {
       const spec = this.lieSpec();

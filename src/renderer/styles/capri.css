@@ -135,13 +135,22 @@ body {
 }
 
 .capri__sprite,
-.capri__pose {
+.capri__pose,
+.capri__sitparts {
   display: block;
 }
 
 .capri__pose[hidden],
-.capri__sprite[hidden] {
+.capri__sprite[hidden],
+.capri__sitparts[hidden] {
   display: none;
+}
+
+.capri__sitparts {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
 }
 
 .fx {

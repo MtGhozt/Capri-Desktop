@@ -1,0 +1,32 @@
+{
+  "source": "assets\\capri\\poses\\lying_A.png",
+  "scale": 0.5,
+  "parts": {
+    "arm_L": {
+      "file": "arm_L.png",
+      "pivot": {
+        "x": 57,
+        "y": 32
+      },
+      "sourceBox": [
+        112,
+        382,
+        286,
+        616
+      ]
+    },
+    "arm_R": {
+      "file": "arm_R.png",
+      "pivot": {
+        "x": 30,
+        "y": 40
+      },
+      "sourceBox": [
+        248,
+        398,
+        478,
+        574
+      ]
+    }
+  }
+}

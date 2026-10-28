@@ -1,4 +1,5 @@
 // WebGL renderer for the Capri cut-out.
+import { faceDrawTransform, SIT_FACE } from './sit-parts.js';
 // One texture, one quad: every bit of life (head tilt, mane sway and flare, both arms, sitting with
 // dangling legs, smear frames, afterimages, line boil, speckles, the violet misregistration, glitch
 // slices, teleport collapse) is done in the fragment shader.
@@ -116,6 +117,7 @@ vec3 grade(vec3 c, out float red) {
 
 // Graded, speckled, premultiplied sample of the figure.
 vec4 cel(vec2 s) {
+  if (uSit > 0.0 && distance(s, vec2(${SIT_FACE.x}.0, ${SIT_FACE.y}.0)) < ${SIT_FACE.size / 2}.0) return vec4(0.0);
   vec4 c = tex(s);
   if (c.a <= 0.0) return vec4(0.0);
   float red;
@@ -443,6 +445,43 @@ export class SpriteRenderer {
     gl.uniform3f(u.uRim, 0.48, 0.24, 1.0);
     gl.uniform1f(u.uAlpha, s.alpha);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+}
+
+export class SitPartsLayer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d', { alpha: true });
+    this.faces = {};
+    for (const name of ['calm', 'aside', 'smug', 'wide', 'look', 'laugh', 'many']) {
+      const image = new Image();
+      image.src = `../../assets/capri/parts/face-${name}.png`;
+      this.faces[name] = image;
+    }
+    this.scale = 1;
+  }
+
+  resize(scale) {
+    this.scale = scale;
+    const dpr = window.devicePixelRatio || 1;
+    const { width, height } = SpriteRenderer.cssSize(scale);
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
+    this.canvas.width = Math.round(width * dpr);
+    this.canvas.height = Math.round(height * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  draw(state, visible) {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    const faceImage = this.faces[state.face || 'calm'] || this.faces.calm;
+    if (!visible || !faceImage.complete || !faceImage.naturalWidth) return;
+    const face = faceDrawTransform(this.scale, state.head);
+    this.ctx.save();
+    this.ctx.translate(face.x, face.y);
+    this.ctx.rotate(face.angle);
+    this.ctx.drawImage(faceImage, -face.size / 2, -face.size / 2, face.size, face.size);
+    this.ctx.restore();
   }
 }
 
