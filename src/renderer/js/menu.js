@@ -47,6 +47,7 @@ export class AppMenu {
     this.foundOpen = null;
     this.foundNote = '';
     this.scanning = false;
+    this.modelNote = '';   // what came of the last model / key save (Paso 4K)
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -104,6 +105,7 @@ export class AppMenu {
       this.resetApps();
       this.confirmForget = false;
       this.fixNote = '';
+      this.modelNote = '';
       this.at = { x, y };
       this.avoid = avoid || { left: x, top: y, right: x, bottom: y };
       this.render(state);
@@ -364,6 +366,34 @@ export class AppMenu {
       build('div', 'appmenu__hint', state.music?.connected ? 'CONECTADO' : 'SIN CONEXIÓN'));
     body.append(spotify);
 
+    // MODELO: who answers her, where the key lives, and what may leave the PC (Paso 4K)
+    section('MODELO');
+    const model = state.model || { providers: [{ id: 'local', label: 'LM Studio' }], provider: 'local', model: '', local: true };
+    selector('Proveedor', {
+      options: model.providers,
+      current: model.provider,
+      onChange: (id) => this.act('model-provider', id),
+    });
+    action('Modelo y clave', {
+      value: model.local ? 'LOCAL' : (model.hasKey ? 'CLAVE GUARDADA' : 'SIN CLAVE'),
+      chevron: 'model',
+      onClick: () => this.toggle('model', state),
+    });
+    if (this.expanded === 'model') {
+      body.append(this.modelPanel(model, { build }));
+      toggle('Enviar mi pantalla cuando le pida mirar', {
+        on: model.shareScreen,
+        labels: ['NO', 'SÍ'],
+        onChange: (on) => this.saveShare({ shareScreen: on }),
+      });
+      toggle('Enviar lo que recuerda de mí', {
+        on: model.shareMemory,
+        labels: ['NO', 'SÍ'],
+        onChange: (on) => this.saveShare({ shareMemory: on }),
+      });
+      body.append(build('div', 'appmenu__hint', 'Apagados, a la nube solo va lo que le escribes. Con LM Studio nada sale de tu PC.'));
+    }
+
     // MEMORIA
     section('MEMORIA');
     action('Olvidar conversación', {
@@ -450,7 +480,7 @@ export class AppMenu {
     plate.append(rail, body, keys);
     this.el.replaceChildren(plate);
     if (this.open && this.at) this.place();
-    this.useKeyboard(this.expanded === 'fixes' || this.capturing);
+    this.useKeyboard(this.expanded === 'fixes' || this.expanded === 'model' || this.capturing);
   }
 
   // Her app table: the list (each one editable: aliases, how to close it, delete), adding a
@@ -807,6 +837,90 @@ export class AppMenu {
     return wrap;
   }
 
+  // Model name and key: the key is typed here, saved encrypted, and never shown back (Paso 4K).
+  modelPanel(model, { build }) {
+    const panel = build('div', 'appmenu__fix');
+    const field = build('label', 'appmenu__fix-field');
+    const name = this.textInput(build, model.model, model.local ? 'google/gemma-4-e2b' : 'el nombre exacto del modelo', 120);
+    field.append(build('span', 'appmenu__fix-label', 'Modelo'), name);
+    const save = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'GUARDAR');
+    save.type = 'button';
+    save.dataset.state = 'on';
+    const actions = build('div', 'appmenu__fix-actions');
+    actions.append(save);
+    const note = build('div', 'appmenu__hint', this.modelNote);
+    const saveModel = async () => {
+      const res = await this.host.menuAction({ id: 'model-set', value: name.value.trim() })
+        .catch(() => ({ ok: false, message: 'No se pudo guardar.' }));
+      this.modelNote = res?.ok ? `MODELO: ${res.model}` : res?.message || 'No se pudo guardar.';
+      await this.refresh();
+    };
+    save.addEventListener('click', (e) => {
+      e.stopPropagation();
+      saveModel();
+    });
+    name.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      saveModel();
+    });
+    panel.append(field, actions);
+
+    if (model.provider === 'openrouter') {
+      panel.append(build('div', 'appmenu__hint', 'En OpenRouter el nombre va exacto, con el proveedor delante: openai/gpt-4o-mini.'));
+    }
+
+    if (!model.local) {
+      const keyField = build('label', 'appmenu__fix-field');
+      const key = build('input', 'appmenu__input');
+      key.type = 'password';
+      key.value = '';
+      key.placeholder = model.hasKey ? 'clave guardada: pega otra para cambiarla' : 'pega tu clave de ' + this.providerLabel(model, 'la nube');
+      key.spellcheck = false;
+      key.autocomplete = 'off';
+      key.addEventListener('keydown', (e) => e.stopPropagation());
+      for (const type of ['mousedown', 'click']) key.addEventListener(type, (e) => e.stopPropagation());
+      keyField.append(build('span', 'appmenu__fix-label', 'Clave'), key);
+      const keyActions = build('div', 'appmenu__fix-actions');
+      const saveKey = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'GUARDAR CLAVE');
+      saveKey.type = 'button';
+      saveKey.dataset.state = 'on';
+      saveKey.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const res = await this.host.menuAction({ id: 'model-key', value: { provider: model.provider, key: key.value } })
+          .catch(() => ({ ok: false, message: 'No se pudo guardar.' }));
+        this.modelNote = res?.message || '';
+        await this.refresh();
+      });
+      keyActions.append(saveKey);
+      if (model.hasKey) {
+        const drop = build('button', 'appmenu__toggle-btn appmenu__app-delete', 'BORRAR');
+        drop.type = 'button';
+        drop.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const res = await this.host.menuAction({ id: 'model-key', value: { provider: model.provider, key: '' } })
+            .catch(() => ({ ok: false, message: 'No se pudo borrar.' }));
+          this.modelNote = res?.message || '';
+          await this.refresh();
+        });
+        keyActions.append(drop);
+      }
+      panel.append(keyField, keyActions,
+        build('div', 'appmenu__hint', 'La clave se guarda cifrada con tu cuenta de Windows, fuera de config.json.'));
+    }
+    panel.append(note);
+    return panel;
+  }
+
+  providerLabel(model, fallback) {
+    return (model.providers || []).find((p) => p.id === model.provider)?.label || fallback;
+  }
+
+  async saveShare(patch) {
+    await this.host.menuAction({ id: 'model-share', value: patch }).catch(() => {});
+    await this.refresh();
+  }
+
   async saveTalkKey(keys) {
     let result;
     try {
@@ -924,7 +1038,7 @@ export class AppMenu {
     }
     this.confirmForget = false;
     const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'music-player'
-      || id === 'spotify-connect' || id === 'spotify-disconnect' || id === 'drag-lock' || id === 'theme'
+      || id === 'model-provider' || id === 'spotify-connect' || id === 'spotify-disconnect' || id === 'drag-lock' || id === 'theme'
       || id === 'startup' || id === 'gaming-mode' || id === 'comments' || id === 'app-fx' || id === 'scanlines';
     await this.host.menuAction({ id, value });
     if (!keep) {

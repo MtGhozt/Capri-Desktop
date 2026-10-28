@@ -699,6 +699,24 @@ async function connectSpotify(clientId) {
   }
 }
 const spotify = createSpotify({ token: () => spotifyAccessToken });
+
+// Cloud chat keys, kept encrypted with your Windows account in their own file: never in config.json,
+// never in a log (Paso 4K). Same store as Spotify's tokens.
+const llmKeys = () => createTokenStore({
+  file: path.join(app.getPath('userData'), 'llm-keys'),
+  safeStorage,
+});
+function llmKey(id) {
+  return String(llmKeys().read()?.[id] || '');
+}
+function saveLlmKey(id, key) {
+  const all = llmKeys().read() || {};
+  const clean = String(key || '').trim();
+  if (clean) all[id] = clean;
+  else delete all[id];
+  llmKeys().write(all);
+  return Boolean(clean);
+}
 // is that program up? (tasklist, so no extra script)
 function processRunning(name) {
   return new Promise((resolve) => {
@@ -1009,6 +1027,37 @@ function updateConfig(patch) {
   return cfg;
 }
 
+// MODELO (Paso 4K): who answers her. Switching keeps LM Studio's model apart, so coming back to it
+// doesn't cost a re-download; the key never leaves its own encrypted file.
+function setChatProvider(id) {
+  if (!PROVIDERS[id]) return { ok: false, message: 'Ese proveedor no existe.' };
+  const cfg = config.load();
+  const from = String(cfg.llm?.provider || 'local');
+  if (id === from) return { ok: true };
+  const patch = {
+    provider: id,
+    model: id === 'local' ? cfg.llm?.localModel || PROVIDERS.local.model : PROVIDERS[id].model,
+  };
+  if (from === 'local') patch.localModel = cfg.llm?.model || PROVIDERS.local.model;
+  updateConfig({ llm: patch });
+  return { ok: true };
+}
+
+function setChatModel(value) {
+  const provider = String(config.load().llm?.provider || 'local');
+  const model = String(value?.model ?? value ?? '').trim().slice(0, 120);
+  if (!model) return { ok: false, message: 'Falta el nombre del modelo.' };
+  updateConfig({ llm: provider === 'local' ? { model, localModel: model } : { model } });
+  return { ok: true, model };
+}
+
+function setChatKey(value) {
+  const provider = String(value?.provider || config.load().llm?.provider || 'local');
+  if (!PROVIDERS[provider] || PROVIDERS[provider].local) return { ok: false, message: 'Ese proveedor no usa clave.' };
+  const saved = saveLlmKey(provider, value?.key);
+  return { ok: true, hasKey: saved, message: saved ? 'Clave guardada.' : 'Clave borrada.' };
+}
+
 function applyMenuAction(id, value) {
   switch (id) {
     case 'teleport': sendCommand('teleport'); break;
@@ -1248,6 +1297,18 @@ function menuState(extra = {}) {
       clientId: String(cfg.music?.spotify?.clientId || ''),
       connected: Boolean(spotifyAccessToken),
     },
+    model: (() => {
+      const id = String(cfg.llm?.provider || 'local');
+      return {
+        provider: PROVIDERS[id] ? id : 'local',
+        providers: providerOptions(),
+        model: String(cfg.llm?.model || ''),
+        local: !isCloud(id),
+        hasKey: Boolean(llmKey(id)),
+        shareScreen: cfg.llm?.shareScreen === true,
+        shareMemory: cfg.llm?.shareMemory === true,
+      };
+    })(),
     apps: appsMenuState(),
     found: {
       at: scanned().at || null,
@@ -1473,7 +1534,9 @@ function registerIpc() {
     }
     return picked;
   });
-  ipcMain.handle('llm:status', () => lms?.status() || 'ready');
+  ipcMain.handle('llm:status', () => (
+    isCloud(config.load().llm?.provider) ? 'ready' : lms?.status() || 'ready'
+  ));
   ipcMain.on('systemfx:done', (_e, id) => systemFxWaiters.get(Number(id))?.());
   ipcMain.handle('chat:send', async (_e, text) => {
     const line = String(text || '').trim();
@@ -1502,10 +1565,13 @@ function registerIpc() {
     if (overlayFolded || isWakeCommand(line)) return goWakeReply();
     const appOrder = await apps().command(line); // "abre Discord", "cierra Spotify"
     if (appOrder) return appReply(appOrder);
-    const boot = await lms.whenReady();
-    if (boot === 'failed') {
-      overlay.webContents.send('chat:error', { kind: 'offline' });
-      return { ok: false };
+    // the local stack is only waited for when it is the one who answers
+    if (!isCloud(config.load().llm?.provider)) {
+      const boot = await lms.whenReady();
+      if (boot === 'failed') {
+        overlay.webContents.send('chat:error', { kind: 'offline', text: 'No pude despertar LM Studio. Revisa que esté instalado y vuelve a intentarlo.' });
+        return { ok: false };
+      }
     }
     const speakId = ttsOn() ? speakQueue?.start() : 0;
     if (!speakId) speakQueue?.stop();
@@ -1650,6 +1716,15 @@ function main() {
     llm = createLlm({
       loadConfig: () => config.load(),
       personaPath: path.join(__dirname, 'persona.md'),
+      apiKey: (id) => llmKey(id),
+      // what she may tell a cloud provider about your screen, only with the switch on
+      screenContext: () => {
+        const title = String(lastWindows?.fgTitle || '').trim();
+        const exe = String(lastWindows?.fgExe || '').split(/[\\/]/).pop();
+        return [exe, title && `«${title}»`].filter(Boolean).join(' ');
+      },
+      onFallback: (line) => sendCommand('box-log', { kind: 'sistema', text: line }),
+      ensureLocal: () => lms?.whenReady(),
     });
     lms = createLms({
       loadConfig: () => config.load(),

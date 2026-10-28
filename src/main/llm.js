@@ -1,12 +1,13 @@
 'use strict';
 
 const fs = require('node:fs');
+const { PROVIDERS, isCloud, requestFor, explain } = require('./chat-providers');
 
 const HISTORY_LIMIT = 16;
 const TIMEOUT_MS = 45000;
 const LOCAL_TZ = 'America/Costa_Rica';
 
-function createLlm({ loadConfig, personaPath }) {
+function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback, ensureLocal } = {}) {
   let history = [];
   let abort = null;
   let persona = null;
@@ -51,10 +52,29 @@ function createLlm({ loadConfig, personaPath }) {
     return `${get('weekday')}, ${get('month')} ${get('day')}, ${get('year')} ${get('hour')}:${get('minute')} (${LOCAL_TZ})`;
   }
 
-  function systemPrompt() {
+  function systemPrompt(cfg) {
     const base = personaText();
-    const lang = String(loadConfig().lang || 'es');
-    return `${base}\n\nLanguage setting: ${lang}. Always speak Spanish. Local date and time for Matias right now: ${localClock()}. If he asks the time or date, use that.`;
+    const lang = String(cfg.lang || 'es');
+    const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. Local date and time for Matias right now: ${localClock()}. If he asks the time or date, use that.`];
+    // off by default: only what she is told to send leaves this PC
+    const screen = cfg.llm?.shareScreen ? String(screenContext?.() || '').trim() : '';
+    if (screen) parts.push(`What is open on Matias' screen right now: ${screen}`);
+    return parts.join('\n\n');
+  }
+
+  // Her memory of the conversation travels to a cloud provider only when the switch says so.
+  function messagesFor(cfg, cloud, user) {
+    const messages = [{ role: 'system', content: systemPrompt(cfg) }];
+    if (!cloud || cfg.llm?.shareMemory) messages.push(...history);
+    messages.push({ role: 'user', content: user });
+    return messages;
+  }
+
+  // The model for the provider in use: LM Studio keeps its own, so going to the cloud and back
+  // doesn't lose it (config.llm.localModel).
+  function modelFor(cfg, id) {
+    if (id !== 'local') return String(cfg.llm?.model || PROVIDERS[id]?.model || '');
+    return String(cfg.llm?.localModel || cfg.llm?.model || PROVIDERS.local.model);
   }
 
   function cancel() {
@@ -62,105 +82,127 @@ function createLlm({ loadConfig, personaPath }) {
     abort = null;
   }
 
-  async function chat({ user, onToken, onDone, onError }) {
-    cancel();
-    abort = new AbortController();
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      abort.abort();
-    }, TIMEOUT_MS);
-
-    const cfg = loadConfig();
-    const baseUrl = String(cfg.llm?.baseUrl || 'http://localhost:1235/v1').replace(/\/$/, '');
-    const model = cfg.llm?.model || 'google/gemma-4-e2b';
-    const messages = [
-      { role: 'system', content: systemPrompt() },
-      ...history,
-      { role: 'user', content: user },
-    ];
-
+  // OpenAI-style streaming (server-sent events): onToken as each piece comes, all of it at the end.
+  async function streamChat(request, onToken, signal) {
     let res;
     try {
-      res = await fetch(`${baseUrl}/chat/completions`, {
+      res = await fetch(request.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages,
-          stream: true,
-          reasoning_effort: 'none',
-        }),
-        signal: abort.signal,
+        headers: request.headers,
+        body: JSON.stringify(request.body),
+        signal,
       });
     } catch (err) {
-      clearTimeout(timer);
-      if (err.name === 'AbortError') {
-        if (timedOut) onError({ kind: 'offline' });
-        return;
-      }
-      onError({ kind: 'offline' });
-      return;
+      throw Object.assign(new Error(err.message || 'network'), { offline: true });
     }
-
-    if (!res.ok || !res.body) {
-      clearTimeout(timer);
-      onError({ kind: 'offline' });
-      return;
-    }
+    if (!res.ok || !res.body) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
 
     let full = '';
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop() ?? '';
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data:')) continue;
-          const data = trimmed.slice(5).trim();
-          if (!data || data === '[DONE]') continue;
-          let json;
-          try {
-            json = JSON.parse(data);
-          } catch {
-            continue;
-          }
-          const piece = json.choices?.[0]?.delta?.content;
-          if (piece) {
-            full += piece;
-            onToken(piece);
-          }
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const data = trimmed.slice(5).trim();
+        if (!data || data === '[DONE]') continue;
+        let json;
+        try {
+          json = JSON.parse(data);
+        } catch {
+          continue;
+        }
+        if (json.error) throw new Error(json.error.message || 'provider error');
+        const piece = json.choices?.[0]?.delta?.content;
+        if (piece) {
+          full += piece;
+          onToken(piece);
         }
       }
-    } catch (err) {
+    }
+    if (!full.trim()) throw Object.assign(new Error('empty'), { code: 'empty' });
+    return full;
+  }
+
+  async function chat({ user, onToken, onDone, onError }) {
+    cancel();
+    abort = new AbortController();
+    const signal = abort.signal;
+    let timedOut = false;
+    const controller = abort;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, TIMEOUT_MS);
+
+    const cfg = loadConfig();
+    const id = String(cfg.llm?.provider || 'local');
+    const cloud = isCloud(id);
+    let streamed = false;
+    let full = '';
+    const send = (piece) => {
+      streamed = true;
+      full += piece;
+      onToken(piece);
+    };
+    const ask = (target) => streamChat(requestFor(target, {
+      model: modelFor(cfg, target),
+      messages: messagesFor(cfg, isCloud(target), user),
+      key: apiKey?.(target) || '',
+      baseUrl: cfg.llm?.baseUrl,
+    }), send, signal);
+
+    const done = (text) => {
       clearTimeout(timer);
-      if (err.name === 'AbortError') {
-        if (timedOut) onError({ kind: 'offline' });
+      history = [
+        ...history,
+        { role: 'user', content: user },
+        { role: 'assistant', content: text },
+      ].slice(-HISTORY_LIMIT);
+      onDone({ text });
+    };
+
+    const fail = (err) => {
+      clearTimeout(timer);
+      if (signal.aborted && !timedOut) return; // you stopped her
+      onError({ kind: 'offline', text: timedOut ? 'Se tardó demasiado en contestar.' : explain(err, id) });
+    };
+
+    let error = null;
+    try {
+      const text = await ask(cloud ? id : 'local');
+      done(text);
+      return;
+    } catch (err) {
+      error = err;
+    }
+    if (signal.aborted && !timedOut) {
+      clearTimeout(timer); // you stopped her: nothing left to say
+      return;
+    }
+
+    // The cloud is down (no network, a limit, a dead key): the local model answers instead, and she
+    // says so in her message box. Nothing streamed yet, or the two answers would mix.
+    if (cloud && !streamed) {
+      const why = explain(error, id);
+      onFallback?.(`${why} Te contesto con ${PROVIDERS.local.label} mientras tanto.`);
+      try {
+        await ensureLocal?.();
+        const text = await ask('local');
+        done(text);
+        return;
+      } catch {
+        fail(error);
         return;
       }
-      onError({ kind: 'offline' });
-      return;
     }
-
-    clearTimeout(timer);
-    if (!full.trim()) {
-      onError({ kind: 'offline' });
-      return;
-    }
-
-    history = [
-      ...history,
-      { role: 'user', content: user },
-      { role: 'assistant', content: full },
-    ].slice(-HISTORY_LIMIT);
-    onDone({ text: full });
+    fail(error);
   }
 
   return { chat, cancel, reset, reloadPersona, personaText };

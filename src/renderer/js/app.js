@@ -502,6 +502,8 @@ async function boot() {
   };
 
   const applyBoot = (state) => {
+    // a cloud provider answers, so whether LM Studio came up is nobody's business here (Paso 4K)
+    if (config.llm?.provider && config.llm.provider !== 'local') return;
     bubble.setBoot(state);
     if (machine.get() === 'DORMANT') return;
     if (state === 'booting') {
@@ -525,7 +527,7 @@ async function boot() {
     bubble.onToken(typeof piece === 'string' ? piece : piece?.text || '');
   });
   host.onChatDone((payload) => bubble.onDone(payload?.text || ''));
-  host.onChatError(() => bubble.onError());
+  host.onChatError((payload) => bubble.onError(payload));
   host.onVoice(async (evt) => {
     const type = evt?.type;
     if (type === 'listening') {

@@ -47,6 +47,8 @@ function startWindowWatch({ overlay, onUpdate }) {
       const bar = toOverlayRect(snap.bar, bounds, dip);
       onUpdate({
         fg: snap.fg,
+        fgExe: snap.fgExe,
+        fgTitle: snap.fgTitle,
         taskbar: Boolean(snap.taskbar),
         start: Boolean(snap.start),
         bar: bar ? { ...bar, shown: Boolean(snap.bar?.shown) } : null,

@@ -16,9 +16,14 @@ const DEFAULTS = {
   visible: true,
   welcomed: false,   // she has introduced herself (her welcome panel)
   linked: false,     // a Claude Code event has reached her at least once
+  render: 'auto',    // her window: 'auto', 'gl' (OpenGL) or 'software' (no graphics card), for black screens
   llm: {
+    provider: 'local',       // 'local' (LM Studio) or a cloud one: see chat-providers.js
+    model: 'google/gemma-4-e2b', // the model of the provider in use
+    localModel: 'google/gemma-4-e2b', // LM Studio's, kept apart so going to the cloud and back doesn't lose it
+    shareScreen: false,      // send what is open on screen (cloud only): off by default
+    shareMemory: false,      // send her memory of the conversation (cloud only): off by default
     baseUrl: 'http://localhost:1235/v1',
-    model: 'google/gemma-4-e2b',
     autoStart: true,
     lmsPath: null,           // null → %USERPROFILE%\.lmstudio\bin\lms.exe
     contextLength: 8192,
@@ -158,6 +163,11 @@ function load() {
   // Older installs defaulted to English; Capri now speaks Spanish.
   if (cache.lang === 'en') {
     cache.lang = 'es';
+    persist();
+  }
+  // The local model used to live in llm.model alone: keep hers when moving to a provider.
+  if (!cache.llm.localModel) {
+    cache.llm.localModel = cache.llm.model;
     persist();
   }
   return cache;

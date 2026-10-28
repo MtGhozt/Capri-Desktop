@@ -349,15 +349,15 @@ export class Bubble {
     this.typeToward(this.replyText, { finish: true });
   }
 
-  onError() {
+  onError(payload) {
     if (!this.busy) return;
-    this.fail();
+    this.fail(payload?.text);
   }
 
-  fail() {
+  fail(text) {
     this.stopThink();
     this.busy = false;
-    const line = OFFLINE[Math.floor(Math.random() * OFFLINE.length)];
+    const line = String(text || '').trim() || OFFLINE[Math.floor(Math.random() * OFFLINE.length)];
     this.replyText = line;
     this.note('sistema', line);
     this.typeToward(line, { finish: true });
