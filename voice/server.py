@@ -914,6 +914,11 @@ class Engine:
             else:
                 self._session_tts = self._tts
                 reason = "kokoro" if self._tts and not isinstance(self._tts, NullTTS) else "off"
+        if reason == "omnivoice":
+            # her voice is loaded: nothing to decide, so no VRAM probe. With LM Studio off (cloud chat)
+            # that probe waits on its port and then `lms ps`, 3-8 s before every reply.
+            log(f"tts engine=omnivoice reason={reason}")
+            return
         free, usable, _loaded = self._vram_budget()
         if self._omni is not None or reason == "omnivoice_loading":
             engine = "omnivoice"
