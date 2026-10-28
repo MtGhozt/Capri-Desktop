@@ -14,6 +14,7 @@ const { createBridge } = require('./bridge');
 const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
 const { PROVIDERS, providerOptions, isCloud } = require('./chat-providers');
+const { parseRenderMode, renderSwitches } = require('./render-mode');
 const { createLms } = require('./lms');
 const { createVoice } = require('./voice');
 const { createSpeakQueue } = require('./speak');
@@ -1078,6 +1079,12 @@ function applyMenuAction(id, value) {
     case 'model-set': return setChatModel(value);
     case 'model-key': return setChatKey(value);
     case 'model-share': updateConfig({ llm: value }); break;
+    case 'render':
+      if (parseRenderMode(value) !== value) return { ok: false, message: 'Esa opción de pantalla no existe.' };
+      config.save({ render: value });
+      app.relaunch(); // read once, when Chromium starts
+      app.exit(0);
+      break;
     case 'spotify-connect':
       updateConfig({ music: { spotify: { clientId: String(value || '').trim().slice(0, 100) } } });
       return connectSpotify(value);
@@ -1286,6 +1293,7 @@ function menuState(extra = {}) {
       appFx: cfg.fx?.apps !== false,
       scanlines: cfg.fx?.scanlines !== false,
       musicPlayer: ['namida', 'spotify', 'none'].includes(cfg.music?.player) ? cfg.music.player : 'namida',
+      render: parseRenderMode(cfg.render),
     },
     hearing: {
       fixes: cleanFixes(cfg.hearing?.fixes),
@@ -1706,7 +1714,18 @@ async function debugHandler(route, body) {
   throw new Error('unknown debug route');
 }
 
+// How her window is drawn, read before Chromium starts (menu › COMPORTAMIENTO › Pantalla).
+function applyRender() {
+  const { software, switches } = renderSwitches(config.load().render);
+  for (const [name, value] of switches) {
+    if (value == null) app.commandLine.appendSwitch(name);
+    else app.commandLine.appendSwitch(name, value);
+  }
+  if (software) app.disableHardwareAcceleration();
+}
+
 function main() {
+  applyRender();
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;

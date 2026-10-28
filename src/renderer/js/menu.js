@@ -461,6 +461,18 @@ export class AppMenu {
       current: cfg.theme,
       onChange: (id) => this.act('theme', id),
     });
+    selector('Pantalla', {
+      options: [
+        { id: 'auto', label: 'AUTOMÁTICO' },
+        { id: 'gl', label: 'OPENGL' },
+        { id: 'software', label: 'SIN GPU' },
+      ],
+      current: cfg.render || 'auto',
+      onChange: (id) => this.act('render', id),
+    });
+    if ((cfg.render || 'auto') !== 'auto') {
+      body.append(build('div', 'appmenu__hint', 'Se reinicia para aplicarlo. Si su fondo sale negro y esto no lo arregla, vuelve a AUTOMÁTICO.'));
+    }
     action('Atajos', { chevron: 'shortcuts', onClick: () => this.toggle('shortcuts', state) });
     if (this.expanded === 'shortcuts') {
       for (const s of state.shortcuts || []) {
