@@ -32,13 +32,13 @@ const THEME_OPTIONS = [
 
 export const QUICK_MENU_ITEMS = [
   { id: 'mic' }, { id: 'mic-device' }, { id: 'reply-mode' }, { id: 'model-provider' },
-  { id: 'fixes' }, { id: 'clip-save' }, { id: 'behavior' }, { id: 'drone-mode' }, { id: 'theme' }, { id: 'settings' }, { id: 'quit' },
+  { id: 'fixes' }, { id: 'clip-save' }, { id: 'do-something' }, { id: 'behavior' }, { id: 'drone-mode' }, { id: 'theme' }, { id: 'settings' }, { id: 'quit' },
 ];
 
 export const SETTINGS_TABS = [
   { id: 'model', label: 'Modelo y clave' }, { id: 'memory', label: 'Memoria' },
   { id: 'hearing', label: 'Oído' }, { id: 'apps', label: 'Mis apps' },
-  { id: 'bubble', label: 'Caja de mensajes' }, { id: 'music', label: 'Música / Reproductor' },
+  { id: 'bubble', label: 'Apariencia' }, { id: 'music', label: 'Música / Reproductor' },
   { id: 'shortcuts', label: 'Atajos' }, { id: 'behavior', label: 'Comportamiento' },
 ];
 
@@ -170,7 +170,9 @@ export class AppMenu {
   }
 
   // The overlay never takes the keyboard by itself: ask for it while the fix fields are open.
+  // Settings is a separate window — never steal the overlay's focus from here.
   useKeyboard(on) {
+    if (this.settingsMode) return;
     if (this.keyboard === on) return;
     this.keyboard = on;
     this.host.menuAction({ id: 'menu-keyboard', value: on }).catch(() => {});
@@ -260,7 +262,7 @@ export class AppMenu {
       const item = build('button', 'appmenu__row appmenu__row--action appmenu__quick-row', label);
       item.type = 'button';
       if (danger) item.classList.add('is-danger');
-      item.append(build('span', 'appmenu__meta', value || ''), build('span', 'appmenu__chevron', id === 'clip-save' ? '' : '›'));
+      item.append(build('span', 'appmenu__meta', value || ''), build('span', 'appmenu__chevron', ['clip-save', 'do-something'].includes(id) ? '' : '›'));
       item.addEventListener('click', (e) => { e.stopPropagation(); onClick(item.getBoundingClientRect()); });
       body.append(item);
     };
@@ -281,6 +283,7 @@ export class AppMenu {
     row('Corregir lo último', hearing.fixes?.length ? `${hearing.fixes.length} CORRECCIONES` : 'OÍDO', 'fixes',
       () => { this.hide(); this.host.openSettings('hearing'); });
     row('Guardar clip', 'ALT+F10', 'clip-save', () => this.act('clip-save'));
+    row('Hacer algo', '', 'do-something', () => this.act('do-something'));
     row('Comportamiento', cfg.locked ? 'FIJO' : 'NORMAL', 'behavior',
       (anchor) => openSubmenu('behavior', [{ id: 'normal', label: 'NORMAL' }, { id: 'locked', label: 'FIJO' }], cfg.locked ? 'locked' : 'normal', 'drag-lock', anchor));
     row('Dron en modo juego', cfg.gaming?.drone === false ? 'NO' : 'SÍ', 'drone-mode',
@@ -449,7 +452,7 @@ export class AppMenu {
     }
 
     // AUDIO
-    section('AUDIO', 'audio');
+    section('AUDIO', 'hearing');
     toggle('Micrófono', { on: cfg.mic, labels: ['MUTEADO', 'ACTIVO'], onChange: (on) => this.act('mic', on) });
     const devices = [
       { id: null, label: 'Predeterminado' },
@@ -564,25 +567,61 @@ export class AppMenu {
 
     // COMPORTAMIENTO
     section('COMPORTAMIENTO', 'behavior');
-    toggle('Arrastrar', { on: cfg.locked, labels: ['NORMAL', 'FIJO'], onChange: (on) => this.act('drag-lock', on) });
-    toggle('Iniciar con Windows', { on: state.login, labels: ['INACTIVO', 'ACTIVO'], onChange: (on) => this.act('startup', on) });
-    toggle('Modo juego', {
-      on: cfg.gaming !== 'off',
-      labels: ['OFF', 'AUTO'],
-      onChange: (on) => this.act('gaming-mode', on ? 'auto' : 'off'),
+    toggle('Comentarios', {
+      setting: 'behavior',
+      on: cfg.comments?.enabled !== false,
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.act('comments', on),
+    });
+    const commentFrequency = build('div', 'appmenu__row appmenu__comment-frequency');
+    commentFrequency.dataset.setting = 'behavior';
+    commentFrequency.append(build('span', 'appmenu__label', 'Frecuencia (min–máx)'));
+    for (const [key, fallback] of [['minMinutes', 20], ['maxMinutes', 40]]) {
+      const input = build('input', 'appmenu__input');
+      input.type = 'number';
+      input.min = '1';
+      input.max = '1440';
+      input.value = String(cfg.comments?.[key] ?? fallback);
+      input.title = key === 'minMinutes' ? 'Mínimo en minutos' : 'Máximo en minutos';
+      input.addEventListener('change', () => this.act('comments-range', {
+        [key]: Math.max(1, Math.min(1440, Number(input.value) || fallback)),
+      }));
+      commentFrequency.append(input);
+    }
+    body.append(commentFrequency);
+    toggle('Saludos', {
+      setting: 'behavior',
+      on: cfg.behavior?.greetings !== false,
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.act('greetings', on),
+    });
+    toggle('Saludo al desbloquear', {
+      setting: 'behavior',
+      on: cfg.behavior?.unlockGreeting !== false,
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.act('unlock-greeting', on),
+    });
+    toggle('Caricias', {
+      setting: 'behavior',
+      on: cfg.behavior?.caresses !== false,
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.act('caresses', on),
+    });
+    toggle('Bailar con música', {
+      setting: 'behavior',
+      on: cfg.behavior?.musicDance !== false,
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.act('music-dance', on),
     });
     toggle('Dron en modo juego', {
-      setting: 'drone',
+      setting: 'behavior',
       on: cfg.gaming?.drone !== false,
       labels: ['NO', 'SÍ'],
       onChange: (on) => this.act('drone-mode', on),
     });
-    toggle('Comentarios', {
-      on: cfg.comments !== false,
-      labels: ['INACTIVO', 'ACTIVO'],
-      onChange: (on) => this.act('comments', on),
-    });
+    section('APARIENCIA', 'bubble');
     toggle('Animaciones de apps', {
+      setting: 'bubble',
       on: cfg.appFx !== false,
       labels: ['INACTIVO', 'ACTIVO'],
       onChange: (on) => this.act('app-fx', on),
@@ -594,11 +633,13 @@ export class AppMenu {
       onChange: (on) => this.act('scanlines', on),
     });
     selector('Tema', {
+      setting: 'bubble',
       options: THEME_OPTIONS,
       current: cfg.theme,
       onChange: (id) => this.act('theme', id),
     });
     selector('Pantalla', {
+      setting: 'bubble',
       options: [
         { id: 'auto', label: 'AUTOMÁTICO' },
         { id: 'gl', label: 'OPENGL' },
@@ -608,8 +649,12 @@ export class AppMenu {
       onChange: (id) => this.act('render', id),
     });
     if ((cfg.render || 'auto') !== 'auto') {
-      body.append(build('div', 'appmenu__hint', 'Se reinicia para aplicarlo. Si su fondo sale negro y esto no lo arregla, vuelve a AUTOMÁTICO.'));
+      const hint = build('div', 'appmenu__hint');
+      hint.dataset.setting = 'bubble';
+      hint.textContent = 'Se reinicia para aplicarlo. Si su fondo sale negro y esto no lo arregla, vuelve a AUTOMÁTICO.';
+      body.append(hint);
     }
+    section('ATAJOS', 'shortcuts');
     action('Atajos', { setting: 'shortcuts', chevron: 'shortcuts', onClick: () => this.toggle('shortcuts', state) });
     if (this.expanded === 'shortcuts') {
       for (const s of state.shortcuts || []) {
@@ -638,21 +683,19 @@ export class AppMenu {
     if (!this.settingsMode) return;
     const groups = {
       model: ['model'], memory: ['memory'], hearing: ['hearing'], apps: ['apps', 'apps-add', 'apps-found', 'apps-test'],
-      bubble: ['behavior'], music: ['music'], shortcuts: ['behavior'], behavior: ['behavior'],
+      bubble: ['bubble'], music: ['music'], shortcuts: ['shortcuts'], behavior: ['behavior'],
     };
     const allowed = new Set(groups[this.settingsSection] || []);
     let sectionId = '';
     for (const child of body.children) {
       if (child.classList.contains('appmenu__section')) {
-        sectionId = child.dataset.section;
+        sectionId = child.dataset.section || '';
         child.hidden = !allowed.has(sectionId);
-      } else {
-        const setting = child.dataset.setting;
-        child.hidden = !allowed.has(sectionId) || (
-          (this.settingsSection === 'bubble' || this.settingsSection === 'shortcuts') &&
-          setting !== this.settingsSection
-        );
+        continue;
       }
+      // Own section id wins; else inherit the last heading (rows under COMPORTAMIENTO / CAJA / …).
+      const own = child.dataset.setting || sectionId;
+      child.hidden = !allowed.has(own);
     }
   }
 
@@ -1210,9 +1253,11 @@ export class AppMenu {
       return;
     }
     this.confirmForget = false;
-    const keep = id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'music-player'
+    const keep = this.settingsMode || id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'music-player'
       || id === 'model-provider' || id === 'spotify-connect' || id === 'spotify-disconnect' || id === 'drag-lock' || id === 'theme'
-      || id === 'startup' || id === 'gaming-mode' || id === 'comments' || id === 'app-fx' || id === 'scanlines';
+      || id === 'startup' || id === 'gaming-mode' || id === 'drone-mode' || id === 'comments' || id === 'comments-range'
+      || id === 'greetings' || id === 'unlock-greeting' || id === 'caresses' || id === 'music-dance'
+      || id === 'app-fx' || id === 'scanlines';
     await this.host.menuAction({ id, value });
     if (!keep) {
       this.hide();

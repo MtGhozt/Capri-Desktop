@@ -9,10 +9,32 @@ const HISTORY_LIMIT = 16;
 const TIMEOUT_MS = 45000;
 const LOCAL_TZ = 'America/Costa_Rica';
 
-function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback, ensureLocal } = {}) {
+function temporalContext({ now = new Date(), lastTalkAt = null } = {}) {
+  const parts = new Intl.DateTimeFormat('es-CR', {
+    timeZone: LOCAL_TZ, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(now);
+  const get = (type) => parts.find((p) => p.type === type)?.value || '';
+  const hour = Number(get('hour'));
+  const period = hour < 6 ? 'madrugada' : hour < 12 ? 'mañana' : hour < 19 ? 'tarde' : 'noche';
+  let elapsed = 'es la primera conversación de esta sesión';
+  if (Number.isFinite(lastTalkAt)) {
+    const minutes = Math.max(0, Math.round((now.getTime() - lastTalkAt) / 60000));
+    if (minutes < 1) elapsed = 'hace menos de 1 minuto';
+    else if (minutes < 60) elapsed = `hace ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+    else {
+      const hours = Math.round(minutes / 60);
+      elapsed = `hace ${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+    }
+  }
+  return `Hora local: ${get('weekday')}, ${get('month')} ${get('day')} de ${get('year')} a las ${get('hour')}:${get('minute')} (${LOCAL_TZ}). Momento del día: ${period}. Última conversación: ${elapsed}.`;
+}
+
+function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback, ensureLocal, now = () => new Date() } = {}) {
   let history = [];
   let abort = null;
   let persona = null;
+  let lastTalkAt = null;
 
   function readPersona() {
     try {
@@ -36,28 +58,19 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
   function reset() {
     cancel();
     history = [];
+    lastTalkAt = null;
     return { ok: true };
   }
 
-  function localClock() {
-    const parts = new Intl.DateTimeFormat('es-CR', {
-      timeZone: LOCAL_TZ,
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).formatToParts(new Date());
-    const get = (type) => parts.find((p) => p.type === type)?.value || '';
-    return `${get('weekday')}, ${get('month')} ${get('day')}, ${get('year')} ${get('hour')}:${get('minute')} (${LOCAL_TZ})`;
+  function rememberAssistant(text) {
+    if (!String(text || '').trim()) return;
+    history = [...history, { role: 'assistant', content: String(text).trim() }].slice(-HISTORY_LIMIT);
   }
 
   function systemPrompt(cfg, cloud) {
     const base = personaText();
     const lang = String(cfg.lang || 'es');
-    const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. Local date and time for Matias right now: ${localClock()}. If he asks the time or date, use that.`];
+    const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. ${temporalContext({ now: now(), lastTalkAt })} Si pregunta la hora o la fecha, usa esos datos.`];
     // her answer is shown in a terminal box and read out loud: markers would be spelled out
     if (cloud) parts.push('Responde en texto plano, sin Markdown, sin asteriscos ni listas; frases cortas para ser leídas en voz alta. Nada de etiquetas de seguridad ni de tu razonamiento.');
     // off by default: only what she is told to send leaves this PC
@@ -192,6 +205,7 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
         { role: 'user', content: user },
         { role: 'assistant', content: text },
       ].slice(-HISTORY_LIMIT);
+      lastTalkAt = now().getTime();
       onDone({ text });
     };
 
@@ -233,7 +247,7 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
     return result('failed');
   }
 
-  return { chat, cancel, reset, reloadPersona, personaText };
+  return { chat, cancel, reset, rememberAssistant, reloadPersona, personaText };
 }
 
-module.exports = { createLlm };
+module.exports = { createLlm, temporalContext };

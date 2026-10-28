@@ -44,11 +44,12 @@ function cleanText(raw) {
     line = line.replace(HEADING, '').replace(BULLET, '').replace(QUOTE, '');
     kept.push(line);
   }
+  // Collapse runs of spaces/tabs inside a line, but never eat the space after ".!?" or
+  // spaces around newlines — stream chunks are concatenated as-is.
   return withoutMarkdown(kept.join('\n'))
-    .replace(/[ \t]+/g, ' ')
-    .replace(/ ?\n ?/g, '\n')
-    .replace(/\n{2,}/g, '\n')
-    .trim();
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\s+|\s+$/g, '');
 }
 
 // Where a stream may be cut: after the last sentence end, or at a space once it runs long.
@@ -70,8 +71,17 @@ function cutPoint(text) {
 function createStreamCleaner({ onText } = {}) {
   let buf = '';
 
-  function emit(text) {
-    const clean = cleanText(text);
+  // cleanText trims; streamed pieces are concatenated, so keep the whitespace the model put
+  // between sentences ("pasa? " + "No" → not "pasa?No").
+  function emit(text, { final = false } = {}) {
+    const lead = text.match(/^\s*/)?.[0] || '';
+    const trail = text.match(/\s*$/)?.[0] || '';
+    let clean = cleanText(text);
+    if (!clean && !final) return;
+    if (!final) {
+      if (lead && !/^\s/.test(clean)) clean = (lead.includes('\n') ? '\n' : ' ') + clean;
+      if (trail && !/\s$/.test(clean)) clean += trail.includes('\n') ? '\n' : ' ';
+    }
     if (clean) onText?.(clean);
   }
 
@@ -90,7 +100,7 @@ function createStreamCleaner({ onText } = {}) {
     flush() {
       const rest = buf;
       buf = '';
-      emit(rest);
+      emit(rest, { final: true });
     },
   };
 }

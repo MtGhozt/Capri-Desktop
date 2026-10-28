@@ -98,6 +98,10 @@ let gameWork = Promise.resolve();
 let gameWasFolded = false;
 let gameHadLlm = false;
 let gameHadVoice = false;
+let lastGreetingAt = 0;
+let bootGreetingDone = false;
+let greeting = null;
+const GREETING_COOLDOWN_MS = 10 * 60_000;
 
 const userSoundsDir = () => path.join(app.getPath('userData'), 'sounds');
 
@@ -150,6 +154,27 @@ function rearmOverlay() {
   fitOverlay();
   sendCommand('rearmed'); // click-through again: she waits for the pointer to be on her
   console.log('[capri] mouse hook set up again');
+}
+
+// Win+L / sleep freezes heartbeats and Windows drops global shortcuts. Reset so the quick menu
+// and Ajustes are not stuck under an interactive fullscreen overlay with a dead Esc hook.
+function recoverAfterUnlock(reason = 'unlock') {
+  if (!overlay || overlay.isDestroyed()) return;
+  logEvent(voiceLogPath(), `[capri] recover after ${reason}`);
+  menuGuard.forceClose(reason);
+  menuKeyboardOn(false);
+  if (chatOpen) closeChat();
+  else {
+    overlay.setFocusable(false);
+    overlay.showInactive();
+  }
+  rearmOverlay();
+  // force Esc re-bind: Windows drops the accelerator on the lock screen while we still think it's ours
+  takeEscape(false);
+  raiseOverlay();
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    try { settingsWindow.moveTop(); settingsWindow.focus(); } catch { /* gone */ }
+  }
 }
 
 // Back on top of everything, the taskbar included (it comes up over her when it's clicked). Twice:
@@ -269,13 +294,14 @@ const menuGuard = createMenuGuard({
 let escapeTaken = false;
 let menuGuardTimer = 0;
 function takeEscape(on) {
-  if (on === escapeTaken) return;
   try {
-    if (on) escapeTaken = globalShortcut.register('Escape', () => menuGuard.forceClose('esc'));
-    else {
-      globalShortcut.unregister('Escape');
+    // Always unregister first: after Win+L the OS may have dropped the hook while escapeTaken stayed true.
+    if (escapeTaken || !on) {
+      try { globalShortcut.unregister('Escape'); } catch { /* already gone */ }
       escapeTaken = false;
     }
+    if (!on) return;
+    escapeTaken = globalShortcut.register('Escape', () => menuGuard.forceClose('esc'));
   } catch (err) {
     console.error(`[capri] Esc for the menu: ${err.message}`);
     escapeTaken = false;
@@ -456,6 +482,13 @@ const followUp = createFollowUp({
     logEvent(voiceLogPath(), `[capri] follow-up listen ${secs}s chain=${followUp.chain}`);
     voice?.followUp?.(secs);
   },
+  onOpened: () => {
+    try { comments?.opened(); } catch (err) { logEvent(voiceLogPath(), `[capri] follow-up opened failed: ${err.message}`); }
+  },
+  onHeard: () => {
+    try { comments?.heard(); } catch (err) { logEvent(voiceLogPath(), `[capri] follow-up heard failed: ${err.message}`); }
+  },
+  onError: (err, phase) => logEvent(voiceLogPath(), `[capri] follow-up ${phase} failed: ${err.message}`),
 });
 
 function followUpSec(cfg) {
@@ -519,6 +552,7 @@ async function musicReply(parsed, { chat = true } = {}) {
       ? `Está sonando «${result.track}» de ${result.artist}.`
       : pickLine(MUSIC_LINE[parsed.action] || 'musicaPlay');
     sendCommand('box-log', { kind: 'musica', text: parsed.action });
+    sendCommand('music-state', { playing: !['pause', 'mute', 'volumeDown', 'volumeUp'].includes(parsed.action) });
     announce(line, { chat, badge: 'MUSIC' });
     return { ok: true };
   } catch (err) {
@@ -1122,6 +1156,15 @@ function applyMenuAction(id, value) {
     case 'gaming-mode': updateConfig({ gaming: { mode: value === 'off' ? 'off' : 'auto' } }); break;
     case 'drone-mode': updateConfig({ gaming: { drone: Boolean(value) } }); break;
     case 'comments': updateConfig({ comments: { enabled: Boolean(value) } }); break;
+    case 'comments-range': updateConfig({ comments: {
+      ...(value?.minMinutes != null ? { minMinutes: Number(value.minMinutes) } : {}),
+      ...(value?.maxMinutes != null ? { maxMinutes: Number(value.maxMinutes) } : {}),
+    } }); break;
+    case 'greetings': updateConfig({ behavior: { greetings: Boolean(value) } }); break;
+    case 'unlock-greeting': updateConfig({ behavior: { unlockGreeting: Boolean(value) } }); break;
+    case 'caresses': updateConfig({ behavior: { caresses: Boolean(value) } }); break;
+    case 'music-dance': updateConfig({ behavior: { musicDance: Boolean(value) } }); break;
+    case 'compact-mode': break; // removed: ignore legacy menu / config compact
     case 'app-fx': updateConfig({ fx: { apps: Boolean(value) } }); break;
     case 'scanlines': updateConfig({ fx: { scanlines: Boolean(value) } }); break;
     case 'persona-reload': {
@@ -1133,6 +1176,7 @@ function applyMenuAction(id, value) {
       break;
     }
     case 'clip-save': goClipReply({ chat: false }); break;
+    case 'do-something': sendCommand('do-something'); break;
     case 'fix-add': saveFix(value?.heard, value?.meant); break;
     case 'fix-remove': dropFix(value); break;
     case 'menu-keyboard': menuKeyboardOn(Boolean(value)); break;
@@ -1302,8 +1346,21 @@ function menuState(extra = {}) {
       replyMode: String(cfg.voice?.replyMode || 'voice'),
       locked: Boolean(cfg.position?.locked),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
-      gaming: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
-      comments: cfg.comments?.enabled !== false,
+      gaming: {
+        mode: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
+        drone: cfg.gaming?.drone !== false,
+      },
+      comments: {
+        enabled: cfg.comments?.enabled !== false,
+        minMinutes: Number(cfg.comments?.minMinutes) || 20,
+        maxMinutes: Number(cfg.comments?.maxMinutes) || 40,
+      },
+      behavior: {
+        greetings: cfg.behavior?.greetings !== false,
+        unlockGreeting: cfg.behavior?.unlockGreeting !== false,
+        caresses: cfg.behavior?.caresses !== false,
+        musicDance: cfg.behavior?.musicDance !== false,
+      },
       appFx: cfg.fx?.apps !== false,
       scanlines: cfg.fx?.scanlines !== false,
       musicPlayer: ['namida', 'spotify', 'none'].includes(cfg.music?.player) ? cfg.music.player : 'namida',
@@ -1548,6 +1605,9 @@ function registerIpc() {
     const result = applyMenuAction(payload.id, payload.value);
     return result && typeof result === 'object' ? result : { ok: true };
   });
+  ipcMain.on('settings:close', () => {
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
+  });
   ipcMain.handle('settings:open', (_e, tab = null) => {
     settingsWindow = createSettingsWindow({
       BrowserWindow,
@@ -1562,23 +1622,45 @@ function registerIpc() {
         },
       },
     });
-    ipcMain.on('settings:close', () => settingsWindow?.close());
     settingsWindow.once?.('closed', () => { settingsWindow = null; });
     if (tab) settingsWindow.webContents.once('did-finish-load', () => settingsWindow.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent('capri-settings-tab',{detail:${JSON.stringify(tab)}}))`));
     return { ok: true };
   });
   // her hello at boot: the overlay shows it, and it plays from the cached wav if there is one
-  ipcMain.handle('greet', () => {
+  greeting = async function greeting({ unlock = false } = {}) {
+    const cfg = config.load();
+    if (cfg.behavior?.greetings === false || (unlock && cfg.behavior?.unlockGreeting === false)) return null;
+    const now = Date.now();
+    if (now - lastGreetingAt < GREETING_COOLDOWN_MS) {
+      logEvent(voiceLogPath(), `[capri] greeting skipped cooldown reason=${unlock ? 'unlock' : 'boot'}`);
+      return null;
+    }
     const picked = pickGreeting({ last: config.load().greeting?.last || null });
     config.save({ greeting: { last: picked.id } });
-    if (voiceReplyOn() && speakQueue) {
-      const rid = speakQueue.start();
-      if (rid) {
-        voice?.greet?.(picked.id, picked.text, rid);
-        speakQueue.flush(rid);
-      }
+    lastGreetingAt = now;
+    logEvent(voiceLogPath(), `[capri] greeting ${unlock ? 'unlock' : 'start'} id=${picked.id}`);
+    let text = picked.text;
+    if (llm) {
+      let generated = null;
+      await new Promise((resolve) => {
+        llm.chat({
+          user: unlock ? 'Salúdame brevemente porque acabo de desbloquear la computadora.' : 'Salúdame brevemente al iniciar.',
+          onToken: () => {},
+          onDone: ({ text: value }) => { generated = String(value || '').trim(); resolve(); },
+          onError: () => resolve(),
+        });
+      });
+      if (generated && generated.length <= 180) text = generated;
+      else logEvent(voiceLogPath(), '[capri] greeting fallback local');
     }
-    return picked;
+    if (voiceReplyOn()) speakLine(text);
+    if (unlock) sendCommand('line', { badge: 'ONLINE', text });
+    return { ...picked, text };
+  };
+  ipcMain.handle('greet', async () => {
+    if (bootGreetingDone) return null;
+    bootGreetingDone = true;
+    return greeting();
   });
   ipcMain.handle('llm:status', () => (
     isCloud(config.load().llm?.provider) ? 'ready' : lms?.status() || 'ready'
@@ -1796,10 +1878,14 @@ function main() {
       loadConfig: () => config.load(),
       onEvent: (event) => {
         const payload = event?.type === 'transcript' ? hearTranscript(event) : event;
-        if (payload?.type === 'transcript') followUp.heard({ followUp: Boolean(payload.followUp) });
+        if (payload?.type === 'transcript') {
+          if (payload.followUp) comments?.heard();
+          followUp.heard({ followUp: Boolean(payload.followUp) });
+        }
         followUp.onVoiceEvent(payload);
         if (payload?.type === 'stopped' && payload.quiet) {
           logEvent(voiceLogPath(), '[capri] follow-up closed: nobody answered');
+          comments?.missed();
         }
         if (payload?.type === 'tts_state') ttsLoading = payload.state === 'loading';
         if (payload?.type === 'talking') voiceTalking = true;
@@ -1829,18 +1915,28 @@ function main() {
         && !overlayFolded
         && !chatOpen
         && !ttsLoading
+        && ttsOn()
         && !voiceTalking
         && !llmBusy
         && !gameMode?.active()
         && !goodnight.pending
       ),
-      minMs: () => commentRange(config.load().comments?.minMinutes, 15),
+      minMs: () => commentRange(config.load().comments?.minMinutes, 20),
       maxMs: () => commentRange(config.load().comments?.maxMinutes, 40),
       onLine: (line, kind) => {
         if (!line) return;
-        speakLine(line);
+        llm?.rememberAssistant?.(line);
+        const spoken = Boolean(speakLine(line));
         sendCommand('line', { badge: COMMENT_BADGE[kind] || 'CAPRI', text: line });
+        if (spoken) followUp.listenAfter(line);
       },
+      onIgnored: (line) => {
+        if (!line) return;
+        const spoken = Boolean(speakLine(line));
+        sendCommand('line', { badge: 'CAPRI', text: line });
+        if (spoken) followUp.listenAfter(line);
+      },
+      onError: (err, phase) => logEvent(voiceLogPath(), `[capri] ${phase} comment failed: ${err.message}`),
     });
     voice.prepareGreetings(GREETINGS);
     voice.start();
@@ -1864,7 +1960,10 @@ function main() {
         if (barUp || start || (rest && data.taskbar && !lastWindows?.taskbar)) raiseOverlay();
         lastWindows = data;
         gameMode?.update(data);
-        comments?.observe(windowContext(data, { apps: config.load().gaming?.apps || [] }));
+        const cfg = config.load();
+        comments?.observe(cfg.llm?.shareScreen === true
+          ? windowContext(data, { apps: cfg.gaming?.apps || [] })
+          : null);
         overlay?.webContents.send('windows:update', data);
       },
     });
@@ -1885,7 +1984,7 @@ function main() {
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });
     // after sleep or a locked screen, once Windows has settled
-    powerMonitor.on('resume', () => setTimeout(rearmOverlay, 2000));
+    powerMonitor.on('resume', () => setTimeout(() => recoverAfterUnlock('resume'), 2000));
     // a sidecar that slept with the audio devices open can leave Windows with no sound at all:
     // stop it as the PC goes down and start it fresh once Windows has its devices back
     powerMonitor.on('suspend', () => {
@@ -1899,7 +1998,13 @@ function main() {
       voice.stop();
       voice.start();
     }, 4000));
-    powerMonitor.on('unlock-screen', () => setTimeout(rearmOverlay, 1000));
+    powerMonitor.on('unlock-screen', () => setTimeout(() => {
+      recoverAfterUnlock('unlock');
+      // Greeting after the UI is free: never leave the overlay holding focus over Ajustes.
+      Promise.resolve(greeting?.({ unlock: true })).catch((err) => {
+        logEvent(voiceLogPath(), `[capri] greeting timer failed: ${err.message}`);
+      });
+    }, 1000));
   });
 
   app.on('will-quit', () => {

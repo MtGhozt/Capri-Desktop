@@ -43,6 +43,9 @@ function createFollowUp({
   startMs = START_MS,
   talkMs = TALK_MS,
   turnMs = TURN_MS,
+  onOpened = () => {},
+  onHeard = () => {},
+  onError = () => {},
 } = {}) {
   let chain = 0;        // windows opened since your last wake word / hotkey turn
   let turnAt = null;    // when you last said something we are waiting to answer
@@ -68,15 +71,23 @@ function createFollowUp({
     if (secs <= 0 || !canListen?.()) return false;
     if (chain >= maxChain) return false;
     chain += 1;
-    open(secs);
+    try { open(secs); onOpened(); } catch (err) { onError(err, 'open'); }
     return true;
   };
 
   return {
     get pending() { return Boolean(pending); },
     get chain() { return chain; },
+    listenAfter(text) {
+      stopTimer();
+      pending = null;
+      if ((Number(seconds?.()) || 0) <= 0 || !canListen?.()) return false;
+      arm(readMs(text) + gapMs, fire);
+      return true;
+    },
     heard({ followUp = false } = {}) {
       cancel();
+      if (followUp) onHeard();
       if (!followUp) chain = 0;
       turnAt = now();
     },

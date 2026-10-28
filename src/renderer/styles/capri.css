@@ -1191,6 +1191,16 @@ button.appmenu__row {
   box-shadow: inset 0 0 0 1px var(--accent-on);
 }
 
+.appmenu__comment-frequency {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.appmenu__comment-frequency .appmenu__input {
+  width: 72px;
+  flex: none;
+}
+
 .appmenu__fix-actions {
   display: flex;
   align-items: center;

@@ -25,13 +25,13 @@ Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
 - [x] **4G Energía:** "apaga la compu", "reinicia la compu", "suspende la compu" con confirmación en voz alta (solo un "sí" claro ejecuta). Secuencia glitch a pantalla completa antes de apagar/reiniciar (más corta al suspender), con textos propios en español. "Bloquea la PC", "minimiza todo" y "devuélvelas" van directos. Hecho (`3f98675..f276b22`).
 - [x] **4H Modo dron:** un ojo con fragmentos de su pelo girando (magenta/violeta/verde neón), dibujado en canvas, diseño propio. En modo juego aparece en vez de desaparecer; sin modo manual por ahora.
 - [x] **4H caja + poses:** caja `CAPRI.SYS // MENSAJE` (carpeta, logs, typewriter) y Capri recostada/de pie en el borde (`lying_A` / `lying_B`).
-- [ ] **4I Extras:** modo compacto, "Hacer algo" en el menú, saludo grande al desbloquear la PC.
-  - Saludo con voz al arrancar.
-  - Que sepa la hora y cuánto tiempo llevas sin hablarle (se agrega al prompt del sistema en cada mensaje), para saludar y hablar distinto.
-  - Comentarios espontáneos: se asoma sola cada cierto tiempo a comentar lo que estás haciendo. Si la ignoras, se pone sentida y pide atención.
-  - Poder contestarle sus comentarios: el comentario queda guardado en la conversación como turno de Capri y, después de comentar, se queda escuchando unos segundos sin palabra de activación (relacionado con 4B). Ejemplo: ella dice "ese no me cae bien, parece el malo" y vos respondés "no Capri, ese no es el malo".
-  - Caricias en la cabeza pasando el cursor (reacciona); patalea al arrastrarla.
-  - Bailar cuando suena música.
+- [x] **4I Extras:** modo compacto provisional, "Hacer algo" en el menú, saludo grande al desbloquear la PC.
+  - Saludo con voz al arrancar y al desbloquear, con cooldown y fallback local.
+  - Hora, momento del día y tiempo desde la última conversación en cada prompt.
+  - Comentarios espontáneos con privacidad de pantalla, reacción si se ignoran y escucha posterior.
+  - Caricias en la cabeza pasando el cursor; reacción visual y sonora.
+  - Bailar ocasionalmente cuando recibe estado de reproducción musical.
+  - "Hacer algo" y modo compacto provisional desde el menú.
 - [x] **Rediseño del menú + ventana de ajustes:** hecho, sin commit.
 - [ ] **4J Ver la pantalla:**
   - Captura de pantalla enviada a un modelo con visión, solo con el interruptor de pantalla activado (apagado por defecto) y solo con proveedores en la nube o un modelo local con visión.

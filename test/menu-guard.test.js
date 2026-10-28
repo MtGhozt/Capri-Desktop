@@ -50,6 +50,7 @@ test('she goes quiet: the clicks go back to the other windows', () => {
   s.guard.tick();
   assert.equal(s.through(), true);
   assert.ok(s.calls.some((c) => c[0] === 'keyboardOff'));
+  assert.ok(s.calls.some((c) => c[0] === 'cmd' && c[1] === 'menu-close' && c[2]?.force));
   assert.equal(s.guard.menuOpen, false);
 });
 

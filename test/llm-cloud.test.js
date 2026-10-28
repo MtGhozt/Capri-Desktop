@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createLlm } = require('../src/main/llm');
+const { createLlm, temporalContext } = require('../src/main/llm');
 const { createTokenStore } = require('../src/main/spotify');
 
 const KEY = 'sk-test-do-not-log-123';
@@ -17,6 +17,14 @@ const LOCAL = 'http://localhost:1235/v1';
 const sse = (text) => `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`;
 const ok = (text) => ({ ok: true, status: 200, body: new Response(sse(text)).body });
 const bad = (status) => ({ ok: false, status, body: new Response('{}').body });
+
+test('temporal context names Costa Rica time, Spanish day period and elapsed silence', () => {
+  const now = new Date('2026-10-29T02:30:00.000Z');
+  const text = temporalContext({ now, lastTalkAt: now.getTime() - 3 * 60 * 60 * 1000 });
+  assert.match(text, /hora local/i);
+  assert.match(text, /noche/i);
+  assert.match(text, /hace 3 horas/i);
+});
 
 function cfgOf(patch = {}) {
   return {

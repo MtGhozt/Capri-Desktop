@@ -190,3 +190,25 @@ test('active reports whether the switch is on', () => {
   on = false;
   assert.equal(comments.active(), false);
 });
+
+test('after two ignored comments she asks for attention once', () => {
+  const { lines, comments } = setup({ onIgnored: (line) => lines.push({ line, kind: 'atencion' }) });
+  comments.opened();
+  comments.missed();
+  comments.opened();
+  comments.missed();
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].kind, 'atencion');
+});
+
+test('comment callback failures are contained and reported', () => {
+  const errors = [];
+  const { time, comments } = setup({
+    pick: () => 'hola',
+    onLine: () => { throw new Error('boom'); },
+    onError: (err, phase) => errors.push(`${phase}:${err.message}`),
+  });
+  comments.start();
+  time.advance(DEFAULT_MIN_MS);
+  assert.deepEqual(errors, ['comment:boom']);
+});

@@ -20,6 +20,8 @@ function createComments({
   canSpeak = () => true,
   pick = (kind) => pickLine(kind),
   onLine = () => {},
+  onIgnored = () => {},
+  onError = () => {},
   minMs = DEFAULT_MIN_MS,
   maxMs = DEFAULT_MAX_MS,
   random = Math.random,
@@ -31,6 +33,8 @@ function createComments({
   let nextAt = 0;
   let context = null;
   let running = false;
+  let ignored = 0;
+  let waiting = false;
 
   const gap = () => {
     const lo = ms(minMs, DEFAULT_MIN_MS);
@@ -57,7 +61,7 @@ function createComments({
     if (!line) return false;
     lastAt = now();
     nextAt = lastAt + gap();
-    onLine(line, kind);
+    try { onLine(line, kind); } catch (err) { onError(err, 'comment'); }
     schedule();
     return true;
   }
@@ -107,6 +111,18 @@ function createComments({
     clear();
   }
 
+  function opened() { waiting = true; }
+  function heard() { waiting = false; ignored = 0; }
+  function missed() {
+    if (!waiting) return;
+    waiting = false;
+    ignored += 1;
+    if (ignored >= 2) {
+      ignored = 0;
+      try { onIgnored?.(pick('atencion')); } catch (err) { onError(err, 'ignored'); }
+    }
+  }
+
   return {
     start,
     stop,
@@ -114,6 +130,9 @@ function createComments({
     observe,
     active: () => running && enabled(),
     context: () => context,
+    opened,
+    heard,
+    missed,
   };
 }
 

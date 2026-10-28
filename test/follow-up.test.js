@@ -83,6 +83,13 @@ test('opens only after her voice is done, plus a short gap', () => {
   assert.deepEqual(opened, [{ s: 8, at: 5250 }]);
 });
 
+test('a spontaneous comment opens one listening window after its line', () => {
+  const s = setup();
+  assert.equal(s.fu.listenAfter('Te estoy vigilando, choom.'), true);
+  s.advance(readMs('Te estoy vigilando, choom.') + 250);
+  assert.deepEqual(s.opened, [{ s: 8, at: readMs('Te estoy vigilando, choom.') + 250 }]);
+});
+
 test('no question, no window; nor for lines you did not ask for', () => {
   const s = setup();
   s.turn('Listo.');

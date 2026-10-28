@@ -75,8 +75,14 @@ const DEFAULTS = {
   },
   comments: {
     enabled: true,           // her own lines: every so often, and when the context changes
-    minMinutes: 15,          // shortest wait between two lines
+    minMinutes: 20,          // shortest wait between two lines
     maxMinutes: 40,          // longest wait between two lines
+  },
+  behavior: {
+    greetings: true,
+    unlockGreeting: true,
+    caresses: true,
+    musicDance: true,
   },
   hearing: {
     fixes: [],               // what she hears wrong, read as what you meant: [{ heard, meant }] (see fixes.js)
@@ -147,6 +153,11 @@ function load() {
       gaming: { ...DEFAULTS.gaming, ...(saved.gaming || {}) },
       greeting: { ...DEFAULTS.greeting, ...(saved.greeting || {}) },
       comments: { ...DEFAULTS.comments, ...(saved.comments || {}) },
+      behavior: (() => {
+        const behavior = { ...DEFAULTS.behavior, ...(saved.behavior || {}) };
+        delete behavior.compact; // removed feature: ignore legacy config.json
+        return behavior;
+      })(),
       hearing: { ...DEFAULTS.hearing, ...(saved.hearing || {}) },
       music: {
         ...DEFAULTS.music,
@@ -197,6 +208,11 @@ function save(patch) {
     gaming: { ...DEFAULTS.gaming, ...(current.gaming || {}), ...(patch.gaming || {}) },
     greeting: { ...DEFAULTS.greeting, ...(current.greeting || {}), ...(patch.greeting || {}) },
     comments: { ...DEFAULTS.comments, ...(current.comments || {}), ...(patch.comments || {}) },
+    behavior: (() => {
+      const behavior = { ...DEFAULTS.behavior, ...(current.behavior || {}), ...(patch.behavior || {}) };
+      delete behavior.compact;
+      return behavior;
+    })(),
     hearing: { ...DEFAULTS.hearing, ...(current.hearing || {}), ...(patch.hearing || {}) },
     music: {
       ...DEFAULTS.music,

@@ -5,6 +5,8 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 // the renderer modules read these when they load
 globalThis.matchMedia ??= () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
@@ -412,6 +414,19 @@ test('a box perch can switch to the sitting shader pose', async () => {
   assert.equal(c.perch.pose, 'sit');
   assert.equal(c.stance, 'sit');
   assert.equal(c.pos.y, 511.6);
+});
+
+test('a fast head stroke is recognized as a caress', async () => {
+  const { caressGesture } = await import('../src/renderer/js/capri.js');
+  assert.equal(caressGesture({ x: 100, y: 100, at: 1000 }, { x: 150, y: 104, at: 1100 }), true);
+  assert.equal(caressGesture({ x: 100, y: 100, at: 1000 }, { x: 150, y: 140, at: 1100 }), false);
+  // ~30 ms poll (click-through has no mousemove)
+  assert.equal(caressGesture({ x: 100, y: 100, at: 1000 }, { x: 140, y: 102, at: 1030 }), true);
+});
+
+test('compact mode is gone from her CSS', async () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'styles', 'capri.css'), 'utf8');
+  assert.doesNotMatch(css, /\.capri\.is-compact/);
 });
 
 test('a window perch can switch between sitting and lying pose contacts', async () => {

@@ -347,6 +347,10 @@ const POOLS = {
     'Soy la mejor compañera que vas a tener en este escritorio. Nada, solo digo.',
     'Bueno, digo algo y me callo. Hola.',
   ],
+  atencion: [
+    'Ey, choom… ignorarme dos veces ya es grosero.',
+    '¿Hola? Capri pide un poquito de atención, gonk.',
+  ],
   musica: [
     '¿Otra vez esa canción? Bueno, no está mal, ¿eh?',
     'Mmm, buen gusto… para ser humano.',

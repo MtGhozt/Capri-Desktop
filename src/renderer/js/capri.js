@@ -34,6 +34,12 @@ const GREEN = [0.21, 1, 0.48];
 const INK = [0.08, 0.06, 0.11];
 const RED = [1, 0.13, 0.32];
 
+export function caressGesture(previous, current) {
+  if (!previous || !current || Math.abs(current.y - previous.y) > 16) return false;
+  const dt = current.at - previous.at;
+  return dt > 0 && dt <= 180 && Math.abs(current.x - previous.x) >= 35;
+}
+
 export class Capri {
   constructor({ root, canvas, image, fx, voice, poses = {} }) {
     this.root = root;
@@ -119,6 +125,9 @@ export class Capri {
     this.chipAt = null;   // () => the biochip's middle on screen
     this.onDoze = null;   // ('start', face) | 'waking' | 'end': down to her mask and back
     this.onHome = null;   // (fraction of the screen width): you dropped her somewhere new to rest
+    this.onCaress = null;
+    this.lastCaress = -Infinity;
+    this._caressStroke = null;
 
     this.alphaMap = this.buildAlphaMap(image);
     for (const [name, img] of Object.entries(poses)) {
@@ -1935,6 +1944,19 @@ export class Capri {
   }
 
   // ---------- pointer ----------
+
+  // Click-through drops mousemove: app.js polls screen.getCursorScreenPoint (~30 ms) and calls this.
+  noteCursor(x, y, at = performance.now()) {
+    if (this.dragging || this.busy || this.hidden) return;
+    const head = this.head();
+    const next = { x, y, at };
+    if (Math.hypot(x - head.x, y - head.y) < 70
+      && caressGesture(this._caressStroke, next) && at - this.lastCaress > 1200) {
+      this.lastCaress = at;
+      this.onCaress?.();
+    }
+    this._caressStroke = next;
+  }
 
   bindPointer() {
     let down = null;

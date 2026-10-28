@@ -20,6 +20,21 @@ test('the stream is cleaned as it arrives, even split mid-tag', () => {
   assert.match(said, /Ya lo hice\./);
 });
 
+test('streamed sentences keep the space after punctuation', () => {
+  let said = '';
+  const c = createStreamCleaner({ onText: (t) => { said += t; } });
+  for (const p of ['¿Qué pasa? ', 'No es para tanto. ', '¿Sí?']) c.push(p);
+  c.flush();
+  assert.equal(said, '¿Qué pasa? No es para tanto. ¿Sí?');
+});
+
+test('cleanText keeps spaces after ?!. inside a full answer', () => {
+  assert.equal(
+    cleanText('¿Qué pasa? No es para tanto. ¿Sí?'),
+    '¿Qué pasa? No es para tanto. ¿Sí?',
+  );
+});
+
 test('with a cloud provider the sidecar keeps no VRAM for Gemma', () => {
   assert.equal(sidecarConfig({ llm: { provider: 'openrouter' } }).localLlm, false);
   assert.equal(sidecarConfig({ llm: { provider: 'local' } }).localLlm, true);

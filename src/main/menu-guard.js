@@ -71,7 +71,11 @@ function createMenuGuard({
     if (t - lastBeat >= SILENT_MS && !silent) {
       silent = true;
       log(`[capri] overlay silent for ${Math.round((t - lastBeat) / 1000)}s: click-through on`);
+      // Lock/sleep freezes her page: close the menu in the renderer too (not only click-through),
+      // or after unlock the overlay stays interactive over Ajustes. No forcedAt — a long lock
+      // must not reload her every few seconds.
       keyboardOff();
+      sendCommand('menu-close', { force: true });
       setClickThrough(true);
       menuChanged(false);
     }

@@ -219,6 +219,17 @@ async function boot() {
     rearmedAt = now;
     host.rearm();
   }, WATCH_MS);
+
+  // Click-through: no mousemove. Poll global cursor (~30 ms) over her head for caresses.
+  setInterval(async () => {
+    if (config.behavior?.caresses === false || capri.busy || capri.hidden || capri.dragging) return;
+    const at = await host.cursor().catch(() => null);
+    if (!at?.inside) {
+      capri._caressStroke = null;
+      return;
+    }
+    capri.noteCursor(at.x, at.y);
+  }, 30);
   const menuAvoid = (x, y) => {
     if (dormant.contains(x, y)) return dormant.rect();
     if (chip.visible && chip.contains(x, y, 0)) {
@@ -266,6 +277,11 @@ async function boot() {
     } else {
       mask.hide();
     }
+  };
+  capri.onCaress = () => {
+    if (config.behavior?.caresses === false || capri.busy || capri.hidden) return;
+    capri.perform('laugh');
+    capri.voice?.play?.('land');
   };
   capri.onMode = (mode, prev) => chip.setMode(mode, prev);
   // now and then she says something about the satellite: while she looks at it, or once
@@ -757,6 +773,8 @@ async function boot() {
   applyVoiceHold(config);
 
   host.onConfig((cfg) => {
+    Object.assign(config, cfg);
+    if (cfg.behavior) config.behavior = { ...config.behavior, ...cfg.behavior };
     voice.configure(cfg);
     applyVoiceHold(cfg);
     applyPosition(cfg);
@@ -830,6 +848,16 @@ async function boot() {
           }
         }
         refreshHit();
+        break;
+      case 'music-state':
+        if (cmd.playing && config.behavior?.musicDance !== false && !capri.hidden && !capri.busy) {
+          setTimeout(() => {
+            if (cmd.playing && !capri.hidden && !capri.busy) capri.flourish();
+          }, 1200 + Math.random() * 2800);
+        }
+        break;
+      case 'do-something':
+        if (!capri.busy && !capri.hidden) capri.flourish();
         break;
       case 'chat': // Ctrl+Alt+T: wake DORMANT and open chat
         if (cmd.on) {
