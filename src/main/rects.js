@@ -22,4 +22,14 @@ function toOverlayRect(rect, bounds, toDip = (box) => box) {
   };
 }
 
-module.exports = { toOverlayRect };
+// what the overlay needs to know about the window in front, fullscreen included (game mode)
+function foreground(snap) {
+  return {
+    fg: snap?.fg,
+    fgExe: snap?.fgExe,
+    fgTitle: snap?.fgTitle,
+    fgFull: Boolean(snap?.fgFull),
+  };
+}
+
+module.exports = { toOverlayRect, foreground };

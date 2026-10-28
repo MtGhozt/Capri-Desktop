@@ -8,7 +8,7 @@ const path = require('node:path');
 const readline = require('node:readline');
 const { spawn } = require('node:child_process');
 const { screen } = require('electron');
-const { toOverlayRect } = require('./rects');
+const { toOverlayRect, foreground } = require('./rects');
 
 // in the installed app it sits next to the app archive (asarUnpack), where PowerShell can read it
 const SCRIPT = path.join(__dirname, 'windows.ps1').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
@@ -46,9 +46,7 @@ function startWindowWatch({ overlay, onUpdate }) {
       // the bar of her monitor, in her coordinates: where it is, and whether it is up
       const bar = toOverlayRect(snap.bar, bounds, dip);
       onUpdate({
-        fg: snap.fg,
-        fgExe: snap.fgExe,
-        fgTitle: snap.fgTitle,
+        ...foreground(snap),
         taskbar: Boolean(snap.taskbar),
         start: Boolean(snap.start),
         bar: bar ? { ...bar, shown: Boolean(snap.bar?.shown) } : null,

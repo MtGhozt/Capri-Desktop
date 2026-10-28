@@ -49,3 +49,14 @@ test('a missing or broken rect is nothing', () => {
   const broken = () => null;
   assert.equal(toOverlayRect({ x: 0, y: 0, w: 10, h: 10 }, bounds, broken), null);
 });
+
+test('the window watch passes fgFull on, so game mode can see a fullscreen game', () => {
+  const { foreground } = require('../src/main/rects');
+  const { gameOnScreen } = require('../src/main/game-detect');
+  const fg = foreground({ fg: 1, fgExe: 'D:\\Epic Games\\Fortnite\\Fortnite.exe', fgTitle: 'Fortnite', fgFull: true });
+  assert.equal(fg.fgFull, true);
+  assert.equal(gameOnScreen(fg), true);
+  assert.equal(foreground({ fgExe: 'x.exe' }).fgFull, false);
+  const src = require('node:fs').readFileSync(require.resolve('../src/main/windows.js'), 'utf8');
+  assert.match(src, /\.\.\.foreground\(snap\)/);
+});
