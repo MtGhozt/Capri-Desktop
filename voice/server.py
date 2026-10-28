@@ -220,6 +220,7 @@ class Engine:
             "sttIdleUnloadMin": DEFAULT_IDLE_UNLOAD_MIN,
             "sleeping": False,
             "llmBaseUrl": "http://localhost:1235/v1",
+            "localLlm": True,
             "muted": False,
             "volume": 0.7,
         }
@@ -284,6 +285,7 @@ class Engine:
 
     def apply_cfg(self, patch: dict) -> None:
         before = (self.cfg.get("enabled"), self.cfg.get("inputDevice"))
+        local_llm_before = self.cfg.get("localLlm", True)
         was_muted = bool(self.cfg.get("muted"))
         was_sleeping = bool(self.cfg.get("sleeping"))
         for key in self.cfg:
@@ -311,6 +313,10 @@ class Engine:
             # session skips start_tts(): release the engines from here too.
             self._want_tts = False
             self._drop_tts(f"replyMode={self.reply_mode()}")
+        local_llm_changed = self.cfg.get("localLlm", True) is not local_llm_before
+        if local_llm_changed and self.reply_mode() == "voice" and not self.cfg.get("sleeping"):
+            self._drop_tts("localLlm-change")
+            self.start_tts()
         self._cfg_ready = True
 
     def list_devices(self) -> list[dict]:
