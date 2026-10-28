@@ -35,6 +35,8 @@ function createMusic({ config, apps, sendKey, spawnProcess = spawn, wait = (ms) 
     if (parsed.action === 'query' && parsed.player === 'spotify' && cfg.music?.spotify?.clientId) {
       return spotify.playQuery(parsed.query);
     }
+    if (parsed.action === 'nowPlaying' && cfg.music?.spotify?.clientId) return spotify.nowPlaying();
+    if (parsed.action === 'nowPlaying') return { ok: false, fallback: true };
     if (parsed.action === 'query') {
       await key('play');
       return { ok: true, fallback: true };

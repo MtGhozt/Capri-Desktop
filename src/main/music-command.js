@@ -10,6 +10,7 @@ const EXACT = new Map([
   ['sube el volumen', 'volumeUp'], ['baja el volumen', 'volumeDown'],
   ['silencio', 'mute'], ['mutea', 'mute'],
   ['pon musica', 'start'],
+  ['que esta sonando', 'nowPlaying'],
 ]);
 
 function parseMusicCommand(text) {

@@ -495,7 +495,9 @@ async function musicReply(parsed, { chat = true } = {}) {
       showLine(result.error, { chat, badge: 'MUSIC' });
       return { ok: false };
     }
-    const line = pickLine(MUSIC_LINE[parsed.action] || 'musicaPlay');
+    const line = result?.track
+      ? `Está sonando «${result.track}» de ${result.artist}.`
+      : pickLine(MUSIC_LINE[parsed.action] || 'musicaPlay');
     sendCommand('box-log', { kind: 'musica', text: parsed.action });
     announce(line, { chat, badge: 'MUSIC' });
     return { ok: true };

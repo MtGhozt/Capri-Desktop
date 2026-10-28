@@ -11,6 +11,7 @@ test('parses media commands without matching ordinary phrases', () => {
   assert.deepEqual(parseMusicCommand('la siguiente'), { action: 'next' });
   assert.deepEqual(parseMusicCommand('baja el volumen'), { action: 'volumeDown' });
   assert.deepEqual(parseMusicCommand('silencio'), { action: 'mute' });
+  assert.deepEqual(parseMusicCommand('qué está sonando'), { action: 'nowPlaying' });
   assert.equal(parseMusicCommand('la siguiente pregunta'), null);
 });
 
