@@ -30,6 +30,8 @@ const POOLS = {
     'Mmm… ¿qué pasó? ¿Me perdí algo divertido?',
     'Aquí estoy, tontito. Siempre estuve, ¿no?',
     '¿Sí? Dime, dime, te escucho.',
+    '¿No crees que ya era momento de que regresaras, chico raro?',
+    '¿Eh? ¿Pensabas que era un producto de tu imaginación?',
   ],
   clip: [
     '¡Guardado! Eso quedó para la historia.',
@@ -110,6 +112,7 @@ const POOLS = {
     'Hecho. Ves que te entiendo mejor que nadie, ¿no?',
     'Corrección guardada. Qué haría tu dicción sin mí.',
     'Ok, «{heard}» ahora es «{meant}». No me lo agradezcas tanto.',
+    '¿Te lo explico con bolitas y palitos? «{heard}» es «{meant}». Ya lo anoté.',
   ],
   corregirOtraVez: [
     'Ah, ¿ahora «{heard}» es «{meant}»? Decidite, humanito. Cambiado.',
@@ -152,6 +155,7 @@ const POOLS = {
     'Te abro {app}. Otra vez yo salvándote.',
     'Hecho: {app}. Pídeme algo difícil algún día.',
     '{app}, ya. Ni tuviste que buscarla.',
+    'Te dije que puedo hacer mucho más que eso. Abriendo {app}.',
   ],
   appAbrirVarias: [
     'Abriendo {apps}. Todo a la vez, qué exigente.',
@@ -182,6 +186,7 @@ const POOLS = {
     'Ni idea de dónde vive {app}. Dímelo en APPS.',
     '{app}… no me suena. Revisa mi lista de APPS.',
     'Eso de {app} no lo tengo. Qué vergüenza… tuya, claro.',
+    '¿Cuántas veces debo decirte? {app} no está en mi lista, chico raro.',
   ],
   appQuisiste: [
     '¿Quisiste decir {apps}?',
