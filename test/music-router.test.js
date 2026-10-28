@@ -35,11 +35,15 @@ test('real Whisper transcripts reach the media keys', async () => {
     ['Sigue.', 'play', ['play']],
     ['Reanuda la música', 'play', ['play']],
     ['Siguiente canción', 'next', ['next']],
+    ['Siguiente cancion', 'next', ['next']],
+    ['Anterior canción', 'previous', ['previous', 'previous']],
     ['Pasa a la siguiente', 'next', ['next']],
     ['Capri, siguiente.', 'next', ['next']],
-    ['La anterior', 'previous', ['previous']],
+    ['La anterior', 'previous', ['previous', 'previous']],
     ['Pausa la música', 'pause', ['pause']],
     ['Pausa.', 'pause', ['pause']],
+    ['Silencia la música', 'mute', ['mute']],
+    ['sube la música, sube el volumen', 'volumeUp', ['volumeUp', 'volumeUp', 'volumeUp', 'volumeUp', 'volumeUp']],
   ];
   for (const [said, action, keys] of cases) {
     const r = await route(said);
@@ -56,8 +60,9 @@ test('ordinary phrases stay with the model', async () => {
 });
 
 test('a song search she cannot do is reported, not faked', async () => {
-  const r = await route('Pon my alcoholic friends');
+  const r = await route('Pon en love with myself');
   assert.equal(r.parsed.action, 'query');
+  assert.equal(r.parsed.query, 'love with myself');
   assert.equal(r.result.ok, false);
   assert.match(r.result.error, /Todavía no sé buscar/);
   assert.deepEqual(r.keys, []);

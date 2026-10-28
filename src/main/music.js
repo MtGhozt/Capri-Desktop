@@ -31,8 +31,14 @@ function createMusic({
   async function command(parsed) {
     const cfg = config.load();
     if (ACTIONS.has(parsed.action)) {
-      const presses = parsed.action === 'volumeUp' || parsed.action === 'volumeDown' ? 5 : 1;
-      for (let i = 0; i < presses; i += 1) await key(parsed.action);
+      if (parsed.action === 'previous') {
+        await key(parsed.action);
+        await wait(150);
+        await key(parsed.action);
+      } else {
+        const presses = parsed.action === 'volumeUp' || parsed.action === 'volumeDown' ? 5 : 1;
+        for (let i = 0; i < presses; i += 1) await key(parsed.action);
+      }
       return { ok: true, action: parsed.action };
     }
     if (parsed.action === 'start') {
