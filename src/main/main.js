@@ -58,6 +58,7 @@ const {
 } = require('./apps-config');
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
+const { createSettingsWindow } = require('./settings-window');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DEV = process.argv.includes('--dev');
@@ -72,6 +73,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let overlay = null;
+let settingsWindow = null;
 let tray = null;
 let trayMenu = null; // also what she opens when you right-click her
 let demoTimer = null;
@@ -987,10 +989,15 @@ async function gameEnter(windows) {
   voice?.stop(); // the sidecar holds OmniVoice: stopping it hands the VRAM back
   await lms?.unloadAll?.();
   gameLog(`game on after unload ${vramText()}`);
+  if (config.load().gaming?.drone !== false) {
+    sendCommand('game-drone', { on: true });
+    gameLog(`drone visible ${vramText()}`);
+  }
 }
 
 async function gameLeave() {
   gameLog(`game off ${vramText()}`);
+  sendCommand('game-drone', { on: false });
   if (!gameWasFolded) sendCommand('wake');
   if (gameHadVoice) voice?.start({ force: true });
   if (gameHadLlm) await lms?.reload?.();
@@ -1113,6 +1120,7 @@ function applyMenuAction(id, value) {
     case 'mic-device': updateConfig({ voice: { inputDevice: value } }); break;
     case 'forget': goForgetReply({ chat: false }); break;
     case 'gaming-mode': updateConfig({ gaming: { mode: value === 'off' ? 'off' : 'auto' } }); break;
+    case 'drone-mode': updateConfig({ gaming: { drone: Boolean(value) } }); break;
     case 'comments': updateConfig({ comments: { enabled: Boolean(value) } }); break;
     case 'app-fx': updateConfig({ fx: { apps: Boolean(value) } }); break;
     case 'scanlines': updateConfig({ fx: { scanlines: Boolean(value) } }); break;
@@ -1539,6 +1547,25 @@ function registerIpc() {
   ipcMain.handle('menu:action', (_e, payload = {}) => {
     const result = applyMenuAction(payload.id, payload.value);
     return result && typeof result === 'object' ? result : { ok: true };
+  });
+  ipcMain.handle('settings:open', (_e, tab = null) => {
+    settingsWindow = createSettingsWindow({
+      BrowserWindow,
+      existing: settingsWindow,
+      url: 'capri://app/src/renderer/settings.html',
+      options: {
+        webPreferences: {
+          preload: path.join(__dirname, '..', 'preload.js'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+        },
+      },
+    });
+    ipcMain.on('settings:close', () => settingsWindow?.close());
+    settingsWindow.once?.('closed', () => { settingsWindow = null; });
+    if (tab) settingsWindow.webContents.once('did-finish-load', () => settingsWindow.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent('capri-settings-tab',{detail:${JSON.stringify(tab)}}))`));
+    return { ok: true };
   });
   // her hello at boot: the overlay shows it, and it plays from the cached wav if there is one
   ipcMain.handle('greet', () => {

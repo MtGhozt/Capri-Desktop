@@ -385,14 +385,14 @@ export class Capri {
     this.bar = data?.bar || null;
     this.followBox();
     this.followLedge(); // the taskbar slid up or down under her feet
-    if (this.stance !== 'sit' || this.busy || this.dragging) return;
+    if (!this.perch?.id || !['sit', 'lie'].includes(this.stance) || this.busy || this.dragging) return;
     const win = this.perchWin(this.perch.id);
     const dx = win ? clamp(this.perch.dx, 50, win.w - 60) : 0;
     if (!win || !this.canSit(win) || this.covered(win, win.x + dx)) {
       this.fall(); // the ledge is gone (closed, minimized, maximized or covered)
       return;
     }
-    const to = this.seat(win, dx);
+    const to = this.windowSeat(win, dx, this.perch.pose);
     if (to.x !== this.pos.x || to.y !== this.pos.y) {
       this.pos = to; // ride along with the window
       this.place();
@@ -461,6 +461,11 @@ export class Capri {
   // Where her feet go so that her hips rest on the window's top edge.
   seat(win, dx) {
     return { x: win.x + dx, y: win.y + 3 + (SPRITE.feet.y - SPRITE.hip) * this.scale };
+  }
+
+  windowSeat(win, dx, pose = 'stand') {
+    if (pose === 'lieA' || pose === 'lieB') return { x: win.x + dx, y: win.y + 1 };
+    return this.seat(win, dx);
   }
 
   canSit(win) {
@@ -703,8 +708,15 @@ export class Capri {
 
   // What she does with herself when nobody needs her.
   wanderStep() {
+    const switchBoxPose = () => {
+      const previous = this.perch?.pose;
+      const result = this.switchBoxPose();
+      const next = this.perch?.pose;
+      if (previous !== next) console.log(`[capri] pose box ${previous} -> ${next}`);
+      return result;
+    };
     if (this.locked) { // FIJO: she stays where you put her
-      if (this.onBox()) this.switchBoxPose();
+      if (this.onBox()) switchBoxPose();
       else this.flourish();
       return;
     }
@@ -714,14 +726,25 @@ export class Capri {
     }
     if (this.onBox()) {
       const r = Math.random();
-      if (r < 0.4) this.switchBoxPose();
-      else if (r < 0.65) this.flourish();
+      if (this.lying) {
+        if (r < 0.6) switchBoxPose();
+        else this.teleport(this.spot('random'));
+      } else if (r < 0.45) switchBoxPose();
+      else if (r < 0.7) this.flourish();
       else this.teleport(this.spot('random'));
+      return;
+    }
+    if (this.perch?.id && ['sit', 'lie'].includes(this.stance)) {
+      const r = Math.random();
+      if (r < 0.35) this.switchWindowPose();
+      else if (r < 0.6) this.fall();
+      else if (r < 0.8) this.teleport(this.spot('random'));
+      else this.flourish();
       return;
     }
     const box = typeof this.messageBox === 'function' ? this.messageBox() : null;
     if (box && Math.random() < 0.45) {
-      this.perchOnBox(pick(['lieA', 'lieB', 'stand']));
+      this.perchOnBox(pick(['lieA', 'lieB', 'stand', 'sit']));
       return;
     }
     if (this.stance === 'sit') {
@@ -1488,7 +1511,25 @@ export class Capri {
   }
 
   sitOn({ win, dx }) {
-    return this.teleport(this.seat(win, dx), { stance: 'sit', perch: { id: win.id, dx }, face: this.facing });
+    const pose = pick(['sit', 'sit', 'lieA', 'lieB']);
+    const stance = pose === 'sit' ? 'sit' : 'lie';
+    return this.teleport(this.windowSeat(win, dx, pose), {
+      stance, perch: { id: win.id, dx, pose }, face: this.facing,
+    });
+  }
+
+  switchWindowPose() {
+    if (!this.perch?.id) return Promise.resolve();
+    const win = this.perchWin(this.perch.id);
+    if (!win || !this.canSit(win)) return Promise.resolve();
+    const previous = this.perch.pose || 'sit';
+    const pose = pick(['sit', 'lieA', 'lieB'].filter((item) => item !== previous));
+    const dx = clamp(this.perch.dx, 50, win.w - 60);
+    this.pos = this.windowSeat(win, dx, pose);
+    this.setStance(pose === 'sit' ? 'sit' : 'lie', { perch: { id: win.id, dx, pose } });
+    this.drawFrame();
+    console.log(`[capri] pose window ${previous} -> ${pose}`);
+    return Promise.resolve();
   }
 
   followBox() {
@@ -1513,18 +1554,20 @@ export class Capri {
     const ledge = typeof this.messageBox === 'function' ? this.messageBox() : null;
     if (!ledge) return Promise.resolve();
     const to = boxSeat(ledge, pose, { scale: this.scale });
-    const stance = pose === 'stand' ? 'stand' : 'lie';
+    const stance = pose === 'sit' ? 'sit' : pose === 'stand' ? 'stand' : 'lie';
     return this.teleport({ x: to.x, y: to.y }, { stance, perch: { kind: 'box', pose, dx: to.dx }, face: 1 });
   }
 
   switchBoxPose() {
     if (!this.onBox()) return Promise.resolve();
-    const next = pick(['lieA', 'lieB', 'stand'].filter((p) => p !== this.perch.pose));
+    const next = pick(['lieA', 'lieB', 'stand', 'sit'].filter((p) => p !== this.perch.pose));
     const ledge = typeof this.messageBox === 'function' ? this.messageBox() : null;
     if (!ledge) return Promise.resolve();
     const to = boxSeat(ledge, next, { scale: this.scale });
     this.pos = { x: to.x, y: to.y };
-    this.setStance(next === 'stand' ? 'stand' : 'lie', { perch: { kind: 'box', pose: next, dx: to.dx } });
+    this.setStance(next === 'sit' ? 'sit' : next === 'stand' ? 'stand' : 'lie', {
+      perch: { kind: 'box', pose: next, dx: to.dx },
+    });
     this.drawFrame();
     return Promise.resolve();
   }
@@ -1959,10 +2002,12 @@ export class Capri {
   drop() {
     const box = typeof this.messageBox === 'function' ? this.messageBox() : null;
     if (box && Math.abs(this.pos.y - box.top) < 36 && this.pos.x > box.x + 24 && this.pos.x < box.x + box.w - 24) {
-      const pose = pick(['lieA', 'lieB', 'stand']);
+      const pose = pick(['lieA', 'lieB', 'stand', 'sit']);
       const to = boxSeat(box, pose, { scale: this.scale, dx: this.pos.x - box.x });
       this.pos = { x: to.x, y: to.y };
-      this.setStance(pose === 'stand' ? 'stand' : 'lie', { perch: { kind: 'box', pose, dx: to.dx } });
+      this.setStance(pose === 'stand' ? 'stand' : pose === 'sit' ? 'sit' : 'lie', {
+        perch: { kind: 'box', pose, dx: to.dx },
+      });
       this.voice.play('land');
       return;
     }

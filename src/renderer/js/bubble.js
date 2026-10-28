@@ -329,7 +329,10 @@ export class Bubble {
   }
 
   setLine(text) {
-    if (this.lineEl) this.lineEl.textContent = text;
+    if (this.lineEl) {
+      this.lineEl.textContent = text;
+      this.lineEl.classList.toggle('is-emphasis', this.fx && /[!?]$|[A-ZÁÉÍÓÚÑ]{3,}/.test(text));
+    }
   }
 
   onToken(piece) {

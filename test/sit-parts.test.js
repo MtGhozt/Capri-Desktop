@@ -21,4 +21,5 @@ test('the shader gates the face replacement to the sitting uniform', () => {
   const source = fs.readFileSync(path.join(root, 'src', 'renderer', 'js', 'sprite.js'), 'utf8');
   assert.match(source, /uSit\s*>\s*0\.0/);
   assert.match(source, /SitPartsLayer/);
+  assert.match(fs.readFileSync(path.join(root, 'src', 'renderer', 'js', 'sit-parts.js'), 'utf8'), /SIT_FACE_ENABLED\s*=\s*false/);
 });

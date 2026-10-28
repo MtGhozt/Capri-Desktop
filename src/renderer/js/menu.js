@@ -9,6 +9,16 @@ const REPLY_OPTIONS = [
   { id: 'silent', label: 'SILENCIO' },
 ];
 
+export function unionRects(a, b) {
+  if (!b) return a;
+  return {
+    left: Math.min(a.left, b.left),
+    top: Math.min(a.top, b.top),
+    right: Math.max(a.right, b.right),
+    bottom: Math.max(a.bottom, b.bottom),
+  };
+}
+
 const CLOSE_OPTIONS = [
   { id: 'graceful', label: 'CON CUIDADO' },
   { id: 'ask', label: 'PREGUNTAR' },
@@ -18,6 +28,18 @@ const CLOSE_OPTIONS = [
 const THEME_OPTIONS = [
   { id: 'cyberpunk', label: 'CYBERPUNK' },
   { id: 'capri', label: 'CAPRI' },
+];
+
+export const QUICK_MENU_ITEMS = [
+  { id: 'mic' }, { id: 'mic-device' }, { id: 'reply-mode' }, { id: 'model-provider' },
+  { id: 'fixes' }, { id: 'clip-save' }, { id: 'behavior' }, { id: 'drone-mode' }, { id: 'theme' }, { id: 'settings' }, { id: 'quit' },
+];
+
+export const SETTINGS_TABS = [
+  { id: 'model', label: 'Modelo y clave' }, { id: 'memory', label: 'Memoria' },
+  { id: 'hearing', label: 'Oído' }, { id: 'apps', label: 'Mis apps' },
+  { id: 'bubble', label: 'Caja de mensajes' }, { id: 'music', label: 'Música / Reproductor' },
+  { id: 'shortcuts', label: 'Atajos' }, { id: 'behavior', label: 'Comportamiento' },
 ];
 
 export class AppMenu {
@@ -48,6 +70,10 @@ export class AppMenu {
     this.foundNote = '';
     this.scanning = false;
     this.modelNote = '';   // what came of the last model / key save (Paso 4K)
+    this.settingsMode = false;
+    this.settingsSection = 'model';
+    this.quickOpen = null;
+    this.quickAnchor = null;
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -80,10 +106,11 @@ export class AppMenu {
     // Seen first (capture), so nothing under the pointer can keep it from her: while the menu is
     // up she takes the whole screen, and a click that doesn't close it would be a click lost.
     window.addEventListener('mousedown', (e) => {
+      if (this.settingsMode) return;
       if (!this.visible || e.button !== 0) return;
       if (performance.now() - this.openedAt < 400) return;
       if (!this.open) return this.hide(); // still opening (or stuck at it): the click wins
-      const r = this.el.getBoundingClientRect();
+      const r = this.rect();
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
         this.hide();
       }
@@ -131,6 +158,7 @@ export class AppMenu {
     this.open = false;
     this.opening = false;
     this.expanded = null;
+    this.quickOpen = null;
     this.confirmForget = false;
     this.el.hidden = true;
     this.capturing = false;
@@ -162,7 +190,7 @@ export class AppMenu {
 
   rect() {
     if (!this.open || this.el.hidden) return null;
-    return this.el.getBoundingClientRect();
+    return unionRects(this.el.getBoundingClientRect(), this.el.querySelector('.appmenu__submenu')?.getBoundingClientRect());
   }
 
   setTheme(theme) {
@@ -210,6 +238,100 @@ export class AppMenu {
   }
 
   render(state) {
+    if (!this.settingsMode) return this.renderQuick(state);
+    this.renderFull(state);
+  }
+
+  renderQuick(state) {
+    this.lastState = state;
+    const { cfg, model = {}, hearing = {} } = state;
+    this.setTheme(cfg.theme);
+    const build = (tag, className, text) => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    };
+    const plate = build('div', 'appmenu__plate appmenu__quick-plate');
+    const rail = build('div', 'appmenu__rail');
+    rail.append(build('span', 'appmenu__rail-text', 'CAPRI.SYS // OVERLAY'), build('span', 'appmenu__rail-text', 'LOCAL LINK'));
+    const body = build('div', 'appmenu__body appmenu__quick-body');
+    const row = (label, value, id, onClick, danger = false) => {
+      const item = build('button', 'appmenu__row appmenu__row--action appmenu__quick-row', label);
+      item.type = 'button';
+      if (danger) item.classList.add('is-danger');
+      item.append(build('span', 'appmenu__meta', value || ''), build('span', 'appmenu__chevron', id === 'clip-save' ? '' : '›'));
+      item.addEventListener('click', (e) => { e.stopPropagation(); onClick(item.getBoundingClientRect()); });
+      body.append(item);
+    };
+    const openSubmenu = (id, options, current, action, anchor) => {
+      this.quickOpen = this.quickOpen === id ? null : id;
+      this.quickOptions = { id, options, current, action };
+      this.quickAnchor = anchor;
+      this.renderQuick(this.lastState);
+      requestAnimationFrame(() => this.placeSubmenu());
+    };
+    row('Micrófono', cfg.mic ? 'ACTIVO' : 'MUTEADO', 'mic', () => this.act('mic', !cfg.mic));
+    row('Dispositivo de audio', state.micDevices?.find((d) => String(d.id) === String(cfg.micDevice))?.name || 'PREDETERMINADO', 'mic-device',
+      (anchor) => openSubmenu('mic-device', [{ id: null, label: 'PREDETERMINADO' }, ...(state.micDevices || []).map((d) => ({ id: d.id, label: d.name }))], cfg.micDevice, 'mic-device', anchor));
+    row('Modo de respuesta', REPLY_OPTIONS.find((o) => o.id === cfg.replyMode)?.label || 'VOZ', 'reply-mode',
+      (anchor) => openSubmenu('reply-mode', REPLY_OPTIONS, cfg.replyMode, 'reply-mode', anchor));
+    row('Proveedor', model.providers?.find((o) => o.id === model.provider)?.label || model.provider, 'model-provider',
+      (anchor) => openSubmenu('model-provider', model.providers || [], model.provider, 'model-provider', anchor));
+    row('Corregir lo último', hearing.fixes?.length ? `${hearing.fixes.length} CORRECCIONES` : 'OÍDO', 'fixes',
+      () => { this.hide(); this.host.openSettings('hearing'); });
+    row('Guardar clip', 'ALT+F10', 'clip-save', () => this.act('clip-save'));
+    row('Comportamiento', cfg.locked ? 'FIJO' : 'NORMAL', 'behavior',
+      (anchor) => openSubmenu('behavior', [{ id: 'normal', label: 'NORMAL' }, { id: 'locked', label: 'FIJO' }], cfg.locked ? 'locked' : 'normal', 'drag-lock', anchor));
+    row('Dron en modo juego', cfg.gaming?.drone === false ? 'NO' : 'SÍ', 'drone-mode',
+      (anchor) => openSubmenu('drone-mode', [{ id: false, label: 'NO' }, { id: true, label: 'SÍ' }],
+        cfg.gaming?.drone !== false, 'drone-mode', anchor));
+    row('Tema', cfg.theme === 'capri' ? 'CAPRI' : 'CYBERPUNK', 'theme',
+      (anchor) => openSubmenu('theme', THEME_OPTIONS, cfg.theme, 'theme', anchor));
+    const rule = build('div', 'appmenu__quick-rule');
+    body.append(rule);
+    row('Ajustes…', '', 'settings', () => { this.hide(); this.host.openSettings(); });
+    row('Salir', '', 'quit', () => this.act('quit'));
+    const foot = build('div', 'appmenu__rail appmenu__quick-foot');
+    foot.append(build('span', 'appmenu__kbd', 'ESC'), build('span', 'appmenu__rail-text', 'CERRAR'), build('span', 'appmenu__rail-text', 'CAPRICORN'));
+    plate.append(rail, body, foot);
+    this.el.replaceChildren(plate);
+    if (this.quickOpen) {
+      const menu = build('div', 'appmenu__submenu');
+      menu.append(build('div', 'appmenu__submenu-title', this.quickOptions.id.toUpperCase()));
+      for (const option of this.quickOptions.options) {
+        const button = build('button', 'appmenu__submenu-row', option.label);
+        button.type = 'button';
+        button.classList.toggle('is-selected', String(option.id) === String(this.quickOptions.current));
+        button.addEventListener('click', () => {
+          const value = this.quickOptions.action === 'drag-lock' ? option.id === 'locked' : option.id;
+          this.quickOpen = null;
+          this.act(this.quickOptions.action, value);
+        });
+        menu.append(button);
+      }
+      this.el.append(menu);
+    }
+    if (this.open && this.at && !this.settingsMode) this.place();
+  }
+
+  placeSubmenu() {
+    const menu = this.el.querySelector('.appmenu__submenu');
+    if (!menu) return;
+    const main = this.el.querySelector('.appmenu__quick-plate').getBoundingClientRect();
+    const w = menu.offsetWidth;
+    const h = menu.offsetHeight;
+    const right = main.right + 8;
+    const left = main.left - w - 8;
+    const x = right + w <= innerWidth - 8 ? right : Math.max(8, left);
+    const anchorTop = this.quickAnchor?.top ?? main.top;
+    const anchorBottom = this.quickAnchor?.bottom ?? main.bottom;
+    const y = Math.min(Math.max(8, anchorTop), innerHeight - h - 8);
+    menu.style.left = `${Math.round(x - main.left)}px`;
+    menu.style.top = `${Math.round(y - main.top)}px`;
+  }
+
+  renderFull(state) {
     this.lastState = state;
     const { cfg } = state;
     this.setTheme(cfg.theme);
@@ -235,13 +357,18 @@ export class AppMenu {
     escape.append(kbd('ESC'), build('span', 'appmenu__key-label', 'Cerrar'));
     keys.append(escape, build('span', 'appmenu__keys-meta', 'CAPRICORN'));
 
-    const section = (title) => body.append(build('div', 'appmenu__section', title));
+    const section = (title, id = title) => {
+      const heading = build('div', 'appmenu__section', title);
+      heading.dataset.section = id;
+      body.append(heading);
+    };
 
-    const action = (label, { value = '', hotkey = '', danger = false, sub = false, chevron = '', onClick } = {}) => {
+    const action = (label, { value = '', hotkey = '', danger = false, sub = false, chevron = '', setting = '', onClick } = {}) => {
       const row = build(onClick ? 'button' : 'div', 'appmenu__row appmenu__row--action');
       if (onClick) row.type = 'button';
       if (danger) row.classList.add('is-danger');
       if (sub) row.classList.add('appmenu__row--sub');
+      if (setting) row.dataset.setting = setting;
       row.append(build('span', 'appmenu__label', label));
       if (hotkey) row.append(kbd(hotkey));
       else if (value) row.append(build('span', 'appmenu__meta', value));
@@ -260,8 +387,9 @@ export class AppMenu {
     };
 
     // labels: [estado apagado, estado encendido]; por defecto OFF|ON.
-    const toggle = (label, { on, onChange, labels = ['OFF', 'ON'] }) => {
+    const toggle = (label, { on, onChange, labels = ['OFF', 'ON'], setting = '' }) => {
       const row = build('div', 'appmenu__row');
+      if (setting) row.dataset.setting = setting;
       row.append(build('span', 'appmenu__label', label));
       const group = build('div', 'appmenu__toggle');
       for (const [id, text] of [['off', labels[0]], ['on', labels[1]]]) {
@@ -281,9 +409,10 @@ export class AppMenu {
       body.append(row);
     };
 
-    const selector = (label, { options, current, onChange }, into = body) => {
+    const selector = (label, { options, current, onChange, setting = '' }, into = body) => {
       const index = Math.max(0, options.findIndex((o) => String(o.id) === String(current)));
       const row = build('div', 'appmenu__row');
+      if (setting) row.dataset.setting = setting;
       row.append(build('span', 'appmenu__label', label));
       const box = build('div', 'appmenu__select');
       const step = (delta) => onChange(options[(index + delta + options.length) % options.length].id);
@@ -312,14 +441,15 @@ export class AppMenu {
     if (this.view === 'apps') {
       this.appsView(state, { body, build, kbd, section, action, selector });
       plate.append(rail, body, keys);
+      this.filterSettingsBody(body);
       this.el.replaceChildren(plate);
-      if (this.open && this.at) this.place();
+      if (this.open && this.at && !this.settingsMode) this.place();
       this.useKeyboard(true); // its text fields
       return;
     }
 
     // AUDIO
-    section('AUDIO');
+    section('AUDIO', 'audio');
     toggle('Micrófono', { on: cfg.mic, labels: ['MUTEADO', 'ACTIVO'], onChange: (on) => this.act('mic', on) });
     const devices = [
       { id: null, label: 'Predeterminado' },
@@ -336,7 +466,7 @@ export class AppMenu {
       onChange: (id) => this.act('reply-mode', id),
     });
 
-    section('MÚSICA');
+    section('MÚSICA', 'music');
     selector('Reproductor', {
       options: [
         { id: 'namida', label: 'NAMIDA' },
@@ -367,7 +497,7 @@ export class AppMenu {
     body.append(spotify);
 
     // MODELO: who answers her, where the key lives, and what may leave the PC (Paso 4K)
-    section('MODELO');
+    section('MODELO', 'model');
     const model = state.model || { providers: [{ id: 'local', label: 'LM Studio' }], provider: 'local', model: '', local: true };
     selector('Proveedor', {
       options: model.providers,
@@ -395,7 +525,7 @@ export class AppMenu {
     }
 
     // MEMORIA
-    section('MEMORIA');
+    section('MEMORIA', 'memory');
     action('Olvidar conversación', {
       value: this.confirmForget ? 'CONFIRMAR' : '',
       danger: this.confirmForget,
@@ -404,7 +534,7 @@ export class AppMenu {
     action('Recargar personalidad', { value: 'PERSONA.MD', onClick: () => this.act('persona-reload') });
 
     // OÍDO: what she hears wrong (Paso 4A)
-    section('OÍDO');
+    section('OÍDO', 'hearing');
     const hearing = state.hearing || { fixes: [], lastHeard: '' };
     action('Corregir lo último', {
       value: hearing.fixes.length ? `${hearing.fixes.length} CORRECCIONES` : '',
@@ -416,7 +546,7 @@ export class AppMenu {
     body.append(this.talkKeyRow(hearing, build, kbd));
 
     // APPS: what "abre X" / "cierra X" reach, in a panel of its own
-    section('APPS');
+    section('APPS', 'apps');
     action('Mis apps', {
       value: `${(state.apps || []).length} APPS`,
       chevron: 'apps',
@@ -428,18 +558,24 @@ export class AppMenu {
     });
 
     // CLIPS
-    section('CLIPS');
+    section('CLIPS', 'clips');
     action('Guardar clip', { hotkey: state.clips.hotkey, onClick: () => this.act('clip-save') });
     action('Abrir carpeta de clips', { value: state.clips.folder, onClick: () => this.act('clips-dir') });
 
     // COMPORTAMIENTO
-    section('COMPORTAMIENTO');
+    section('COMPORTAMIENTO', 'behavior');
     toggle('Arrastrar', { on: cfg.locked, labels: ['NORMAL', 'FIJO'], onChange: (on) => this.act('drag-lock', on) });
     toggle('Iniciar con Windows', { on: state.login, labels: ['INACTIVO', 'ACTIVO'], onChange: (on) => this.act('startup', on) });
     toggle('Modo juego', {
       on: cfg.gaming !== 'off',
       labels: ['OFF', 'AUTO'],
       onChange: (on) => this.act('gaming-mode', on ? 'auto' : 'off'),
+    });
+    toggle('Dron en modo juego', {
+      setting: 'drone',
+      on: cfg.gaming?.drone !== false,
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.act('drone-mode', on),
     });
     toggle('Comentarios', {
       on: cfg.comments !== false,
@@ -452,6 +588,7 @@ export class AppMenu {
       onChange: (on) => this.act('app-fx', on),
     });
     toggle('Caja de mensaje', {
+      setting: 'bubble',
       on: cfg.scanlines !== false,
       labels: ['PLANA', 'FX'],
       onChange: (on) => this.act('scanlines', on),
@@ -473,12 +610,13 @@ export class AppMenu {
     if ((cfg.render || 'auto') !== 'auto') {
       body.append(build('div', 'appmenu__hint', 'Se reinicia para aplicarlo. Si su fondo sale negro y esto no lo arregla, vuelve a AUTOMÁTICO.'));
     }
-    action('Atajos', { chevron: 'shortcuts', onClick: () => this.toggle('shortcuts', state) });
+    action('Atajos', { setting: 'shortcuts', chevron: 'shortcuts', onClick: () => this.toggle('shortcuts', state) });
     if (this.expanded === 'shortcuts') {
       for (const s of state.shortcuts || []) {
-        action(s.label, s.accel ? { hotkey: s.accel, sub: true } : { value: '—', sub: true });
+        action(s.label, s.accel ? { hotkey: s.accel, sub: true, setting: 'shortcuts' } : { value: '—', sub: true, setting: 'shortcuts' });
       }
       action('Abrir config.json', {
+        setting: 'shortcuts',
         value: 'EDITAR',
         sub: true,
         onClick: () => this.act('shortcuts-file'),
@@ -486,13 +624,36 @@ export class AppMenu {
     }
 
     // SALIR
-    section('SALIR');
+    section('SALIR', 'exit');
     action('Salir', { onClick: () => this.act('quit') });
 
     plate.append(rail, body, keys);
+    this.filterSettingsBody(body);
     this.el.replaceChildren(plate);
-    if (this.open && this.at) this.place();
+    if (this.open && this.at && !this.settingsMode) this.place();
     this.useKeyboard(this.expanded === 'fixes' || this.expanded === 'model' || this.capturing);
+  }
+
+  filterSettingsBody(body) {
+    if (!this.settingsMode) return;
+    const groups = {
+      model: ['model'], memory: ['memory'], hearing: ['hearing'], apps: ['apps', 'apps-add', 'apps-found', 'apps-test'],
+      bubble: ['behavior'], music: ['music'], shortcuts: ['behavior'], behavior: ['behavior'],
+    };
+    const allowed = new Set(groups[this.settingsSection] || []);
+    let sectionId = '';
+    for (const child of body.children) {
+      if (child.classList.contains('appmenu__section')) {
+        sectionId = child.dataset.section;
+        child.hidden = !allowed.has(sectionId);
+      } else {
+        const setting = child.dataset.setting;
+        child.hidden = !allowed.has(sectionId) || (
+          (this.settingsSection === 'bubble' || this.settingsSection === 'shortcuts') &&
+          setting !== this.settingsSection
+        );
+      }
+    }
   }
 
   // Her app table: the list (each one editable: aliases, how to close it, delete), adding a
@@ -507,7 +668,7 @@ export class AppMenu {
       },
     });
 
-    section('APPS');
+    section('APPS', 'apps');
     const items = build('div', 'appmenu__apps-list');
     if (!list.length) items.append(build('span', 'appmenu__meta', 'SIN APPS TODAVÍA'));
     for (const app of list) {
@@ -531,7 +692,7 @@ export class AppMenu {
     }
     body.append(items);
 
-    section('AÑADIR');
+    section('AÑADIR', 'apps-add');
     action('Buscar programa…', {
       value: 'EXE / LNK',
       onClick: async () => {
@@ -553,7 +714,7 @@ export class AppMenu {
 
     this.foundView(state, { body, build, section, action });
 
-    section('PROBAR COMANDO');
+    section('PROBAR COMANDO', 'apps-test');
     const test = build('div', 'appmenu__fix appmenu__apps-test');
     const input = this.textInput(build, this.testText, 'abre Discord y YouTube', 80);
     const result = build('div', 'appmenu__hint', this.testResult || 'Escribe una orden: te digo qué haría, sin hacerlo.');
@@ -582,7 +743,7 @@ export class AppMenu {
   foundView(state, { body, build, section, action }) {
     const found = state.found || { items: [] };
     const items = found.items || [];
-    section('ENCONTRADO EN ESTA PC');
+    section('ENCONTRADO EN ESTA PC', 'apps-found');
     const busy = this.scanning || found.scanning;
     action('Volver a escanear', {
       value: busy ? 'ESCANEANDO…' : found.at ? `HACE ${this.since(found.at)}` : 'NUNCA',

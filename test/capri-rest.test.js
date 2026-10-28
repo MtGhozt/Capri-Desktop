@@ -11,6 +11,7 @@ globalThis.matchMedia ??= () => ({ matches: true, addEventListener() {}, removeE
 globalThis.requestAnimationFrame ??= (fn) => setTimeout(() => fn(performance.now()), 0);
 
 const load = () => import('../src/renderer/js/capri.js');
+const loadPoses = () => import('../src/renderer/js/poses.js');
 
 // A Capri with no canvas behind her, standing at the bottom of a 1920x1079 window. Moves are
 // recorded instead of played: `teleports` lists where she was sent.
@@ -77,6 +78,14 @@ test('dropped at the bottom of the screen, she stays right there and it becomes 
   assert.equal(c.pos.y, c.floor);
   assert.ok(Math.abs(c.homeX - 700 / 1920) < 1e-9);
   assert.deepEqual(c.homes, [c.homeX]); // saved (app.js puts it in config.position.homeX)
+});
+
+test('the message box can seat her with the sitting shader pose', async () => {
+  const { boxSeat } = await loadPoses();
+  const seat = boxSeat({ x: 100, top: 400, w: 600 }, 'sit', { scale: 0.6 });
+  assert.equal(seat.pose, 'sit');
+  assert.equal(seat.y, 511.6);
+  assert.equal(seat.dx, 432);
 });
 
 test('going home goes to her own spot when she has one', async () => {
@@ -352,6 +361,83 @@ test('FIJO: she stays on the box instead of wandering off it', async () => {
   c.wanderStep();
   assert.equal(c.teleports.length, 0);
   assert.equal(c.switched, true);
+});
+
+test('a lying box pose spends 60 percent switching and 40 percent teleporting', async () => {
+  const c = await make();
+  c.perch = { kind: 'box', pose: 'lieB', dx: 100 };
+  c.stance = 'lie';
+  let switched = 0;
+  c.switchBoxPose = () => { switched++; };
+  const teleports = [];
+  c.teleport = (to) => { teleports.push(to); };
+  const random = Math.random;
+  Math.random = () => 0.59;
+  try { for (let i = 0; i < 10; i++) c.wanderStep(); }
+  finally { Math.random = random; }
+  assert.equal(switched, 10);
+  assert.equal(teleports.length, 0);
+});
+
+test('a standing box pose keeps flourish between switching and teleporting', async () => {
+  const c = await make();
+  c.perch = { kind: 'box', pose: 'stand', dx: 100 };
+  c.stance = 'stand';
+  let switched = 0;
+  let flourished = 0;
+  c.switchBoxPose = () => { switched++; };
+  c.flourish = () => { flourished++; };
+  c.teleport = () => {};
+  const random = Math.random;
+  try {
+    for (const value of [0.44, 0.69, 0.7]) {
+      Math.random = () => value;
+      c.wanderStep();
+    }
+  } finally { Math.random = random; }
+  assert.equal(switched, 1);
+  assert.equal(flourished, 1);
+});
+
+test('a box perch can switch to the sitting shader pose', async () => {
+  const c = await make();
+  c.perch = { kind: 'box', pose: 'lieB', dx: 100 };
+  c.stance = 'lie';
+  c.messageBox = () => ({ x: 100, top: 400, w: 600, h: 180 });
+  c.drawFrame = () => {};
+  const random = Math.random;
+  Math.random = () => 0.99;
+  try { await c.switchBoxPose(); }
+  finally { Math.random = random; }
+  assert.equal(c.perch.pose, 'sit');
+  assert.equal(c.stance, 'sit');
+  assert.equal(c.pos.y, 511.6);
+});
+
+test('a window perch can switch between sitting and lying pose contacts', async () => {
+  const c = await make({ windows: { fg: 1, wins: [{ id: 1, x: 100, y: 300, w: 500, h: 400 }] } });
+  c.drawFrame = () => {};
+  c.perch = { id: 1, dx: 180, pose: 'sit' };
+  c.stance = 'sit';
+  const random = Math.random;
+  Math.random = () => 0;
+  try { await c.switchWindowPose(); }
+  finally { Math.random = random; }
+  assert.equal(c.perch.pose, 'lieA');
+  assert.equal(c.stance, 'lie');
+  assert.equal(c.pos.y, 301);
+});
+
+test('a lying window perch follows its window and falls when it disappears', async () => {
+  const c = await make({ windows: { fg: 1, wins: [{ id: 1, x: 100, y: 300, w: 500, h: 400 }] } });
+  c.perch = { id: 1, dx: 180, pose: 'lieA' };
+  c.stance = 'lie';
+  c.pos = { x: 280, y: 301 };
+  c.setWindows({ fg: 1, wins: [{ id: 1, x: 240, y: 420, w: 500, h: 400 }] });
+  assert.deepEqual(c.pos, { x: 420, y: 421 });
+  c.fall = () => { c.fell = true; };
+  c.setWindows({ fg: 1, wins: [] });
+  assert.equal(c.fell, true);
 });
 
 test('with motion on, she slides up to the bar and ends exactly on it, even when it moves mid-slide', async () => {

@@ -12,6 +12,7 @@ import { Guide } from './guide.js';
 import { LINES } from './lines.js';
 import { POSE_FILES } from './poses.js';
 import { SystemFx } from './system-fx.js';
+import { createDrone } from './drone.js';
 import { pick, fmt, sleep, tween, reducedMotion } from './util.js';
 
 const host = window.host;
@@ -75,6 +76,8 @@ async function boot() {
   });
   appMenu.setTheme(config.ui?.theme);
   const dormant = new DormantWidget({ el: document.getElementById('dormant'), host });
+  const drone = createDrone(document.getElementById('drone'));
+  drone.setTheme(config.ui?.theme);
   const vhs = document.getElementById('vhs');
   dormant.loadPos(config.idle?.widget, innerWidth, innerHeight);
 
@@ -130,6 +133,7 @@ async function boot() {
   let mouse = null;
   let folding = false;
   let foldingAt = 0; // when the fold/unfold started: one that never ends can't hold the screen
+  let droneActive = false;
   let lastLive = performance.now();
   const bumpIdle = () => { lastLive = performance.now(); };
   const setInteractive = (on) => {
@@ -146,9 +150,10 @@ async function boot() {
     const onBubble = bubble.hitInput(mouse.x, mouse.y) || bubble.hitGrab(mouse.x, mouse.y);
     const m = appMenu.rect();
     const onMenu = m && mouse.x >= m.left && mouse.x <= m.right && mouse.y >= m.top && mouse.y <= m.bottom;
+    const onDrone = !document.getElementById('drone').hidden && drone.hit(mouse.x, mouse.y);
     const onDormant = dormant.contains(mouse.x, mouse.y);
     document.body.style.cursor = (onChip() || onDormant) ? 'pointer' : '';
-    return setInteractive(Boolean(onPanel || onBubble || onMenu || onDormant || capri.hit(mouse.x, mouse.y) || onChip()));
+    return setInteractive(Boolean(onPanel || onBubble || onMenu || onDormant || onDrone || capri.hit(mouse.x, mouse.y) || onChip()));
   };
   // Her biochip: her eyes on it follow the pointer over it, and she comes out when you click it
   // (only then, so the pointer passing through that corner doesn't call her back).
@@ -180,6 +185,13 @@ async function boot() {
     hoverChip();
     if (interactive) bumpIdle();
   });
+  const drawDrone = (time) => {
+    if (!document.getElementById('drone').hidden) {
+      drone.update(time, { x: (mouse?.x || innerWidth / 2) / innerWidth * 270, y: (mouse?.y || innerHeight / 2) / innerHeight * 270 });
+    }
+    requestAnimationFrame(drawDrone);
+  };
+  requestAnimationFrame(drawDrone);
   document.addEventListener('mouseleave', () => {
     mouse = null;
     refreshHit();
@@ -350,8 +362,10 @@ async function boot() {
     Object.assign(capri.p, { glitch: 0, split: 0, collapse: 0, alpha: 1 });
     machine.set('DORMANT');
     host.setFolded(true);
-    dormant.setLabel('DORMANT');
-    dormant.show();
+    if (!droneActive) {
+      dormant.setLabel('DORMANT');
+      dormant.show();
+    }
     folding = false;
     refreshHit();
   };
@@ -800,6 +814,22 @@ async function boot() {
           host.setFolded(false);
           capri.stow();
         } else capri.unstow();
+        break;
+      case 'game-drone':
+        if (cmd.on) {
+          droneActive = true;
+          dormant.hide();
+          mask.hide();
+          drone.show();
+        } else {
+          droneActive = false;
+          drone.hide();
+          if (machine.get() === 'DORMANT') {
+            dormant.setLabel('DORMANT');
+            dormant.show();
+          }
+        }
+        refreshHit();
         break;
       case 'chat': // Ctrl+Alt+T: wake DORMANT and open chat
         if (cmd.on) {

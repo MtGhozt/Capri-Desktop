@@ -1,5 +1,7 @@
 // Coordinates shared by the sitting replacement layers and the standing sprite shader.
 export const SIT_FACE = { x: 124, y: 132, size: 44 };
+// The crop is kept for future calibration; the sitting shader remains the source of truth for now.
+export const SIT_FACE_ENABLED = false;
 
 export function faceDrawTransform(scale, head, pad = 56) {
   const radians = Number(head || 0);

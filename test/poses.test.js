@@ -37,6 +37,14 @@ test('box seat puts the contact pixel on the top edge', async () => {
   assert.equal(stand.y, 202);
 });
 
+test('sit box seat puts the shader hip on the top edge', async () => {
+  const { boxSeat } = await load();
+  const ledge = { x: 100, y: 200, w: 360, h: 180, top: 200 };
+  const seat = boxSeat(ledge, 'sit', { scale: 0.6 });
+  assert.equal(seat.y, 311.6);
+  assert.equal(seat.pose, 'sit');
+});
+
 test('pose sheets are at 2x sprite pixels, and a fresh seat lands right of the tab, inside the box', async () => {
   const { boxSeat, poseScale, POSES } = await load();
   assert.equal(poseScale(0.6), 0.3);

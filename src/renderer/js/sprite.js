@@ -1,5 +1,5 @@
 // WebGL renderer for the Capri cut-out.
-import { faceDrawTransform, SIT_FACE } from './sit-parts.js';
+import { faceDrawTransform, SIT_FACE, SIT_FACE_ENABLED } from './sit-parts.js';
 // One texture, one quad: every bit of life (head tilt, mane sway and flare, both arms, sitting with
 // dangling legs, smear frames, afterimages, line boil, speckles, the violet misregistration, glitch
 // slices, teleport collapse) is done in the fragment shader.
@@ -117,7 +117,7 @@ vec3 grade(vec3 c, out float red) {
 
 // Graded, speckled, premultiplied sample of the figure.
 vec4 cel(vec2 s) {
-  if (uSit > 0.0 && distance(s, vec2(${SIT_FACE.x}.0, ${SIT_FACE.y}.0)) < ${SIT_FACE.size / 2}.0) return vec4(0.0);
+  ${SIT_FACE_ENABLED ? `if (uSit > 0.0 && distance(s, vec2(${SIT_FACE.x}.0, ${SIT_FACE.y}.0)) < ${SIT_FACE.size / 2}.0) return vec4(0.0);` : ''}
   vec4 c = tex(s);
   if (c.a <= 0.0) return vec4(0.0);
   float red;
@@ -474,6 +474,7 @@ export class SitPartsLayer {
 
   draw(state, visible) {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (!SIT_FACE_ENABLED) return;
     const faceImage = this.faces[state.face || 'calm'] || this.faces.calm;
     if (!visible || !faceImage.complete || !faceImage.naturalWidth) return;
     const face = faceDrawTransform(this.scale, state.head);

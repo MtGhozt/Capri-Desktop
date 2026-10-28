@@ -1,4 +1,4 @@
-# Capri — Roadmap (actualizado 2026-10-26)
+# Capri — Roadmap (actualizado 2026-10-28)
 
 Upstream de referencia: mochiiwuff/capri-desktop v0.4.0 (`bde7b42`). Nunca push a upstream. Traer cosas por partes (port manual o cherry-pick), no merge completo.
 
@@ -16,17 +16,30 @@ Upstream de referencia: mochiiwuff/capri-desktop v0.4.0 (`bde7b42`). Nunca push 
 ## Fase 4 — Acciones en la PC
 Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
 
-- [ ] **4A Corrector de lo que escucha mal:** tabla "cuando oye X → leer como Y" (palabras completas), aplicada antes de los comandos y del LLM. Comando de voz "cuando digo X quiero decir Y". En el menú, "Corregir lo último" (lo último que oyó).
-- [ ] **4B Conversación sin wake word:** si su respuesta termina en pregunta, escucha ~8 s sin "Hey Jarvis". Slider de sensibilidad del wake word y atajo de teclado para hablar.
-- [ ] **4C Motor de apps:** base upstream `5ecbae7` (`launch.js`, `apps.js`, `chat.js`), en español. Tabla nombre / también dice / tipo (programa, juego de Steam, link/URI) / ruta / procesos / al cerrar (forzar, como la X, preguntar). "Abre X", "cierra X", "abre X y Y"; "¿quisiste decir…?".
-- [ ] **4D Escaneo de la PC:** Steam (`libraryfolders.vdf`), Epic, GOG y accesos del menú Inicio. Lista en el menú con "volver a escanear".
-- [ ] **4E Animaciones:** cerrar = teletransporte con imágenes residuales + rayo rojo a la ventana; abrir = gesto con chispas.
-- [ ] **4F Música:** Namida/Spotify con teclas multimedia. Spotify con Client ID propio (PKCE, token local fuera de git) para "pon X"; sin Premium abre la búsqueda. "Pon música" usa Namida.
-- [ ] **4G Energía:** "apaga la compu", "reinicia la compu", "suspende la compu" con confirmación en voz alta (solo un "sí" claro ejecuta). Secuencia glitch a pantalla completa antes de apagar/reiniciar (más corta al suspender), con textos propios en español. "Bloquea la PC", "minimiza todo" y "devuélvelas" van directos.
-- [ ] **4H Modo dron:** un ojo con fragmentos de su pelo girando (magenta/violeta/verde neón), dibujado en canvas, diseño propio. En modo juego aparece en vez de desaparecer; también se activa a mano desde el menú.
+- [x] **4A Corrector de lo que escucha mal:** tabla "cuando oye X → leer como Y" (palabras completas), aplicada antes de los comandos y del LLM. Comando de voz "cuando digo X quiero decir Y". En el menú, "Corregir lo último" (lo último que oyó). Hecho (`b1a4059`).
+- [x] **4B Conversación sin wake word:** si su respuesta termina en pregunta, escucha ~8 s sin "Hey Jarvis". Slider de sensibilidad del wake word y atajo de teclado para hablar. Hecho (`76b7318`).
+- [x] **4C Motor de apps:** base upstream `5ecbae7` (`launch.js`, `apps.js`, `chat.js`), en español. Tabla nombre / también dice / tipo (programa, juego de Steam, link/URI) / ruta / procesos / al cerrar (forzar, como la X, preguntar). "Abre X", "cierra X", "abre X y Y"; "¿quisiste decir…?". Hecho (`51af817`).
+- [x] **4D Escaneo de la PC:** Steam (`libraryfolders.vdf`), Epic, GOG y accesos del menú Inicio. Lista en el menú con "volver a escanear". Hecho (`cc29810`).
+- [x] **4E Animaciones:** cerrar = teletransporte con imágenes residuales + rayo rojo a la ventana; abrir = gesto con chispas. Hecho (`9251317`).
+- [x] **4F Música:** Namida/Spotify con teclas multimedia. Spotify con Client ID propio (PKCE, token local fuera de git) para "pon X"; sin Premium abre la búsqueda. "Pon música" usa Namida. Hecho (`0d8d116, cc9e069`).
+- [x] **4G Energía:** "apaga la compu", "reinicia la compu", "suspende la compu" con confirmación en voz alta (solo un "sí" claro ejecuta). Secuencia glitch a pantalla completa antes de apagar/reiniciar (más corta al suspender), con textos propios en español. "Bloquea la PC", "minimiza todo" y "devuélvelas" van directos. Hecho (`3f98675..f276b22`).
+- [x] **4H Modo dron:** un ojo con fragmentos de su pelo girando (magenta/violeta/verde neón), dibujado en canvas, diseño propio. En modo juego aparece en vez de desaparecer; sin modo manual por ahora.
 - [x] **4H caja + poses:** caja `CAPRI.SYS // MENSAJE` (carpeta, logs, typewriter) y Capri recostada/de pie en el borde (`lying_A` / `lying_B`).
 - [ ] **4I Extras:** modo compacto, "Hacer algo" en el menú, saludo grande al desbloquear la PC.
-- [ ] **4J Pulido para GitHub** (puede pasar a la Fase 6): submenú de voces (voz neural robótica por defecto, "Capri" solo local), proveedor por API key, `setup.bat` de un clic, README.
+  - Saludo con voz al arrancar.
+  - Que sepa la hora y cuánto tiempo llevas sin hablarle (se agrega al prompt del sistema en cada mensaje), para saludar y hablar distinto.
+  - Comentarios espontáneos: se asoma sola cada cierto tiempo a comentar lo que estás haciendo. Si la ignoras, se pone sentida y pide atención.
+  - Poder contestarle sus comentarios: el comentario queda guardado en la conversación como turno de Capri y, después de comentar, se queda escuchando unos segundos sin palabra de activación (relacionado con 4B). Ejemplo: ella dice "ese no me cae bien, parece el malo" y vos respondés "no Capri, ese no es el malo".
+  - Caricias en la cabeza pasando el cursor (reacciona); patalea al arrastrarla.
+  - Bailar cuando suena música.
+- [x] **Rediseño del menú + ventana de ajustes:** hecho, sin commit.
+- [ ] **4J Ver la pantalla:**
+  - Captura de pantalla enviada a un modelo con visión, solo con el interruptor de pantalla activado (apagado por defecto) y solo con proveedores en la nube o un modelo local con visión.
+  - Intervalo largo y limitado para no gastar.
+  - "Mira mi pantalla" bajo pedido.
+  - Corregir el interruptor actual, que solo manda el exe y el título de la ventana (nombre engañoso).
+  - Que los comentarios de 4I usen esto cuando esté activo.
+- [ ] **4L Pulido para GitHub** (puede pasar a la Fase 6): submenú de voces (voz neural robótica por defecto, "Capri" solo local), proveedor por API key, `setup.bat` de un clic, README. Personalidad y memoria en archivos editables (`personality.md` / memoria) que se abren con el Bloc de notas y se aplican sin reiniciar; reglas fijas aparte para que editarla no rompa nada.
 - [x] **4K Traído de upstream:** proveedores de chat en la nube (LM Studio, OpenRouter, Groq, Gemini, OpenAI, Mistral, DeepSeek) con clave cifrada y vuelta automática a Gemma, clic recuperado con el puntero encima, y opción "Pantalla" para PCs donde su ventana sale negra. Ver `docs/THIRD_PARTY.md`.
 - Quitar "módulo no conectado" de `persona.md` a medida que cada cosa funcione.
 

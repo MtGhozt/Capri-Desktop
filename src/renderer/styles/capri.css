@@ -131,7 +131,8 @@ body {
 }
 
 .capri.is-on-box {
-  z-index: 3; /* under the message box (4): she lies on its edge, the rest hidden behind it */
+  z-index: 5; /* legs and torso stay in front; pointer-events keeps the input clickable through her box */
+  pointer-events: none;
 }
 
 .capri__sprite,
@@ -668,6 +669,16 @@ body {
   line-height: 1.45;
   color: #f4ecff;
   overflow-wrap: anywhere;
+}
+
+.bubble.is-fx .bubble__text.is-emphasis {
+  color: var(--capri-green);
+  animation: bubble-emphasis 180ms steps(2, jump-none) infinite alternate;
+}
+
+@keyframes bubble-emphasis {
+  from { transform: translateX(-1px); }
+  to { transform: translateX(1px); }
 }
 
 .bubble__cursor {
@@ -1481,6 +1492,73 @@ button.appmenu__row {
   overflow-wrap: anywhere;
 }
 
+.appmenu__quick-plate {
+  min-width: 340px;
+}
+
+.appmenu__quick-body {
+  overflow: visible;
+}
+
+.appmenu__quick-row {
+  padding: 8px 4px;
+}
+
+.appmenu__quick-row .appmenu__meta {
+  margin-left: auto;
+}
+
+.appmenu__quick-rule {
+  height: 1px;
+  margin: 8px 4px;
+  background: color-mix(in srgb, var(--label) 35%, transparent);
+}
+
+.appmenu__quick-foot {
+  border-top: 1px solid color-mix(in srgb, var(--line) 20%, transparent);
+  border-bottom: 0;
+}
+
+.appmenu__submenu {
+  position: absolute;
+  z-index: 2;
+  width: 220px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--glow) 18%, transparent);
+}
+
+.appmenu:has(.appmenu__submenu) {
+  clip-path: none;
+}
+
+.appmenu__submenu-title {
+  padding: 5px 7px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+  color: var(--title);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.appmenu__submenu-row {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  text-align: left;
+  cursor: pointer;
+}
+
+.appmenu__submenu-row:hover,
+.appmenu__submenu-row.is-selected {
+  background: color-mix(in srgb, var(--accent-on) 10%, transparent);
+  color: var(--title);
+}
+
 .appmenu__app-edit .appmenu__hint {
   margin-left: 0;
 }
@@ -1591,4 +1669,26 @@ button.appmenu__row {
 
 .sysfx__dot[hidden] {
   display: none;
+}
+.drone {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 180px;
+  height: 180px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.drone.is-glitch-in { animation: drone-glitch-in 220ms steps(3, jump-none); }
+.drone.is-glitch-out { animation: drone-glitch-out 180ms steps(3, jump-none); }
+
+@keyframes drone-glitch-in {
+  from { opacity: 0; transform: translateX(12px) skewX(8deg); filter: hue-rotate(70deg); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes drone-glitch-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(-10px) skewX(-8deg); filter: hue-rotate(-70deg); }
 }

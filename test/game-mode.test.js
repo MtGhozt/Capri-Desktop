@@ -64,6 +64,14 @@ test('a fullscreen game takes her off the GPU once, even over many updates', () 
   assert.equal(mode.active(), true);
 });
 
+test('game mode exposes one enter and one delayed exit for the drone integration', () => {
+  const { mode, events, timers } = harness();
+  mode.update(game);
+  mode.update(desktop);
+  timers.tick(EXIT_DELAY_MS);
+  assert.deepEqual(events, [['enter', GAME], ['exit']]);
+});
+
 test('a maximized browser never fires it', () => {
   const { mode, events } = harness();
   mode.update({ fgExe: 'C:\\Users\\Matias\\AppData\\Local\\Programs\\Opera GX\\opera.exe', fgFull: true });

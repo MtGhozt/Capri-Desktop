@@ -67,6 +67,7 @@ const DEFAULTS = {
   },
   gaming: {
     mode: 'auto',            // 'auto' unloads the GPU while a fullscreen game runs; 'off' never
+    drone: true,             // show the lightweight renderer while a game owns the screen
     apps: [],                // extra exe names or path fragments to treat as games
   },
   greeting: {

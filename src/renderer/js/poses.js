@@ -44,6 +44,7 @@ export function poseFile(name, now, startedAt = 0) {
 
 // The pose sheets are drawn at 2x the standing sprite's pixels (rig.json: "2x sprite px").
 export const POSE_PX = 0.5;
+const SIT_HIP_OFFSET = 186;
 
 export function poseScale(standScale) {
   return standScale * POSE_PX;
@@ -66,6 +67,7 @@ export function boxSeat(ledge, pose, { scale = 0.6, dx = null } = {}) {
   const along = dx == null ? seatAlong(ledge, pose, scale) : dx;
   const x = ledge.x + along;
   if (pose === 'stand') return { x, y: ledge.top + 2, dx: along, pose: 'stand' };
+  if (pose === 'sit') return { x, y: ledge.top + SIT_HIP_OFFSET * scale, dx: along, pose: 'sit' };
   const spec = POSES[pose];
   if (!spec) return { x, y: ledge.top + 1, dx: along, pose };
   return { x, y: ledge.top + 1, dx: along, pose, scale: poseScale(scale) };
