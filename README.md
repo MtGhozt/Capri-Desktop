@@ -26,8 +26,6 @@ Asistente de escritorio con el personaje **Capri** (*Cyberpunk: Edgerunners 2*):
 
 <img src="docs/media/capri-standing.png" alt="Poses" width="480">
 
-<img src="docs/media/capri-drone.png" alt="Dron en modo juego" width="480">
-
 ### Se encariña
 
 - **Caricias** *(próximamente)*: reaccionar al cursor sobre la cabeza

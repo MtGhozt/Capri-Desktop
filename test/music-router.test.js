@@ -78,3 +78,81 @@ test('the media key script is read from outside app.asar', () => {
   const packed = path.join('C:', 'Capri', 'resources', 'app.asar', 'src', 'main', 'media-keys.ps1');
   assert.equal(unpackedPath(packed), path.join('C:', 'Capri', 'resources', 'app.asar.unpacked', 'src', 'main', 'media-keys.ps1'));
 });
+
+// "abre el reproductor de música" / "pon música": whichever player MÚSICA has chosen
+const NAMIDA_EXE = 'C:\\Software\\Namida\\namida\\namida.exe';
+function playerHarness({ player, connected = true, resumeOk = true, namida = true } = {}) {
+  const out = { spawned: [], opened: [], keys: [], resumed: [] };
+  const music = createMusic({
+    config: { load: () => ({ music: { player } }) },
+    apps: () => (namida ? [{ name: 'Namida', target: NAMIDA_EXE }] : []),
+    sendKey: async (action) => { out.keys.push(action); },
+    isRunning: async () => true,
+    spawnProcess: (target, args) => { out.spawned.push([target, ...args]); return { unref() {} }; },
+    wait: async () => {},
+    openExternal: async (uri) => { out.opened.push(uri); },
+    findTrack: () => null,
+    spotify: {
+      playQuery: async () => ({ ok: false, fallback: true }),
+      resume: async (openApp) => {
+        out.resumed.push('resume');
+        if (!connected) return { ok: false, fallback: true };
+        if (!resumeOk) { await openApp(); return { ok: true, opened: true }; }
+        return { ok: true };
+      },
+    },
+  });
+  return { music, ...out };
+}
+
+test('"abre el reproductor de música" is a music order, not an app one', () => {
+  for (const said of ['abre el reproductor de música', 'Abre la música', 'abrime el reproductor', 'open the music player', 'open music']) {
+    assert.deepEqual(parseMusicCommand(said), { action: 'open' }, said);
+  }
+  assert.equal(parseMusicCommand('abre Spotify'), null); // that one stays with the app table
+});
+
+test('opening the player follows MÚSICA', async () => {
+  const namida = playerHarness({ player: 'namida' });
+  assert.deepEqual(await namida.music.command({ action: 'open' }), { ok: true, player: 'namida' });
+  assert.deepEqual(namida.spawned, [[NAMIDA_EXE]]);
+
+  const spotify = playerHarness({ player: 'spotify' });
+  assert.deepEqual(await spotify.music.command({ action: 'open' }), { ok: true, player: 'spotify' });
+  assert.deepEqual(spotify.opened, ['spotify:']);
+
+  const none = playerHarness({ player: 'none' });
+  const r = await none.music.command({ action: 'open' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /MÚSICA/);
+  assert.deepEqual([none.spawned, none.opened], [[], []]);
+
+  const noNamida = playerHarness({ player: 'namida', namida: false });
+  assert.match((await noNamida.music.command({ action: 'open' })).error, /Namida/);
+});
+
+test('"pon música" plays in the chosen player, never a stray media key', async () => {
+  const namida = playerHarness({ player: 'namida' });
+  assert.equal((await namida.music.command({ action: 'start' })).ok, true);
+  assert.deepEqual(namida.spawned, [[NAMIDA_EXE]]); // brought up (single instance) before the key
+  assert.deepEqual(namida.keys, ['play']);
+
+  const premium = playerHarness({ player: 'spotify', connected: true });
+  assert.equal((await premium.music.command({ action: 'start' })).ok, true);
+  assert.equal(premium.resumed.length, 1);
+  assert.deepEqual([premium.keys, premium.opened], [[], []]);
+
+  const free = playerHarness({ player: 'spotify', resumeOk: false }); // 403: the app is opened instead
+  assert.equal((await free.music.command({ action: 'start' })).ok, true);
+  assert.deepEqual([free.keys, free.opened], [[], ['spotify:']]);
+
+  const offline = playerHarness({ player: 'spotify', connected: false }); // not connected
+  assert.equal((await offline.music.command({ action: 'start' })).ok, true);
+  assert.deepEqual([offline.keys, offline.opened], [[], ['spotify:']]);
+
+  const none = playerHarness({ player: 'none' });
+  const r = await none.music.command({ action: 'start' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /MÚSICA/);
+  assert.deepEqual([none.keys, none.opened, none.spawned], [[], [], []]);
+});

@@ -555,7 +555,9 @@ async function musicReply(parsed, { chat = true } = {}) {
       return { ok: false };
     }
     let line;
-    if (result.searchOnly) {
+    if (parsed.action === 'open') {
+      line = `Abro ${result.player === 'spotify' ? 'Spotify' : 'Namida'}.`;
+    } else if (result.searchOnly) {
       line = `Abrí la búsqueda de «${result.query}» en Spotify — dale play al primero, choom.`;
     } else if (parsed.action === 'query' && result.track) {
       line = result.artist
@@ -567,7 +569,7 @@ async function musicReply(parsed, { chat = true } = {}) {
       line = pickLine(MUSIC_LINE[parsed.action] || 'musicaPlay');
     }
     sendCommand('box-log', { kind: 'musica', text: parsed.action });
-    sendCommand('music-state', { playing: !['pause', 'mute', 'volumeDown', 'volumeUp'].includes(parsed.action) });
+    sendCommand('music-state', { playing: !['pause', 'mute', 'volumeDown', 'volumeUp', 'open'].includes(parsed.action) });
     announce(line, { chat, badge: 'MUSIC' });
     return { ok: true };
   } catch (err) {

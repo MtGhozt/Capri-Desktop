@@ -99,6 +99,20 @@ function createSpotify({ token, request = defaultRequest } = {}) {
     return { ok: true, track: track.name, artist: track.artists?.[0]?.name || '' };
   }
 
+  // "pon música": resume in Spotify itself. No Premium (403) or no live device: the app is open,
+  // not an error.
+  async function resume(openApp) {
+    const access = token?.();
+    if (!access) return { ok: false, fallback: true };
+    try {
+      await request('/v1/me/player/play', access, undefined, 'PUT');
+      return { ok: true };
+    } catch {
+      await openApp?.();
+      return { ok: true, opened: true };
+    }
+  }
+
   async function nowPlaying() {
     const access = token?.();
     if (!access) return { ok: false, fallback: true };
@@ -106,7 +120,7 @@ function createSpotify({ token, request = defaultRequest } = {}) {
     return item?.item ? { ok: true, track: item.item.name, artist: item.item.artists?.[0]?.name || '' } : { ok: false };
   }
 
-  return { playQuery, nowPlaying };
+  return { playQuery, resume, nowPlaying };
 }
 
 function defaultRequest(endpoint, access, body, method = 'GET') {

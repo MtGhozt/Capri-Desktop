@@ -10,6 +10,7 @@ const unpackedPath = (p) => p.split(`app.asar${path.sep}`).join(`app.asar.unpack
 const KEY_SCRIPT = unpackedPath(path.join(__dirname, 'media-keys.ps1'));
 
 const ACTIONS = new Set(['pause', 'play', 'next', 'previous', 'volumeUp', 'volumeDown', 'mute']);
+const NO_PLAYER = 'No tienes un reproductor de música elegido. Elige uno en el menú, en MÚSICA.';
 
 function createMusic({
   config, apps, sendKey, spotify, isRunning = () => false, spawnProcess = spawn,
@@ -19,14 +20,45 @@ function createMusic({
   const key = (action) => sendKey(action, KEY_SCRIPT);
   const playerApp = () => apps?.().find((item) => item.name.toLowerCase() === 'namida');
 
+  // Spotify through its own URI: the desktop app or the Store one answers it
+  async function openSpotify() {
+    if (typeof openExternal !== 'function') return { ok: false, error: 'No pude abrir Spotify.' };
+    try {
+      await openExternal('spotify:');
+      return { ok: true, player: 'spotify' };
+    } catch {
+      return { ok: false, error: 'No pude abrir Spotify. ¿Está instalado?' };
+    }
+  }
+
+  // "abre el reproductor de música": whichever one is chosen in Ajustes › MÚSICA
+  async function openPlayer() {
+    const preferred = config.load().music?.player || 'namida';
+    if (preferred === 'none') return { ok: false, error: NO_PLAYER };
+    if (preferred === 'spotify') return openSpotify();
+    const app = playerApp();
+    if (!app?.target) return { ok: false, error: 'No encuentro Namida en tus apps. Agrégala en el menú APPS.' };
+    spawnProcess(app.target, [], { detached: true, stdio: 'ignore' }).unref();
+    return { ok: true, player: 'namida' };
+  }
+
+  // "pon música": the chosen player, never the global key over whatever had media focus
+  async function startPlayer() {
+    const preferred = config.load().music?.player || 'namida';
+    if (preferred === 'none') return { ok: false, error: NO_PLAYER };
+    if (preferred !== 'spotify') return startNamida();
+    const api = spotify?.resume ? await spotify.resume(openSpotify).catch(() => null) : null;
+    if (api?.ok) return { ok: true, action: 'start', player: 'spotify' };
+    const opened = await openSpotify(); // no token: just bring it up, no key
+    return opened.ok ? { ok: true, action: 'start', player: 'spotify' } : opened;
+  }
+
   async function startNamida() {
     const app = playerApp();
     if (!app) return { ok: false, error: 'No encuentro Namida en tus apps. Agrégala en el menú APPS.' };
-    if (!(await isRunning('namida'))) {
-      spawnProcess(app.target, [], { detached: true, stdio: 'ignore' }).unref();
-      await wait(3000); // Namida needs a moment before it listens to media keys
-    }
-    await key('play');
+    spawnProcess(app.target, [], { detached: true, stdio: 'ignore' }).unref(); // single instance: brings it up
+    if (!(await isRunning('namida'))) await wait(3000); // Namida needs a moment before it listens to media keys
+    await key('play'); // the key lands on Namida, not on the video you had paused
     return { ok: true, action: 'start' };
   }
 
@@ -71,9 +103,7 @@ function createMusic({
   async function playQuery(query) {
     const cfg = config.load();
     const preferred = cfg.music?.player || 'namida';
-    if (preferred === 'none') {
-      return { ok: false, error: 'No tienes un reproductor de música elegido en el menú.' };
-    }
+    if (preferred === 'none') return { ok: false, error: NO_PLAYER };
     const order = preferred === 'spotify' ? ['spotify', 'namida'] : ['namida', 'spotify'];
     let lastMiss = null;
     for (const who of order) {
@@ -100,10 +130,8 @@ function createMusic({
       }
       return { ok: true, action: parsed.action };
     }
-    if (parsed.action === 'start') {
-      if (cfg.music?.player === 'none') return { ok: false, error: 'No tienes un reproductor de música elegido en el menú.' };
-      return startNamida();
-    }
+    if (parsed.action === 'open') return openPlayer();
+    if (parsed.action === 'start') return startPlayer();
     if (parsed.action === 'nowPlaying' && cfg.music?.spotify?.clientId) {
       const result = await spotify.nowPlaying();
       return result?.ok ? result : { ok: false, error: 'No pude leer qué está sonando en Spotify.' };

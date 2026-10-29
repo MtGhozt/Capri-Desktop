@@ -35,6 +35,23 @@ test('spotify credentials are not persisted by config or logs', () => {
   assert.equal(JSON.stringify(safe).includes('secret'), false);
 });
 
+test('resuming with a free account opens the app instead of erroring', async () => {
+  const { createSpotify } = require('../src/main/spotify');
+  const calls = [];
+  const opened = [];
+  const spotify = createSpotify({
+    token: () => 'token',
+    request: async (endpoint, access, body, method = 'GET') => {
+      calls.push(`${method} ${endpoint}`);
+      throw new Error('Spotify HTTP 403');
+    },
+  });
+  assert.deepEqual(await spotify.resume(async () => { opened.push('app'); }), { ok: true, opened: true });
+  assert.deepEqual(calls, ['PUT /v1/me/player/play']);
+  assert.deepEqual(opened, ['app']);
+  assert.deepEqual(await createSpotify({ token: () => null }).resume(), { ok: false, fallback: true });
+});
+
 test('a free account opens the track in the app instead of failing on 403', async () => {
   const { createSpotify } = require('../src/main/spotify');
   const calls = [];
