@@ -2,6 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const { parseMusicCommand } = require('../src/main/music-command');
 const { createPkce } = require('../src/main/spotify');
 
@@ -32,4 +33,41 @@ test('spotify credentials are not persisted by config or logs', () => {
   const safe = redactSpotifyConfig({ clientId: 'client-secret', accessToken: 'access-secret', refreshToken: 'refresh-secret' });
   assert.deepEqual(safe, { connected: true });
   assert.equal(JSON.stringify(safe).includes('secret'), false);
+});
+
+test('spotify oauth listens on 47835, 404s anything but /callback and exchanges the code', async () => {
+  const { authorizeSpotify } = require('../src/main/spotify');
+  let stray = null;
+  const store = { write() {} };
+  const result = await authorizeSpotify({
+    clientId: 'client-id',
+    tokenStore: store,
+    openExternal: async (authUrl) => {
+      const { searchParams } = new URL(authUrl);
+      assert.equal(searchParams.get('redirect_uri'), 'http://127.0.0.1:47835/callback');
+      stray = await fetch('http://127.0.0.1:47835/not-the-callback');
+      await fetch(`http://127.0.0.1:47835/callback?state=${searchParams.get('state')}&code=the-code`);
+    },
+    fetcher: async (url, options) => {
+      assert.equal(options.body.get('redirect_uri'), 'http://127.0.0.1:47835/callback');
+      assert.equal(options.body.get('code'), 'the-code');
+      return { ok: true, json: async () => ({ access_token: 'a', expires_in: 3600 }) };
+    },
+  });
+  assert.equal(stray.status, 404);
+  assert.equal(result.access_token, 'a');
+});
+
+test('a taken oauth port is reported with its cause instead of swallowed', async () => {
+  const { authorizeSpotify, spotifyFailureLine } = require('../src/main/spotify');
+  const blocker = http.createServer();
+  await new Promise((resolve) => blocker.listen(47835, '127.0.0.1', resolve));
+  const err = await authorizeSpotify({
+    clientId: 'client-id',
+    openExternal: async () => {},
+    tokenStore: { write() {} },
+  }).then(() => null, (e) => e);
+  blocker.close();
+  assert.equal(err.code, 'EADDRINUSE');
+  assert.match(spotifyFailureLine(err), /EADDRINUSE/);
 });

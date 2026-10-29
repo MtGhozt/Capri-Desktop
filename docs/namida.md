@@ -7,4 +7,4 @@ Verificado en esta PC: exe en `C:\Software\Namida\namida\namida.exe`; biblioteca
 2. **"Pon X":** leer `tracks.db` en solo lectura (`file:...?mode=ro`, usa WAL). Tabla `tracks`: `key` = ruta absoluta, `value` = JSON con `title`, `originalArtist`, `originalAlbum`, etc. Búsqueda difusa con `rapidfuzz` y lanzar `namida.exe "<ruta>"`: reutiliza la instancia abierta (single instance). Para varias canciones, generar un `.m3u` temporal.
 3. **Opcional:** webhook de Namida (Advanced settings → flags → WEBHOOK; solo en betas desde oct-2026) manda POST JSON en `trackChanged`/`play`/`pause` con la ruta del archivo.
 
-Sin API local de control ni esquema URL propio. Spotify queda como extra (Web API, requiere Premium).
+Sin API local de control ni esquema URL propio. Spotify queda como extra (Web API, requiere Premium): en el panel de la app de Spotify Developer, el redirect URI es `http://127.0.0.1:47835/callback` (el 47824 está tomado por el sidecar de voz).

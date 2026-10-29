@@ -28,7 +28,7 @@ const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
 const { createSystemFlow, runSystem } = require('./system-command');
 const { createMusic } = require('./music');
-const { createSpotify, createTokenStore, authorizeSpotify } = require('./spotify');
+const { createSpotify, createTokenStore, authorizeSpotify, spotifyFailureLine } = require('./spotify');
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
 const { parseFixCommand, readTranscript } = require('./fix-command');
@@ -749,7 +749,9 @@ async function connectSpotify(clientId) {
     return { ok: true };
   } catch (err) {
     console.error('[capri] Spotify connection failed:', err.message);
-    return { ok: false, message: 'No pude conectar Spotify.' };
+    const message = spotifyFailureLine(err);
+    showLine(message, { badge: 'SPOTIFY' }); // the menu used to drop this on the floor
+    return { ok: false, message };
   }
 }
 const spotify = createSpotify({ token: () => spotifyAccessToken });

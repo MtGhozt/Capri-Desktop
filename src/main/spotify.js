@@ -34,7 +34,14 @@ function createTokenStore({ file, safeStorage } = {}) {
   return { read, write, clear };
 }
 
-async function authorizeSpotify({ clientId, openExternal, tokenStore, port = 47824, fetcher = fetch }) {
+// 47824 is the voice sidecar's; this one has to be free for the OAuth callback.
+const OAUTH_PORT = 47835;
+
+function spotifyFailureLine(err) {
+  return `No pude conectar Spotify: ${err?.message || err}`;
+}
+
+async function authorizeSpotify({ clientId, openExternal, tokenStore, port = OAUTH_PORT, fetcher = fetch }) {
   const { verifier, challenge } = createPkce();
   const redirectUri = `http://127.0.0.1:${port}/callback`;
   const state = crypto.randomBytes(16).toString('hex');
@@ -47,7 +54,9 @@ async function authorizeSpotify({ clientId, openExternal, tokenStore, port = 478
   const code = await new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url, redirectUri);
-      if (url.pathname !== '/callback') return;
+      if (url.pathname !== '/callback') {
+        res.writeHead(404); res.end('Not found'); return;
+      }
       if (url.searchParams.get('state') !== state) {
         res.writeHead(400); res.end('Invalid state'); server.close(); reject(new Error('Spotify OAuth state mismatch')); return;
       }
@@ -122,5 +131,5 @@ function defaultRequest(endpoint, access, body, method = 'GET') {
 }
 
 module.exports = {
-  createPkce, createSpotify, redactSpotifyConfig, createTokenStore, authorizeSpotify,
+  createPkce, createSpotify, redactSpotifyConfig, createTokenStore, authorizeSpotify, spotifyFailureLine,
 };
