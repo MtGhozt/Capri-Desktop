@@ -1,7 +1,7 @@
 'use strict';
 
 // Artist handoff reel: every pose / face / FX in order with a caption. Driven by CapriArtKit
-// (scripts/demo-art.js). Does not change normal app behavior.
+// (scripts/demo-art.js). Sleep / mask / DORMANT run last so earlier steps stay awake.
 
 import { sleep } from './util.js';
 
@@ -29,12 +29,29 @@ function ensureCaption() {
 }
 
 export async function runArtKit({
-  capri, panel, bubble, fx, dormant, drone, mask, chip, host, machine, shots = false,
+  capri, panel, bubble, fx, dormant, drone, mask, chip, host, machine, unfold, bumpIdle, shots = false,
 }) {
   const captionEl = ensureCaption();
-  const free = () => !capri.busy && !capri.act && capri.stance !== 'fall';
+  const free = () => !capri.busy && !capri.act && capri.stance !== 'fall'
+    && !capri.dormant && !capri.hidden && !capri.stowed;
   const until = async (done, max = 12000) => {
     for (const t0 = Date.now(); !done() && Date.now() - t0 < max;) await sleep(80);
+  };
+  // Same path as a real wake: unfold (DORMANT widget) + await rouse (mask doze).
+  const ensureAwake = async () => {
+    bumpIdle?.();
+    if (machine?.get?.() === 'DORMANT' && typeof unfold === 'function') {
+      await unfold();
+    }
+    if (capri.dormant) await capri.rouse();
+    else capri.wake();
+    if (capri.stowed) await capri.unstow();
+    capri.setHidden(false);
+    dormant.hide();
+    mask.hide();
+    drone.hide();
+    await until(free, 15000);
+    bumpIdle?.();
   };
 
   let stepNo = 0;
@@ -52,18 +69,16 @@ export async function runArtKit({
     }
   };
   const beat = async (id, text, { frames = 1, ms = HOLD } = {}) => {
+    bumpIdle?.();
     stepNo += 1;
     label(`${String(stepNo).padStart(2, '0')} · ${text}`);
     await snap(id, frames);
     await sleep(ms);
+    bumpIdle?.();
   };
 
   capri.nextMove = capri.nextGaze = performance.now() + 600_000;
-  if (capri.stowed) await capri.unstow();
-  if (capri.dormant) capri.wake();
-  dormant.hide();
-  drone.hide();
-  mask.hide();
+  await ensureAwake();
   if (typeof chip.hide === 'function') chip.hide();
   panel.hide();
   await until(free);
@@ -142,7 +157,6 @@ export async function runArtKit({
   await until(free);
 
   // --- satellite / stars ---
-  label('XX · Satélite / estrellas');
   if (capri.gaze({ big: true })) {
     await beat('satellite', 'Satélite / estrellas (acting)', { frames: 6, ms: 2000 });
     await until(() => !capri.sky, 20000);
@@ -158,29 +172,6 @@ export async function runArtKit({
   await until(free);
   await capri.perform('split');
   await beat('fx-split', 'FX: split / chispas', { frames: 4, ms: HOLD });
-  await until(free);
-
-  // --- mask + biochip ---
-  await capri.setMode('sleep');
-  await sleep(1200);
-  await capri.doze();
-  await beat('mask-sleep', 'Máscara dormida', { frames: 4, ms: HOLD });
-  capri.wake();
-  await until(free);
-  await capri.stow();
-  await beat('biochip', 'Biochip (stow)', { frames: 4, ms: HOLD });
-  await capri.unstow();
-  await until(free);
-
-  // --- dormant ---
-  dormant.setLabel('DORMANT');
-  dormant.show();
-  capri.dormant = true;
-  capri.setHidden(true);
-  await beat('dormant', 'DORMANT (ojo / sleep)', { frames: 4, ms: HOLD });
-  capri.dormant = false;
-  capri.setHidden(false);
-  dormant.hide();
   await until(free);
 
   // --- game drone ---
@@ -207,7 +198,7 @@ export async function runArtKit({
   await beat('greeting', 'Saludo', { frames: 3, ms: HOLD });
   panel.hide();
 
-  // --- ignored ---
+  // --- ignored (line only; fold is the sleep block below) ---
   panel.say({
     kind: 'idle', face: 'aside',
     line: 'Me ignoras… me pliego al widget.',
@@ -215,10 +206,6 @@ export async function runArtKit({
   });
   await beat('ignored', 'Reacción al ser ignorada', { frames: 3, ms: HOLD });
   panel.hide();
-  dormant.setLabel('DORMANT');
-  dormant.show();
-  await sleep(900);
-  dormant.hide();
 
   // --- teleport / Hacer algo ---
   await capri.teleport(capri.spot('random'));
@@ -251,6 +238,26 @@ export async function runArtKit({
   if (typeof capri.drop === 'function') capri.drop();
   await sleep(HOLD / 2);
   await until(free);
+
+  // --- sleep / mask / biochip / DORMANT last (wake fully between each) ---
+  await capri.setMode('sleep');
+  await sleep(1200);
+  await capri.doze();
+  await beat('mask-sleep', 'Máscara dormida', { frames: 4, ms: HOLD });
+  await ensureAwake();
+
+  await capri.stow();
+  await beat('biochip', 'Biochip (stow)', { frames: 4, ms: HOLD });
+  await ensureAwake();
+
+  dormant.setLabel('DORMANT');
+  dormant.show();
+  capri.dormant = true;
+  capri.setHidden(true);
+  machine?.set?.('DORMANT');
+  host.setFolded?.(true);
+  await beat('dormant', 'DORMANT (ojo / sleep)', { frames: 4, ms: HOLD });
+  await ensureAwake();
 
   captionEl.textContent = 'FIN · kit de arte listo';
   await sleep(1500);

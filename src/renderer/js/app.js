@@ -335,8 +335,10 @@ async function boot() {
   const showVhs = (on) => { vhs.hidden = !on; };
   // The screen giving up before the PC goes down (Paso 4G): main waits for it to be over.
   const systemFx = new SystemFx({ reducedMotion });
+  let artKitRunning = false;
   const canFold = () => (
-    Number.isFinite(idleMs) && idleMs > 0
+    !artKitRunning
+    && Number.isFinite(idleMs) && idleMs > 0
     && !folding
     && machine.get() !== 'DORMANT'
     && machine.get() !== 'THINKING'
@@ -539,10 +541,17 @@ async function boot() {
     panel.say({ kind: 'info', line: t.end, hold: 5000 });
   };
 
-  brain.onArtKit = (evt) => runArtKit({
-    capri, panel, bubble, fx, dormant, drone, mask, chip, host, machine,
-    shots: Boolean(evt?.shots),
-  });
+  brain.onArtKit = async (evt) => {
+    artKitRunning = true;
+    try {
+      await runArtKit({
+        capri, panel, bubble, fx, dormant, drone, mask, chip, host, machine, unfold,
+        bumpIdle, shots: Boolean(evt?.shots),
+      });
+    } finally {
+      artKitRunning = false;
+    }
+  };
 
   const applyBoot = (state) => {
     // a cloud provider answers, so whether LM Studio came up is nobody's business here (Paso 4K)
