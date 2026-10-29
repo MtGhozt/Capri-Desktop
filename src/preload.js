@@ -49,4 +49,5 @@ contextBridge.exposeInMainWorld('host', {
   openSettings: (tab) => ipcRenderer.invoke('settings:open', tab || null),
   closeSettings: () => ipcRenderer.send('settings:close'),
   greet: () => ipcRenderer.invoke('greet'),
+  artCapture: (name) => ipcRenderer.invoke('art:capture', { name: String(name || 'frame') }),
 });

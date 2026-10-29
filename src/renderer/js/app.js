@@ -13,6 +13,7 @@ import { LINES } from './lines.js';
 import { POSE_FILES } from './poses.js';
 import { SystemFx } from './system-fx.js';
 import { createDrone } from './drone.js';
+import { runArtKit } from './art-kit.js';
 import { pick, fmt, sleep, tween, reducedMotion } from './util.js';
 
 const host = window.host;
@@ -537,6 +538,11 @@ async function boot() {
     await wait(600);
     panel.say({ kind: 'info', line: t.end, hold: 5000 });
   };
+
+  brain.onArtKit = (evt) => runArtKit({
+    capri, panel, bubble, fx, dormant, drone, mask, chip, host, machine,
+    shots: Boolean(evt?.shots),
+  });
 
   const applyBoot = (state) => {
     // a cloud provider answers, so whether LM Studio came up is nobody's business here (Paso 4K)

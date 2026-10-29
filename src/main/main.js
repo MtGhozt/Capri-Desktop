@@ -1665,6 +1665,17 @@ function registerIpc() {
     if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
   });
   ipcMain.handle('settings:open', (_e, tab = null) => openSettingsTab(tab || null));
+  // artist handoff stills → %USERPROFILE%\Desktop\capri-art-kit\shots\
+  ipcMain.handle('art:capture', async (_e, payload = {}) => {
+    if (!overlay || overlay.isDestroyed()) return { ok: false, error: 'no overlay' };
+    const dir = path.join(process.env.USERPROFILE || app.getPath('home'), 'Desktop', 'capri-art-kit', 'shots');
+    fs.mkdirSync(dir, { recursive: true });
+    const name = String(payload.name || 'frame').replace(/[^\w.-]+/g, '_');
+    const image = await overlay.webContents.capturePage();
+    const file = path.join(dir, `${name}.png`);
+    fs.writeFileSync(file, image.toPNG());
+    return { ok: true, file };
+  });
   // her hello at boot: the overlay shows it, and it plays from the cached wav if there is one
   greeting = async function greeting({ unlock = false } = {}) {
     const cfg = config.load();

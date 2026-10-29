@@ -21,6 +21,7 @@ export class Brain {
     this.linked = true;      // has a Claude Code event ever reached her (app.js sets it from the config)
     this.onLinked = null;
     this.onShowcase = null; // the demo's second half (app.js)
+    this.onArtKit = null; // artist handoff reel (art-kit.js)
     this.onPulse = null;    // any hook event (idle / wake the DORMANT widget)
   }
 
@@ -53,6 +54,8 @@ export class Brain {
     this.onPulse?.(evt);
     // the demo's second half (scripts/demo-sequence.js), not a Claude event
     if (evt.hook_event_name === 'CapriShowcase') return this.onShowcase?.();
+    // artist handoff reel (scripts/demo-art.js) — not a Claude event
+    if (evt.hook_event_name === 'CapriArtKit') return this.onArtKit?.(evt);
     // the first real Claude Code event that ever reaches her (the demo's don't count)
     if (!this.linked && !evt.demo) {
       this.linked = true;

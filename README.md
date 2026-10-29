@@ -39,7 +39,7 @@ Asistente de escritorio con el personaje **Capri** (*Cyberpunk: Edgerunners 2*):
 
 ### Inicio rápido (Windows, sin programar)
 
-1. Baja `Capri-Setup-0.1.0.exe` desde [Releases](https://github.com/MatiasBS027/Capri-Desktop/releases).
+1. Baja `Capri-Setup-0.1.0.exe` desde [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
 2. Si SmartScreen dice *Windows protegió tu PC*: **Más información → Ejecutar de todas formas**. El instalador no está firmado con certificado de pago; es normal en un proyecto gratis.
 3. Completa el instalador y abre **Capri**. No hace falta Node.js ni admin.
 
@@ -158,7 +158,7 @@ Fan art — not affiliated with CD PROJEKT RED. Original art/code: [mochiiwuff/c
 
 ## Install (Windows, no coding)
 
-1. Download `Capri-Setup-0.1.0.exe` from [Releases](https://github.com/MatiasBS027/Capri-Desktop/releases).
+1. Download `Capri-Setup-0.1.0.exe` from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
 2. SmartScreen: **More info → Run anyway** (unsigned freeware build).
 3. Install and launch. No Node.js required.
 
