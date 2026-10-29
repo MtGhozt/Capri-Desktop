@@ -175,23 +175,26 @@ test('when she already started answering, a late failure is not retried (two voi
   assert.equal(out.fallback, '');
 });
 
-test('with the memory switch off, a cloud provider only gets this one question', async () => {
-  const h = harness({ cfg: cfgOf({ provider: 'mistral' }) });
-  await h.say('me llamo Matias');
-  await h.say('¿cómo me llamo?');
-  const messages = h.calls[1].body.messages;
-  assert.equal(messages.length, 2); // persona + the question in front of it
-  assert.equal(messages.at(-1).content, '¿cómo me llamo?');
-  assert.ok(!JSON.stringify(messages).includes('me llamo Matias'));
+test('every provider gets the last chat turns, including follow-ups and voice-style lines', async () => {
+  for (const provider of ['local', 'gemini', 'openrouter', 'groq']) {
+    const h = harness({ cfg: cfgOf({ provider, shareMemory: false }) });
+    await h.say('¿quieres que te cuente algo?');
+    await h.say('sí, cuéntame'); // same path as a voice transcript via chat:send
+    const messages = h.calls[1].body.messages;
+    assert.deepEqual(messages.slice(1).map((m) => m.role), ['user', 'assistant', 'user'], provider);
+    assert.equal(messages[1].content, '¿quieres que te cuente algo?', provider);
+    assert.equal(messages.at(-1).content, 'sí, cuéntame', provider);
+  }
 });
 
-test('with the memory switch on, she takes what she remembers along', async () => {
-  const h = harness({ cfg: cfgOf({ provider: 'mistral', shareMemory: true }) });
-  await h.say('me llamo Matias');
-  await h.say('¿cómo me llamo?');
-  const messages = h.calls[1].body.messages;
-  assert.deepEqual(messages.slice(1).map((m) => m.role), ['user', 'assistant', 'user']);
-  assert.equal(messages[1].content, 'me llamo Matias');
+test('rolling history keeps about the last 10 turns on every request', async () => {
+  const h = harness({ cfg: cfgOf({ provider: 'gemini', shareMemory: false }) });
+  for (let i = 0; i < 12; i += 1) await h.say(`turno ${i}`);
+  const messages = h.calls.at(-1).body.messages;
+  const turns = messages.slice(1); // drop system
+  assert.equal(turns.length, 21); // 10 prior turns (20 msgs) + this user line
+  assert.equal(turns[0].content, 'turno 1'); // turno 0 dropped (pair was beyond the 20-msg window)
+  assert.equal(turns.at(-1).content, 'turno 11');
 });
 
 test('the screen only goes out with its switch on', async () => {

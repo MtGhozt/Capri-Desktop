@@ -558,6 +558,8 @@ async function musicReply(parsed, { chat = true } = {}) {
     let line;
     if (parsed.action === 'open') {
       line = `Abro ${result.player === 'spotify' ? 'Spotify' : 'Namida'}.`;
+    } else if (parsed.herSong) {
+      line = pickLine('musicaSuCancion');
     } else if (result.searchOnly) {
       line = `Abrí la búsqueda de «${result.query}» en Spotify — dale play al primero, choom.`;
     } else if (parsed.action === 'query' && result.track) {
@@ -1751,7 +1753,7 @@ function registerIpc() {
     }
     const powerOrder = await systemFlow.command(line);
     if (powerOrder) return { ok: true };
-    const musicOrder = parseMusicCommand(line);
+    const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
     if (musicOrder) return musicReply(musicOrder);
     if (isSleepCommand(line)) return goSleepReply();
     if (isClipCommand(line)) return goClipReply();

@@ -5,7 +5,7 @@ const { PROVIDERS, isCloud, requestFor, explain } = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
 
-const HISTORY_LIMIT = 16;
+const HISTORY_LIMIT = 20; // ~10 user+assistant turns
 const TIMEOUT_MS = 45000;
 const LOCAL_TZ = 'America/Costa_Rica';
 
@@ -98,10 +98,11 @@ function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext,
     return parts.join('\n\n');
   }
 
-  // Her memory of the conversation travels to a cloud provider only when the switch says so.
+  // Last ~10 turns travel with every request (local and cloud): follow-ups like "sí, cuéntame"
+  // need the question she just asked. Voice uses the same history via chat:send → llm.chat.
   function messagesFor(cfg, cloud, user) {
     const messages = [{ role: 'system', content: systemPrompt(cfg, cloud) }];
-    if (!cloud || cfg.llm?.shareMemory) messages.push(...history);
+    messages.push(...history);
     messages.push({ role: 'user', content: user });
     return messages;
   }

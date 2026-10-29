@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { parseMusicCommand } = require('../src/main/music-command');
+const { parseMusicCommand, DEFAULT_HER_SONG } = require('../src/main/music-command');
 const { createPkce } = require('../src/main/spotify');
 
 test('parses media commands without matching ordinary phrases', () => {
@@ -14,6 +14,18 @@ test('parses media commands without matching ordinary phrases', () => {
   assert.deepEqual(parseMusicCommand('silencio'), { action: 'mute' });
   assert.deepEqual(parseMusicCommand('qué está sonando'), { action: 'nowPlaying' });
   assert.equal(parseMusicCommand('la siguiente pregunta'), null);
+});
+
+test('her song phrases map to music.herSong (default)', () => {
+  assert.equal(DEFAULT_HER_SONG, "I'm in love with myself");
+  for (const said of ['pon tu canción', 'pon tu canción favorita', 'tu canción', 'play your song']) {
+    assert.deepEqual(parseMusicCommand(said), {
+      action: 'query', query: DEFAULT_HER_SONG, herSong: true,
+    }, said);
+  }
+  assert.deepEqual(parseMusicCommand('pon tu canción', { herSong: 'Custom Hit' }), {
+    action: 'query', query: 'Custom Hit', herSong: true,
+  });
 });
 
 test('creates a valid PKCE verifier and S256 challenge', () => {

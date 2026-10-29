@@ -4,6 +4,8 @@ const { normalizeCommandText } = require('./command-text');
 
 // What Whisper and the chat box actually write. normalizeCommandText drops accents and
 // punctuation, and Whisper often spells "despausa" as "despauza".
+const DEFAULT_HER_SONG = "I'm in love with myself";
+const HER_SONG = /^(?:(?:pon|ponme|reproduce|reproduceme|toca|play) )?(?:tu cancion(?: favorita)?|your song)$/;
 const SONG = '(?: (?:la |el )?(?:musica|cancion|tema|rola|pista))?';
 const PATTERNS = [
   ['pause', new RegExp(`^(?:pausa|pausala|pausar|para|deten|stop)${SONG}$`)],
@@ -19,16 +21,21 @@ const PATTERNS = [
   ['nowPlaying', /^(?:que (?:esta sonando|suena)|que cancion (?:es esta|es|suena))$/],
 ];
 
-function parseMusicCommand(text) {
+function parseMusicCommand(text, { herSong = DEFAULT_HER_SONG } = {}) {
   const raw = String(text || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   const parts = raw.split(',').map((part) => part.trim()).filter(Boolean);
   if (parts.length > 1) {
-    const parsed = parts.map((part) => parseMusicCommand(part));
+    const parsed = parts.map((part) => parseMusicCommand(part, { herSong }));
     if (parsed.every((item) => item && item.action === parsed[0].action)) return parsed[0];
   }
   const value = normalizeCommandText(text).replace(/\s+por favor$/, '').trim();
   if (!value) return null;
   for (const [action, re] of PATTERNS) if (re.test(value)) return { action };
+  // her song: before generic "pon X" / "play X", so "tu canción" is not a search for those words
+  if (HER_SONG.test(value)) {
+    const query = String(herSong || '').trim() || DEFAULT_HER_SONG;
+    return { action: 'query', query, herSong: true };
+  }
   const spotify = /^(?:pon|ponme|reproduce|toca|play) (.+?) en spotify$/.exec(value);
   if (spotify) return { action: 'query', query: spotify[1], player: 'spotify' };
   const playEn = /^play (?!music(?:a)?$)(.+)$/.exec(value);
@@ -38,4 +45,4 @@ function parseMusicCommand(text) {
   return null;
 }
 
-module.exports = { parseMusicCommand };
+module.exports = { parseMusicCommand, DEFAULT_HER_SONG };

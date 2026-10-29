@@ -91,6 +91,11 @@ const POOLS = {
     'Poniendo música.', 'Namida despierta el beat.', 'Música en camino.', 'Que empiece el ruido.',
     'Abriendo la pista.', 'Dale, que suene.', 'Preparando música.', 'Play para ti.',
   ],
+  musicaSuCancion: [
+    'Obvio que es sobre mí. ¿Quién más iba a ser?',
+    'Mi canción. Spoiler: la protagonista soy yo.',
+    'Ah, la mía. Como si no lo supieras, humanito.',
+  ],
   olvidar: [
     'Listo, borrado. ¿De qué estábamos hablando? Ni idea.',
     'Memoria limpia. Empezamos de cero, ¿sí?',

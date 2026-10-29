@@ -92,6 +92,7 @@ const DEFAULTS = {
   },
   music: {
     player: 'namida', // 'namida' | 'spotify' | 'none'
+    herSong: "I'm in love with myself", // "pon tu canción" / "play your song"
     spotify: { clientId: '' },
   },
   apps: {
