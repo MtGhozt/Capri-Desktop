@@ -18,6 +18,7 @@ from server import (  # noqa: E402
     WAKE_THRESHOLD,
     as_pcm16,
     load_openwakeword,
+    resolve_wake_model,
     wake_score_max,
 )
 
@@ -62,8 +63,11 @@ def tts_hey_jarvis(dest: Path) -> None:
 
 def load_model():
     Model, download_models = load_openwakeword()
-    download_models(model_names=["hey_jarvis"])
-    return Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+    # the clip below says "hey jarvis": score it against whatever that name resolves to
+    model, _fell_back = resolve_wake_model("hey_jarvis")
+    if not model.lower().endswith(".onnx"):
+        download_models(model_names=[model])
+    return Model(wakeword_models=[model], inference_framework="onnx")
 
 
 def score_clip(model, wav_path: Path) -> float:

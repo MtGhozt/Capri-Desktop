@@ -15,7 +15,7 @@ const NO_PLAYER = 'No tienes un reproductor de música elegido. Elige uno en el 
 function createMusic({
   config, apps, sendKey, spotify, isRunning = () => false, spawnProcess = spawn,
   wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  openExternal = null, findTrack = findNamidaTrack,
+  openExternal = null, findTrack = findNamidaTrack, log = () => {},
 } = {}) {
   const key = (action) => sendKey(action, KEY_SCRIPT);
   const playerApp = () => apps?.().find((item) => item.name.toLowerCase() === 'namida');
@@ -65,18 +65,15 @@ function createMusic({
   async function playNamidaQuery(query) {
     const hit = findTrack(query);
     if (!hit) return { ok: false };
+    log(`namida match: ${hit.title} score=${hit.score}`);
     const app = playerApp();
     if (!app?.target) {
       return { ok: false, error: 'No encuentro Namida en tus apps. Agrégala en el menú APPS.' };
     }
-    if (!(await isRunning('namida'))) {
-      spawnProcess(app.target, [hit.path], { detached: true, stdio: 'ignore' }).unref();
-      await wait(2500);
-    } else {
-      spawnProcess(app.target, [hit.path], { detached: true, stdio: 'ignore' }).unref();
-      await wait(400);
-      await key('play');
-    }
+    // handing Namida the file already plays it: a play key here would just pause it
+    const running = await isRunning('namida');
+    spawnProcess(app.target, [hit.path], { detached: true, stdio: 'ignore' }).unref();
+    await wait(running ? 400 : 2500);
     return {
       ok: true, action: 'query', player: 'namida',
       track: hit.title, artist: hit.artist || '', path: hit.path,

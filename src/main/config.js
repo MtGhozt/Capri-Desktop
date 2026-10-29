@@ -104,7 +104,7 @@ const DEFAULTS = {
     pushToTalk: 'Ctrl+Alt+V',
     wakeWord: true,
     wakeThreshold: 0.2,
-    wakeModel: 'hey_jarvis',
+    wakeModel: 'hey_capri',  // voice/models/hey_capri.onnx if it exists; otherwise hey_jarvis (see docs/wake-word.md)
     sttModel: 'auto',
     language: 'es',
     inputDevice: null,

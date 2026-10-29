@@ -25,6 +25,17 @@ test('every direct command has a pool of 8 to 10 lines', () => {
   }
 });
 
+// he is a man: no feminine form aimed at him, no love pet names, no clinginess
+const FORBIDDEN = /juntitas|cansada\b|mi amor|cariño|corazón|mi vida|bebé|papi|papito|te extrañé|extrañaste|soñá conmigo/i;
+
+test('her lines never call him feminine, romantic or clingy', () => {
+  const { GREETINGS } = require('../src/main/greetings');
+  for (const [kind, pool] of Object.entries(POOLS)) {
+    for (const line of pool) assert.equal(FORBIDDEN.test(line), false, `${kind}: ${line}`);
+  }
+  for (const item of GREETINGS) assert.equal(FORBIDDEN.test(item.text), false, item.id);
+});
+
 test('never repeats any of the last three lines of the same command', () => {
   resetLines();
   const picks = [];

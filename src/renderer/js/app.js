@@ -608,7 +608,7 @@ async function boot() {
     if (type === 'transcript') {
       bumpIdle();
       await unfold({ chat: true });
-      bubble.submitFromVoice(evt.text);
+      bubble.submitFromVoice(evt.text, evt.command);
       return;
     }
     if (type === 'talking') {

@@ -76,3 +76,40 @@ test('namida query launches the matched file', async () => {
   assert.equal(r.track, 'song');
   assert.ok(spawned.some((row) => row[0] === 'C:\\Namida\\namida.exe' && row[1] === 'C:\\lib\\song.mp3'));
 });
+
+test('opening a song never sends the play key (Namida already started it)', async () => {
+  const keys = [];
+  const lines = [];
+  const music = createMusic({
+    config: { load: () => ({ music: { player: 'namida' } }) },
+    apps: () => [{ name: 'Namida', target: 'C:\\Namida\\namida.exe' }],
+    spotify: { playQuery: async () => ({ ok: false, fallback: true }) },
+    openExternal: async () => {},
+    findTrack: () => ({ path: 'C:\\lib\\My Alcoholic Friends.mp3', title: 'My Alcoholic Friends', artist: '', score: 1230 }),
+    sendKey: async (action) => { keys.push(action); },
+    isRunning: async () => true,
+    spawnProcess: () => ({ unref() {} }),
+    wait: async () => {},
+    log: (text) => lines.push(text),
+  });
+  const r = await music.command({ action: 'query', query: 'alcoholic friends' });
+  assert.equal(r.ok, true);
+  assert.deepEqual(keys, []);
+  assert.deepEqual(lines, ['namida match: My Alcoholic Friends score=1230']);
+});
+
+test('"mi alcoholic friends" finds the song and nothing else', () => {
+  const files = [
+    path.join('C:', 'lib', 'My Alcoholic Friends.mp3'),
+    path.join('C:', 'lib', 'Limit Break.mp3'),
+    path.join('C:', 'lib', 'Mi Gente.mp3'),
+  ];
+  const search = (query) => findNamidaTrack(query, {
+    dirs: ['C:\\lib'],
+    listFiles: (_dir, out) => { out.push(...files); },
+  });
+  const hit = search('mi alcoholic friends');
+  assert.ok(hit, 'should find the song');
+  assert.equal(hit.title, 'My Alcoholic Friends');
+  assert.equal(search('bohemian rhapsody'), null); // "mi" used to match Limit Break
+});

@@ -1,10 +1,60 @@
 import unittest
+import asyncio
 import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
+import numpy as np
 import server
+
+
+class WakeModelTests(unittest.TestCase):
+    def test_bare_name_resolves_to_the_custom_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            model = Path(tmp) / "hey_capri.onnx"
+            model.write_bytes(b"onnx")
+            name, fell_back = server.resolve_wake_model("hey_capri", Path(tmp))
+            self.assertEqual((name, fell_back), (str(model), False))
+
+    def test_relative_path_resolves_from_the_models_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            model = Path(tmp) / "custom.onnx"
+            model.write_bytes(b"onnx")
+            name, fell_back = server.resolve_wake_model("custom.onnx", Path(tmp))
+            self.assertEqual((name, fell_back), (str(model), False))
+
+    def test_builtin_name_stays_builtin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            name, fell_back = server.resolve_wake_model("hey_jarvis", Path(tmp))
+            self.assertEqual((name, fell_back), ("hey_jarvis", False))
+
+    def test_missing_model_falls_back_to_hey_jarvis(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            name, fell_back = server.resolve_wake_model("hey_capri", Path(tmp))
+            self.assertEqual((name, fell_back), ("hey_jarvis", True))
+
+
+class UtteranceTests(unittest.TestCase):
+    def test_one_utterance_is_one_transcript(self):
+        engine = server.Engine.__new__(server.Engine)
+        engine._lock = __import__("threading").Lock()
+        engine.capturing = True
+        engine.buffer = np.zeros(4000, dtype=np.float32)
+        engine.speech_ms = 400.0
+        engine.silence_ms = 800.0
+        engine.follow = False
+        engine.follow_s = 0.0
+        engine.cfg = {"debugSave": False}
+        engine.arm_wake = lambda: None
+        engine.transcribe = lambda _audio: "Hola Capri, pon música"
+        seen = []
+        engine.broadcast = seen.append
+        asyncio.run(engine.finish(reason="vad"))
+        transcripts = [item for item in seen if item.get("type") == "transcript"]
+        self.assertEqual(len(transcripts), 1)
+        self.assertEqual(transcripts[0]["text"], "Hola Capri, pon música")
 
 
 class ServerConfigTests(unittest.TestCase):

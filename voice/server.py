@@ -115,6 +115,24 @@ def as_pcm16(frame: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(np.clip(frame * 32767.0, -32768, 32767).astype(np.int16))
 
 
+BUILTIN_WAKE = ("alexa", "hey_mycroft", "hey_jarvis", "hey_rhasspy", "timer", "weather")
+
+# openWakeWord ships a few models; anything else is a custom .onnx we train (docs/wake-word.md).
+def resolve_wake_model(value, models: Path = MODELS) -> tuple[str, bool]:
+    """wakeModel -> (name or path openWakeWord can load, whether we fell back to hey_jarvis)."""
+    raw = str(value or "hey_capri").strip()
+    looks_like_path = raw.lower().endswith(".onnx") or "/" in raw or "\\" in raw
+    if looks_like_path:
+        path = Path(raw)
+        if not path.is_absolute():
+            path = models / path
+        return (str(path), False) if path.is_file() else ("hey_jarvis", True)
+    if raw.lower() in BUILTIN_WAKE:
+        return raw.lower(), False
+    custom = models / f"{raw}.onnx"
+    return (str(custom), False) if custom.is_file() else ("hey_jarvis", True)
+
+
 def wake_score_max(scores) -> tuple[float, dict]:
     if not isinstance(scores, dict):
         scores = {"score": scores}
@@ -206,7 +224,7 @@ class Engine:
             "enabled": True,
             "wakeWord": True,
             "wakeThreshold": WAKE_THRESHOLD,
-            "wakeModel": "hey_jarvis",
+            "wakeModel": "hey_capri",
             "sttModel": "auto",
             "language": "es",
             "inputDevice": None,
@@ -396,17 +414,19 @@ class Engine:
         log(f"stt unloaded reason=mic-idle vram_free={free_vram_mib()}")
 
     def _load_wake(self):
-        model = self.cfg.get("wakeModel") or "hey_jarvis"
+        model, fell_back = resolve_wake_model(self.cfg.get("wakeModel"))
+        if fell_back:
+            log(f"wake model {self.cfg.get('wakeModel') or 'hey_capri'} not found, using hey_jarvis")
         last_err = None
         for attempt in range(1, WAKE_ATTEMPTS + 1):
             try:
                 Model, download_models = load_openwakeword()
-                download_models(model_names=[model], target_directory=str(MODELS))
-                download_models(model_names=[model])
-                custom = sorted(MODELS.glob(f"*{model}*.onnx"))
-                names = [str(custom[0])] if custom else [model]
-                wake = Model(wakeword_models=names, inference_framework="onnx")
-                log(f"wake word {model} ready threshold={self.wake_threshold()} onnx={names}")
+                # a custom .onnx is already on disk; a built-in name is downloaded once
+                if not model.lower().endswith(".onnx"):
+                    download_models(model_names=[model], target_directory=str(MODELS))
+                    download_models(model_names=[model])
+                wake = Model(wakeword_models=[model], inference_framework="onnx")
+                log(f"wake word {model} ready threshold={self.wake_threshold()}")
                 return wake
             except Exception as err:
                 last_err = err

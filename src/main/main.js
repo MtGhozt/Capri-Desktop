@@ -32,6 +32,7 @@ const { createSpotify, createTokenStore, authorizeSpotify, spotifyFailureLine } 
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
 const { parseFixCommand, readTranscript } = require('./fix-command');
+const { stripWakeWord } = require('./command-text');
 const { GREETINGS, pickGreeting } = require('./greetings');
 const { windowContext } = require('./context');
 const { createComments } = require('./comments');
@@ -684,9 +685,9 @@ function hearTranscript(payload) {
   if (!read.order && said.trim()) lastHeard = said.trim();
   // what Whisper wrote, so a command that went to the model can be traced (and fixed)
   if (said.trim()) logEvent(voiceLogPath(), `[capri] heard: ${JSON.stringify(said.trim().slice(0, 200))}`);
-  if (!read.heard) return payload;
-  logEvent(voiceLogPath(), `[capri] heard fix: ${JSON.stringify(said)} -> ${JSON.stringify(read.text)}`);
-  return { ...payload, text: read.text, heard: read.heard };
+  if (read.heard) logEvent(voiceLogPath(), `[capri] heard fix: ${JSON.stringify(said)} -> ${JSON.stringify(read.text)}`);
+  // the wake word is not part of the order; the chat still shows what he said ("Hola Capri")
+  return { ...payload, text: read.text, command: stripWakeWord(read.text), heard: read.heard };
 }
 
 function saveFix(heard, meant) {
@@ -835,6 +836,7 @@ const music = createMusic({
   apps: allApps,
   spotify,
   openExternal: (url) => shell.openExternal(url),
+  log: (text) => appLog(text),
   isRunning: (name) => processRunning(name),
   sendKey: (action, script) => new Promise((resolve, reject) => {
     if (process.platform !== 'win32') return reject(new Error('media keys require Windows'));

@@ -17,7 +17,7 @@ function temporalContext({ now = new Date(), lastTalkAt = null } = {}) {
   const get = (type) => parts.find((p) => p.type === type)?.value || '';
   const hour = Number(get('hour'));
   const period = hour < 6 ? 'madrugada' : hour < 12 ? 'mañana' : hour < 19 ? 'tarde' : 'noche';
-  let elapsed = 'es la primera conversación de esta sesión';
+  let elapsed = 'sin conversación previa en esta sesión (no menciones fecha ni hora salvo que él lo pida o importe)';
   if (Number.isFinite(lastTalkAt)) {
     const minutes = Math.max(0, Math.round((now.getTime() - lastTalkAt) / 60000));
     if (minutes < 1) elapsed = 'hace menos de 1 minuto';

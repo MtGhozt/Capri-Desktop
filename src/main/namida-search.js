@@ -6,22 +6,45 @@ const os = require('node:os');
 
 const AUDIO_EXT = new Set(['.mp3', '.flac', '.opus', '.m4a', '.wav', '.ogg', '.aac', '.wma']);
 
+// words that say nothing about which song it is (whisper turns "my" into "mi")
+const FILLER = new Set([
+  'mi', 'my', 'me', 'the', 'el', 'la', 'los', 'las', 'lo', 'un', 'una', 'unos', 'unas',
+  'de', 'del', 'of', 'a', 'an', 'y', 'and', 'para', 'por', 'con', 'que', 'to', 'en',
+]);
+
 function fold(s) {
   return String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 }
 
 function tokens(query) {
-  return fold(query).split(/[^a-z0-9]+/).filter((t) => t.length > 1);
+  return fold(query).split(/[^a-z0-9]+/).filter((t) => t.length > 1 && !FILLER.has(t));
 }
 
+// how many of the query's words a file has to contain to count as the song
+const MATCH_RATIO = 0.6;
+
+/**
+ * How well `filePath` answers the query: most of its words must appear, and words found in the
+ * title weigh more than ones only in the artist or the file name. 0 = not that song.
+ */
 function scorePath(filePath, queryTokens) {
-  const base = fold(path.basename(filePath, path.extname(filePath)));
   if (!queryTokens.length) return 0;
-  let hit = 0;
-  for (const t of queryTokens) if (base.includes(t)) hit += 1;
-  if (hit === 0) return 0;
-  const full = hit === queryTokens.length;
-  return (full ? 1000 : 0) + hit * 10 + Math.min(base.length, 80);
+  const { title, artist } = titleFromFile(filePath);
+  const t = fold(title);
+  const a = fold(artist);
+  const base = fold(path.basename(filePath, path.extname(filePath)));
+  let hits = 0;
+  let inTitle = 0;
+  for (const tok of queryTokens) {
+    if (t.includes(tok)) {
+      hits += 1;
+      inTitle += 1;
+    } else if (a.includes(tok) || base.includes(tok)) {
+      hits += 1;
+    }
+  }
+  if (hits < Math.ceil(queryTokens.length * MATCH_RATIO)) return 0;
+  return (inTitle === queryTokens.length ? 1000 : 0) + hits * 100 + inTitle * 10;
 }
 
 function readScanDirs(home = os.homedir()) {
@@ -74,7 +97,7 @@ function findNamidaTrack(query, { home = os.homedir(), listFiles = walkAudio, di
       best = file;
     }
   }
-  if (!best || bestScore < 10) return null;
+  if (!best) return null;
   return { path: best, ...titleFromFile(best), score: bestScore };
 }
 

@@ -26,6 +26,13 @@ test('temporal context names Costa Rica time, Spanish day period and elapsed sil
   assert.match(text, /hace 3 horas/i);
 });
 
+test('the first minute of a session does not invite a date or time greeting', () => {
+  const text = temporalContext({ now: new Date('2026-10-29T02:30:00.000Z') });
+  assert.equal(/primera conversación/i.test(text), false);
+  assert.match(text, /sin conversación previa/i);
+  assert.match(text, /no menciones fecha ni hora/i);
+});
+
 function cfgOf(patch = {}) {
   return {
     lang: 'es',

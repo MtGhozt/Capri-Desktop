@@ -264,12 +264,13 @@ export class Bubble {
     this.sendLine(text);
   }
 
-  submitFromVoice(text) {
+  // what he said stays in the chat; the order without the wake word is what gets processed
+  submitFromVoice(text, command = '') {
     const line = String(text || '').trim();
     if (!line || this.busy) return;
     if (!this.open) this.show();
     this.note('oido', line);
-    this.sendLine(line, { heard: true });
+    this.sendLine(String(command || '').trim() || line, { heard: true });
   }
 
   sendLine(text, { heard = false } = {}) {

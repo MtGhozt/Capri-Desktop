@@ -11,7 +11,10 @@ scripts/shot-*.js
 
 # voice sidecar (venv + downloaded models + clone audio — never ship)
 voice/.venv/
-voice/models/
+voice/models/*
+!voice/models/.gitkeep
+voice/models/**/*.onnx
+voice/models/**/*.tflite
 voice/__pycache__/
 voice/**/__pycache__/
 voice/ref/

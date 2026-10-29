@@ -5,7 +5,7 @@
 // that file: don't renumber them.
 
 const GREETINGS = [
-  { id: 'greet-1', text: '¡Hola, humanito! ¿Me extrañaste?' },
+  { id: 'greet-1', text: '¡Hola, humanito! Si sobreviviste sin mí, qué decepción.' },
   { id: 'greet-2', text: 'Bueno, bueno… ya llegué. Que empiece la diversión.' },
   { id: 'greet-3', text: '¡Hola! Seamos mejores amigos hoy también, ¿sí?' },
   { id: 'greet-4', text: 'Ya estoy aquí, tontito. ¿Qué hacemos?' },
