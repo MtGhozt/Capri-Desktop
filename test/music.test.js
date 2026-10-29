@@ -35,6 +35,26 @@ test('spotify credentials are not persisted by config or logs', () => {
   assert.equal(JSON.stringify(safe).includes('secret'), false);
 });
 
+test('a free account opens the track in the app instead of failing on 403', async () => {
+  const { createSpotify } = require('../src/main/spotify');
+  const calls = [];
+  const opened = [];
+  const spotify = createSpotify({
+    token: () => 'token',
+    request: async (endpoint, access, body, method = 'GET') => {
+      calls.push(`${method} ${endpoint}`);
+      if (endpoint === '/v1/search') {
+        return { tracks: { items: [{ uri: 'spotify:track:abc', name: 'Neon', artists: [{ name: 'Juno' }] }] } };
+      }
+      throw new Error('Spotify HTTP 403'); // play needs Premium
+    },
+  });
+  const result = await spotify.playQuery('neon', async (uri) => { opened.push(uri); });
+  assert.deepEqual(result, { ok: true, track: 'Neon', artist: 'Juno' });
+  assert.deepEqual(opened, ['spotify:track:abc']);
+  assert.deepEqual(calls, ['GET /v1/search', 'PUT /v1/me/player/play']); // no devices round-trip
+});
+
 test('spotify oauth listens on 47835, 404s anything but /callback and exchanges the code', async () => {
   const { authorizeSpotify } = require('../src/main/spotify');
   let stray = null;

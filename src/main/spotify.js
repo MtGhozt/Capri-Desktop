@@ -83,18 +83,19 @@ async function authorizeSpotify({ clientId, openExternal, tokenStore, port = OAU
 }
 
 function createSpotify({ token, request = defaultRequest } = {}) {
-  async function playQuery(query) {
+  async function playQuery(query, openTrack) {
     const access = token?.();
     if (!access) return { ok: false, fallback: true };
     const result = await request('/v1/search', access, { q: query, type: 'track', limit: 1 });
     const track = result?.tracks?.items?.[0];
     if (!track) return { ok: false, error: 'No encontré esa canción.' };
-    const devices = await request('/v1/me/player/devices', access);
-    const device = devices?.devices?.find((item) => item.is_active) || devices?.devices?.[0];
-    if (!device) return { ok: false, error: 'Spotify no tiene un dispositivo activo.' };
-    await request(`/v1/me/player/play?device_id=${encodeURIComponent(device.id)}`, access, {
-      uris: [track.uri],
-    }, 'PUT');
+    try {
+      await request('/v1/me/player/play', access, { uris: [track.uri] }, 'PUT');
+    } catch {
+      // play needs Premium (403) and a live device: hand the track to the desktop app instead
+      if (!openTrack) throw new Error('Spotify no pudo reproducir esa canción.');
+      await openTrack(track.uri);
+    }
     return { ok: true, track: track.name, artist: track.artists?.[0]?.name || '' };
   }
 

@@ -53,12 +53,9 @@ function createMusic({
 
   async function playSpotifyQuery(query) {
     if (spotify) {
-      const api = await spotify.playQuery(query);
+      // search or play blowing up (free account, no device) still ends in the app, not an error
+      const api = await spotify.playQuery(query, openExternal).catch(() => null);
       if (api?.ok) return { ...api, action: 'query', player: 'spotify' };
-      // token missing → URI search; hard API error still falls through to search
-      if (api && !api.fallback && api.error && !/dispositivo|No encontr/i.test(api.error || '')) {
-        /* keep going to URI */
-      }
     }
     if (typeof openExternal !== 'function') {
       return { ok: false, error: 'No pude abrir Spotify.' };
