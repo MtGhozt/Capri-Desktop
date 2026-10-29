@@ -1042,6 +1042,28 @@ button.appmenu__row {
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent-on) 40%, transparent));
 }
 
+/* Spotify's button only: green = connect, red = disconnect (the other fix-save buttons stay grey) */
+.appmenu__fix-save.is-connect {
+  background: var(--green);
+  box-shadow: none;
+  color: var(--bg);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--green) 40%, transparent));
+}
+
+.appmenu__fix-save.is-connect:hover {
+  background: color-mix(in srgb, var(--green) 78%, #fff);
+}
+
+.appmenu__fix-save.is-disconnect {
+  color: var(--danger, #ff5a6e);
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.appmenu__fix-save.is-disconnect:hover {
+  background: color-mix(in srgb, var(--danger, #ff5a6e) 18%, transparent);
+  color: var(--danger, #ff5a6e);
+}
+
 .appmenu__select {
   display: flex;
   flex: none;

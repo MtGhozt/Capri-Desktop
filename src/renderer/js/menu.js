@@ -538,7 +538,7 @@ export class AppMenu {
     client.value = state.music?.clientId || '';
     client.maxLength = 100;
     client.spellcheck = false;
-    const saveClient = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', state.music?.connected ? 'DESCONECTAR' : 'CONECTAR');
+    const saveClient = build('button', `appmenu__toggle-btn appmenu__fix-save is-active ${state.music?.connected ? 'is-disconnect' : 'is-connect'}`, state.music?.connected ? 'DESCONECTAR' : 'CONECTAR');
     saveClient.type = 'button';
     saveClient.addEventListener('click', (e) => {
       e.stopPropagation();
