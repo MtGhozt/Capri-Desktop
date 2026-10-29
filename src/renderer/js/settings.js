@@ -35,14 +35,29 @@ for (const tab of SETTINGS_TABS) {
 nav.firstElementChild.classList.add('is-active');
 
 menu.open = true;
+let pendingHint = '';
 window.addEventListener('capri-settings-tab', (event) => {
   const tab = SETTINGS_TABS.find((item) => item.id === event.detail);
   if (!tab) return;
   const button = [...nav.children].find((item) => item.textContent === tab.label);
   button?.click();
 });
+window.addEventListener('capri-setup-hint', (event) => {
+  pendingHint = String(event.detail || '');
+  menu.modelNote = pendingHint;
+  menu.expanded = 'model';
+  menu.settingsSection = 'model';
+  if (menu.lastState) menu.render(menu.lastState);
+});
 window.host.getMenu({ folded: false }).then((state) => {
   document.documentElement.dataset.theme = state.cfg.theme;
+  if (pendingHint) {
+    menu.modelNote = pendingHint;
+    menu.expanded = 'model';
+    menu.settingsSection = 'model';
+    nav.querySelector('.is-active')?.classList.remove('is-active');
+    [...nav.children].find((item) => item.textContent === 'Modelo y clave')?.classList.add('is-active');
+  }
   menu.render(state);
 }).catch((err) => {
   console.error('[capri] settings load failed', err);

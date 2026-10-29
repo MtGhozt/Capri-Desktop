@@ -33,6 +33,7 @@ const DEFAULTS = {
   },
   guide: {
     welcome: false,          // Claude Code "plug me in" onboarding
+    setupHint: false,        // first-run: opened Modelo y clave because nothing could answer yet
   },
   idle: {
     dormantAfterMs: 5 * 60 * 1000, // 0 = never fold into the DORMANT widget
@@ -108,17 +109,38 @@ const DEFAULTS = {
     language: 'es',
     inputDevice: null,
     debugSave: false,
-    tts: 'auto',             // 'auto' | 'omnivoice' | 'kokoro' | 'off'
-    ttsRef: null,            // null → voice/ref/capri_ref_short.wav
+    tts: 'off',              // public default: no spoken TTS (code path kept; enable locally if you have voice/)
+    ttsRef: null,            // optional local clone path; never bundled in the public build
     ttsSpeed: 1.0,
-    ttsSteps: 16,            // OmniVoice diffusion steps (8–32)
-    replyMode: 'voice',      // 'voice' | 'blips' | 'silent'
+    ttsSteps: 16,            // OmniVoice diffusion steps (8–32) when TTS is enabled locally
+    replyMode: 'blips',      // 'voice' | 'blips' | 'silent' — public default: typing beeps only
     ttsIdleUnloadMin: 10,    // DORMANT this long → release OmniVoice (0 = never)
     sttIdleUnloadMin: 10,    // mic muted this long → release Whisper (0 = never)
   },
 };
 
 let cache = null;
+
+// Pre-4L defaults written into many configs even when the user never opened the voice menu.
+// Migrate that baked-in pair to blips/off once. Leave alone if they pointed at a clone
+// (ttsRef / voice.dir) or already picked another reply mode.
+function migratePublicReply(voice) {
+  const v = { ...(voice || {}) };
+  if (v.publicReplyMigrated) return { voice: v, changed: false };
+  const mode = String(v.replyMode ?? 'voice').toLowerCase();
+  const tts = String(v.tts ?? 'auto').toLowerCase();
+  const hasClone = Boolean(v.ttsRef)
+    || (typeof v.dir === 'string' && v.dir.trim().length > 0);
+  const looksLikeOldDefault = mode === 'voice'
+    && (tts === 'auto' || tts === 'on' || tts === 'true')
+    && !hasClone;
+  if (looksLikeOldDefault) {
+    v.replyMode = 'blips';
+    v.tts = 'off';
+  }
+  v.publicReplyMigrated = true;
+  return { voice: v, changed: true };
+}
 
 function file() {
   return path.join(app.getPath('userData'), 'config.json');
@@ -173,16 +195,21 @@ function load() {
   } catch {
     cache = { ...DEFAULTS };
   }
+  let dirty = false;
   // Older installs defaulted to English; Capri now speaks Spanish.
   if (cache.lang === 'en') {
     cache.lang = 'es';
-    persist();
+    dirty = true;
   }
   // The local model used to live in llm.model alone: keep hers when moving to a provider.
   if (!cache.llm.localModel) {
     cache.llm.localModel = cache.llm.model;
-    persist();
+    dirty = true;
   }
+  const reply = migratePublicReply(cache.voice);
+  cache.voice = reply.voice;
+  if (reply.changed) dirty = true;
+  if (dirty) persist();
   return cache;
 }
 
@@ -234,4 +261,4 @@ function save(patch) {
   return cache;
 }
 
-module.exports = { load, save, filePath: file, DEFAULTS };
+module.exports = { load, save, filePath: file, DEFAULTS, migratePublicReply };

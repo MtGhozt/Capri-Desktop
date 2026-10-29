@@ -465,7 +465,7 @@ export class AppMenu {
     });
     selector('Respuesta', {
       options: REPLY_OPTIONS,
-      current: String(cfg.replyMode || 'voice'),
+      current: String(cfg.replyMode || 'blips'),
       onChange: (id) => this.act('reply-mode', id),
     });
 
@@ -534,7 +534,17 @@ export class AppMenu {
       danger: this.confirmForget,
       onClick: () => this.act('forget'),
     });
-    action('Recargar personalidad', { value: 'PERSONA.MD', onClick: () => this.act('persona-reload') });
+    action('Abrir personalidad', {
+      setting: 'memory',
+      value: 'PERSONA.MD',
+      onClick: () => this.act('persona-open'),
+    });
+    action('Abrir memoria', {
+      setting: 'memory',
+      value: 'MEMORY.MD',
+      onClick: () => this.act('memory-open'),
+    });
+    action('Recargar personalidad', { setting: 'memory', value: 'RELEER', onClick: () => this.act('persona-reload') });
 
     // OÍDO: what she hears wrong (Paso 4A)
     section('OÍDO', 'hearing');

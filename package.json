@@ -1,9 +1,9 @@
 {
   "name": "capri-desktop",
-  "version": "0.2.0",
-  "description": "Capri, the Project Capricorn construct, living on your desktop and narrating what Claude Code is doing.",
-  "author": "mochiiwuff",
-  "repository": "github:mochiiwuff/capri-desktop",
+  "version": "0.1.0",
+  "description": "Capri, the Project Capricorn construct, living on your desktop. Free forever.",
+  "author": "Capri Desktop contributors",
+  "repository": "github:MatiasBS027/Capri-Desktop",
   "main": "src/main/main.js",
   "private": true,
   "scripts": {
@@ -22,7 +22,7 @@
     "cyberpunk",
     "edgerunners"
   ],
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {
     "node": ">=20"
   },
@@ -39,13 +39,20 @@
   "build": {
     "appId": "capri.desktop",
     "productName": "Capri",
+    "copyright": "Copyright Capri Desktop contributors",
     "files": [
-      "src/**",
-      "assets/**",
-      "hooks/**",
-      "scripts/**",
+      "src/**/*",
+      "assets/**/*",
+      "hooks/**/*",
       "package.json",
-      "LICENSE"
+      "LICENSE",
+      "CREDITS.md",
+      "!voice/**",
+      "!**/*.wav",
+      "!**/ref/**",
+      "!scripts/**",
+      "scripts/install-hooks.js",
+      "scripts/demo-sequence.js"
     ],
     "asarUnpack": [
       "hooks/**",
@@ -56,7 +63,12 @@
       "src/main/media-keys.ps1"
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
       "icon": "assets/icons/capri.ico"
     },
     "nsis": {

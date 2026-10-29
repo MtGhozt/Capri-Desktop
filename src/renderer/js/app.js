@@ -765,8 +765,8 @@ async function boot() {
   });
 
   const applyVoiceHold = (cfg) => {
-    const kind = String(cfg.voice?.tts || 'auto').toLowerCase();
-    const mode = String(cfg.voice?.replyMode || 'voice').toLowerCase();
+    const kind = String(cfg.voice?.tts || 'off').toLowerCase();
+    const mode = String(cfg.voice?.replyMode || 'blips').toLowerCase();
     bubble.replyMode = mode;
     bubble.holdVoice = mode === 'voice' && cfg.voice?.enabled !== false && !cfg.muted && kind !== 'off' && kind !== 'none' && kind !== 'false';
   };

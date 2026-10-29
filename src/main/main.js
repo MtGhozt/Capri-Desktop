@@ -59,6 +59,8 @@ const {
 const hooks = require('../../scripts/install-hooks');
 const demoSteps = require('../../scripts/demo-sequence');
 const { createSettingsWindow } = require('./settings-window');
+const { ensureUserFiles } = require('./user-files');
+const { needsModelSetup, probeLocalLlm, SETUP_HINT } = require('./setup');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DEV = process.argv.includes('--dev');
@@ -101,6 +103,7 @@ let gameHadVoice = false;
 let lastGreetingAt = 0;
 let bootGreetingDone = false;
 let greeting = null;
+let userFiles = null;
 const GREETING_COOLDOWN_MS = 10 * 60_000;
 
 const userSoundsDir = () => path.join(app.getPath('userData'), 'sounds');
@@ -756,6 +759,49 @@ function saveLlmKey(id, key) {
   llmKeys().write(all);
   return Boolean(clean);
 }
+
+function hasAnyLlmKey() {
+  const all = llmKeys().read() || {};
+  return Object.values(all).some((value) => String(value || '').trim());
+}
+
+async function maybeOpenSetupHint() {
+  const cfg = config.load();
+  if (cfg.guide?.setupHint) return;
+  const localReachable = await probeLocalLlm(cfg.llm?.baseUrl);
+  if (!needsModelSetup({ hasAnyKey: hasAnyLlmKey(), localReachable })) return;
+  config.save({ guide: { setupHint: true } });
+  openSettingsTab('model', SETUP_HINT);
+}
+
+function openSettingsTab(tab = null, hint = '') {
+  settingsWindow = createSettingsWindow({
+    BrowserWindow,
+    existing: settingsWindow,
+    url: 'capri://app/src/renderer/settings.html',
+    options: {
+      webPreferences: {
+        preload: path.join(__dirname, '..', 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    },
+  });
+  settingsWindow.once?.('closed', () => { settingsWindow = null; });
+  const boot = () => {
+    const parts = [];
+    if (tab) parts.push(`window.dispatchEvent(new CustomEvent('capri-settings-tab',{detail:${JSON.stringify(tab)}}))`);
+    if (hint) parts.push(`window.dispatchEvent(new CustomEvent('capri-setup-hint',{detail:${JSON.stringify(hint)}}))`);
+    if (parts.length) settingsWindow.webContents.executeJavaScript(parts.join(';')).catch(() => {});
+  };
+  if (settingsWindow.webContents.isLoading?.()) {
+    settingsWindow.webContents.once('did-finish-load', boot);
+  } else {
+    boot();
+  }
+  return { ok: true };
+}
 // is that program up? (tasklist, so no extra script)
 function processRunning(name) {
   return new Promise((resolve) => {
@@ -1049,8 +1095,8 @@ function ttsOn() {
 function voiceReplyOn() {
   const cfg = config.load();
   if (cfg.muted) return false;
-  if (String(cfg.voice?.replyMode || 'voice').toLowerCase() !== 'voice') return false;
-  const kind = String(cfg.voice?.tts || 'auto').toLowerCase();
+  if (String(cfg.voice?.replyMode || 'blips').toLowerCase() !== 'voice') return false;
+  const kind = String(cfg.voice?.tts || 'off').toLowerCase();
   return kind !== 'off' && kind !== 'none' && kind !== 'false';
 }
 
@@ -1118,7 +1164,7 @@ function applyMenuAction(id, value) {
     case 'wake': goWakeReply({ chat: false }); break;
     case 'scale': updateConfig({ scale: Number(value) }); break;
     case 'muted': updateConfig({ muted: Boolean(value) }); break;
-    case 'reply-mode': updateConfig({ voice: { replyMode: String(value || 'voice') } }); break;
+    case 'reply-mode': updateConfig({ voice: { replyMode: String(value || 'blips') } }); break;
     case 'music-player':
       updateConfig({ music: { player: ['namida', 'spotify', 'none'].includes(value) ? value : 'namida' } });
       break;
@@ -1173,6 +1219,16 @@ function applyMenuAction(id, value) {
         badge: 'MEM',
         text: r.ok ? 'Personalidad recargada. Soy más yo que antes.' : 'No pude releer persona.md.',
       });
+      break;
+    }
+    case 'persona-open': {
+      const file = userFiles?.persona?.path;
+      if (file) shell.openPath(file);
+      break;
+    }
+    case 'memory-open': {
+      const file = userFiles?.memory?.path;
+      if (file) shell.openPath(file);
       break;
     }
     case 'clip-save': goClipReply({ chat: false }); break;
@@ -1343,7 +1399,7 @@ function menuState(extra = {}) {
       possess: cfg.possess,
       mic: micActive(cfg),
       micDevice: cfg.voice?.inputDevice ?? null,
-      replyMode: String(cfg.voice?.replyMode || 'voice'),
+      replyMode: String(cfg.voice?.replyMode || 'blips'),
       locked: Boolean(cfg.position?.locked),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
       gaming: {
@@ -1608,24 +1664,7 @@ function registerIpc() {
   ipcMain.on('settings:close', () => {
     if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
   });
-  ipcMain.handle('settings:open', (_e, tab = null) => {
-    settingsWindow = createSettingsWindow({
-      BrowserWindow,
-      existing: settingsWindow,
-      url: 'capri://app/src/renderer/settings.html',
-      options: {
-        webPreferences: {
-          preload: path.join(__dirname, '..', 'preload.js'),
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-        },
-      },
-    });
-    settingsWindow.once?.('closed', () => { settingsWindow = null; });
-    if (tab) settingsWindow.webContents.once('did-finish-load', () => settingsWindow.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent('capri-settings-tab',{detail:${JSON.stringify(tab)}}))`));
-    return { ok: true };
-  });
+  ipcMain.handle('settings:open', (_e, tab = null) => openSettingsTab(tab || null));
   // her hello at boot: the overlay shows it, and it plays from the cached wav if there is one
   greeting = async function greeting({ unlock = false } = {}) {
     const cfg = config.load();
@@ -1851,13 +1890,15 @@ function main() {
   app.on('second-instance', () => sendCommand('status'));
   if (process.platform === 'win32') app.setAppUserModelId('capri.desktop');
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     restoreSpotifyToken();
     serveProtocol();
     registerIpc();
+    userFiles = ensureUserFiles({ userData: app.getPath('userData'), root: ROOT });
     llm = createLlm({
       loadConfig: () => config.load(),
-      personaPath: path.join(__dirname, 'persona.md'),
+      personaPath: userFiles.persona.path,
+      memoryPath: userFiles.memory.path,
       apiKey: (id) => llmKey(id),
       // what she may tell a cloud provider about your screen, only with the switch on
       screenContext: () => {
@@ -1979,6 +2020,7 @@ function main() {
     registerShortcuts();
     setTimeout(() => seedAppTable().catch((err) => appLog(`apps seed failed: ${err.message}`)), 5000);
     setTimeout(scanIfStale, 20000); // after her voice is up: the disk is busy enough before
+    setTimeout(() => maybeOpenSetupHint().catch((err) => logEvent(voiceLogPath(), `[capri] setup hint failed: ${err.message}`)), 2500);
 
     screen.on('display-metrics-changed', fitOverlay);
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });

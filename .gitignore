@@ -5,13 +5,38 @@ out/
 .DS_Store
 Thumbs.db
 
-# local debug captures
+# local debug captures / temp harness shots
 captures/
+scripts/shot-*.js
 
-# voice sidecar (venv + downloaded models)
+# voice sidecar (venv + downloaded models + clone audio — never ship)
 voice/.venv/
 voice/models/
 voice/__pycache__/
 voice/**/__pycache__/
-
 voice/ref/
+voice/**/*.wav
+voice/**/*.pt
+voice/**/*.onnx
+voice/**/*.bin
+*.wav
+
+# secrets and local runtime data
+.env
+.env.*
+!.env.example
+**/llm-keys
+**/spotify-tokens
+**/*secret*
+**/*credential*
+
+# userData-style files that must never enter the repo
+**/memory.md
+!src/main/defaults/memory.md
+config.json
+*.local.json
+
+# editor / OS
+.vscode/
+.idea/
+*.swp

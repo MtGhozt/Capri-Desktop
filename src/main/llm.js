@@ -30,18 +30,29 @@ function temporalContext({ now = new Date(), lastTalkAt = null } = {}) {
   return `Hora local: ${get('weekday')}, ${get('month')} ${get('day')} de ${get('year')} a las ${get('hour')}:${get('minute')} (${LOCAL_TZ}). Momento del día: ${period}. Última conversación: ${elapsed}.`;
 }
 
-function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback, ensureLocal, now = () => new Date() } = {}) {
+function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext, onFallback, ensureLocal, now = () => new Date() } = {}) {
   let history = [];
   let abort = null;
   let persona = null;
+  let memory = null;
   let lastTalkAt = null;
 
-  function readPersona() {
+  function readFile(file, fallback = '') {
     try {
-      return fs.readFileSync(personaPath, 'utf8').trim();
+      return fs.readFileSync(file, 'utf8').trim();
     } catch {
-      return 'You are Capri. Short, sarcastic, loyal. 1–3 sentences.';
+      return fallback;
     }
+  }
+
+  function readPersona() {
+    return readFile(personaPath, 'You are Capri. Short, sarcastic, loyal. 1–3 sentences.');
+  }
+
+  function readMemory() {
+    // Drop comment-only lines so an empty template doesn't pollute the prompt.
+    const raw = readFile(memoryPath, '');
+    return raw.split(/\r?\n/).filter((line) => !/^\s*#/.test(line)).join('\n').trim();
   }
 
   // Cached so "reload persona" is a real action: the menu re-reads persona.md without a restart.
@@ -50,8 +61,14 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
     return persona;
   }
 
+  function memoryText() {
+    if (memory == null) memory = readMemory();
+    return memory;
+  }
+
   function reloadPersona() {
     persona = readPersona();
+    memory = readMemory();
     return { ok: fs.existsSync(personaPath), chars: persona.length };
   }
 
@@ -71,11 +88,13 @@ function createLlm({ loadConfig, personaPath, apiKey, screenContext, onFallback,
     const base = personaText();
     const lang = String(cfg.lang || 'es');
     const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. ${temporalContext({ now: now(), lastTalkAt })} Si pregunta la hora o la fecha, usa esos datos.`];
+    const notes = memoryText();
+    if (notes) parts.push(`Notas fijas sobre el usuario (memory.md):\n${notes}`);
     // her answer is shown in a terminal box and read out loud: markers would be spelled out
     if (cloud) parts.push('Responde en texto plano, sin Markdown, sin asteriscos ni listas; frases cortas para ser leídas en voz alta. Nada de etiquetas de seguridad ni de tu razonamiento.');
     // off by default: only what she is told to send leaves this PC
     const screen = cfg.llm?.shareScreen ? String(screenContext?.() || '').trim() : '';
-    if (screen) parts.push(`What is open on Matias' screen right now: ${screen}`);
+    if (screen) parts.push(`What is open on the user's screen right now: ${screen}`);
     return parts.join('\n\n');
   }
 

@@ -8,7 +8,7 @@ const PROVIDERS = {
   local: { label: 'LM Studio', local: true, model: 'google/gemma-4-e2b' },
   openrouter: { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
   groq: { label: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
-  gemini: { label: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash' },
+  gemini: { label: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-lite-latest' },
   openai: { label: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
   mistral: { label: 'Mistral', url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest' },
   deepseek: { label: 'DeepSeek', url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },

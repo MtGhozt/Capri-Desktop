@@ -39,7 +39,7 @@ Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
   - "Mira mi pantalla" bajo pedido.
   - Corregir el interruptor actual, que solo manda el exe y el título de la ventana (nombre engañoso).
   - Que los comentarios de 4I usen esto cuando esté activo.
-- [ ] **4L Pulido para GitHub** (puede pasar a la Fase 6): submenú de voces (voz neural robótica por defecto, "Capri" solo local), proveedor por API key, `setup.bat` de un clic, README. Personalidad y memoria en archivos editables (`personality.md` / memoria) que se abren con el Bloc de notas y se aplican sin reiniciar; reglas fijas aparte para que editarla no rompa nada.
+- [x] **4L Pulido para GitHub** (en curso, sin commit hasta probar): TTS off / blips por defecto, Gemini `gemini-flash-lite-latest`, first-run hint de clave, `persona.md`/`memory.md` en userData, CREDITS + PolyForm + README ES/EN, instalador 0.1.0. Queda: GIFs, Release, push.
 - [x] **4K Traído de upstream:** proveedores de chat en la nube (LM Studio, OpenRouter, Groq, Gemini, OpenAI, Mistral, DeepSeek) con clave cifrada y vuelta automática a Gemma, clic recuperado con el puntero encima, y opción "Pantalla" para PCs donde su ventana sale negra. Ver `docs/THIRD_PARTY.md`.
 - Quitar "módulo no conectado" de `persona.md` a medida que cada cosa funcione.
 
