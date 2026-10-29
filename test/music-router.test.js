@@ -59,12 +59,11 @@ test('ordinary phrases stay with the model', async () => {
   }
 });
 
-test('a song search she cannot do is reported, not faked', async () => {
-  const r = await route('Pon en love with myself');
+test('a song search with no local hit is reported, not faked', async () => {
+  const r = await route('Pon zzznombrequecasidseguroenoexiste999');
   assert.equal(r.parsed.action, 'query');
-  assert.equal(r.parsed.query, 'love with myself');
   assert.equal(r.result.ok, false);
-  assert.match(r.result.error, /Todavía no sé buscar/);
+  assert.match(r.result.error, /No encontr/);
   assert.deepEqual(r.keys, []);
 });
 

@@ -548,12 +548,24 @@ async function musicReply(parsed, { chat = true } = {}) {
     const result = await music.command(parsed);
     logEvent(voiceLogPath(), `[capri] music ${parsed.action} ${result?.ok ? 'ok' : `failed: ${result?.error || '?'}`}`);
     if (!result?.ok) {
-      showLine(result?.error || 'No pude hacer eso con la música.', { chat, badge: 'MUSIC' });
+      const miss = parsed.action === 'query' && parsed.query
+        ? `No encontré «${parsed.query}».`
+        : (result?.error || 'No pude hacer eso con la música.');
+      showLine(miss, { chat, badge: 'MUSIC' });
       return { ok: false };
     }
-    const line = result?.track
-      ? `Está sonando «${result.track}» de ${result.artist}.`
-      : pickLine(MUSIC_LINE[parsed.action] || 'musicaPlay');
+    let line;
+    if (result.searchOnly) {
+      line = `Abrí la búsqueda de «${result.query}» en Spotify — dale play al primero, choom.`;
+    } else if (parsed.action === 'query' && result.track) {
+      line = result.artist
+        ? `Va, pongo «${result.track}» de ${result.artist}.`
+        : `Va, pongo «${result.track}».`;
+    } else if (result?.track) {
+      line = `Está sonando «${result.track}» de ${result.artist}.`;
+    } else {
+      line = pickLine(MUSIC_LINE[parsed.action] || 'musicaPlay');
+    }
     sendCommand('box-log', { kind: 'musica', text: parsed.action });
     sendCommand('music-state', { playing: !['pause', 'mute', 'volumeDown', 'volumeUp'].includes(parsed.action) });
     announce(line, { chat, badge: 'MUSIC' });
@@ -818,6 +830,7 @@ const music = createMusic({
   config,
   apps: allApps,
   spotify,
+  openExternal: (url) => shell.openExternal(url),
   isRunning: (name) => processRunning(name),
   sendKey: (action, script) => new Promise((resolve, reject) => {
     if (process.platform !== 'win32') return reject(new Error('media keys require Windows'));

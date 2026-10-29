@@ -19,6 +19,16 @@ export function unionRects(a, b) {
   };
 }
 
+// One Esc press peels one layer; never leave a blank plate in settings.
+export function menuEscapeStep({ capturing, quickOpen, expanded, view, settingsMode } = {}) {
+  if (capturing) return 'cancel-capture';
+  if (quickOpen) return 'close-quick-submenu';
+  if (expanded) return 'collapse-expanded';
+  if (view === 'apps') return 'apps-to-main';
+  if (settingsMode) return 'close-settings';
+  return 'hide';
+}
+
 const CLOSE_OPTIONS = [
   { id: 'graceful', label: 'CON CUIDADO' },
   { id: 'ask', label: 'PREGUNTAR' },
@@ -94,10 +104,11 @@ export class AppMenu {
       });
     }, true);
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.open) {
-        e.preventDefault();
-        this.hide();
-      }
+      if (e.key !== 'Escape') return;
+      if (this.settingsMode) return; // settings.html binds Esc → onEscape once
+      if (!this.open) return;
+      e.preventDefault();
+      this.onEscape();
     });
     // Left click outside dismisses. Right-click must not: its mousedown fires before
     // contextmenu, and after the first open the menu is often moved up (she's at the
@@ -150,6 +161,47 @@ export class AppMenu {
     } finally {
       this.opening = false;
     }
+  }
+
+  // Esc: close one layer (submenu → parent), or the whole menu / settings window.
+  onEscape() {
+    const step = menuEscapeStep({
+      capturing: this.capturing,
+      quickOpen: this.quickOpen,
+      expanded: this.expanded,
+      view: this.view,
+      settingsMode: this.settingsMode,
+    });
+    if (step === 'cancel-capture') {
+      this.capturing = false;
+      this.talkNote = '';
+      if (this.lastState) this.render(this.lastState);
+      return step;
+    }
+    if (step === 'close-quick-submenu') {
+      this.quickOpen = null;
+      if (this.lastState) this.renderQuick(this.lastState);
+      return step;
+    }
+    if (step === 'collapse-expanded') {
+      this.expanded = null;
+      this.fixNote = '';
+      this.useKeyboard(false);
+      if (this.lastState) this.render(this.lastState);
+      return step;
+    }
+    if (step === 'apps-to-main') {
+      this.view = 'main';
+      this.resetApps();
+      if (this.lastState) this.render(this.lastState);
+      return step;
+    }
+    if (step === 'close-settings') {
+      this.host.closeSettings();
+      return step;
+    }
+    this.hide();
+    return step;
   }
 
   // force: whatever it thinks it is, it goes (a forced close, or drawn while it thought it was closed)
@@ -887,7 +939,7 @@ export class AppMenu {
       e.stopPropagation();
       if (e.key === 'Escape') {
         e.preventDefault();
-        this.hide();
+        this.onEscape();
       }
     });
     for (const type of ['mousedown', 'click']) input.addEventListener(type, (e) => e.stopPropagation());
@@ -1184,7 +1236,7 @@ export class AppMenu {
           save();
         } else if (e.key === 'Escape') {
           e.preventDefault();
-          this.hide();
+          this.onEscape();
         }
       });
       wrap.append(build('span', 'appmenu__fix-label', label), input);

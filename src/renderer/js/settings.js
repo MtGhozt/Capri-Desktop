@@ -4,9 +4,6 @@ const root = document.querySelector('#settings');
 const close = () => window.host.closeSettings();
 document.querySelector('#settings-close').addEventListener('click', close);
 document.querySelector('#settings-close-bottom').addEventListener('click', close);
-window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') close();
-});
 const nav = document.createElement('nav');
 nav.className = 'settings__tabs';
 const content = document.createElement('section');
@@ -19,6 +16,12 @@ root.append(nav, content);
 
 const menu = new AppMenu({ el: menuEl, host: window.host, folded: () => false });
 menu.settingsMode = true;
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    menu.onEscape();
+  }
+});
 for (const tab of SETTINGS_TABS) {
   const button = document.createElement('button');
   button.type = 'button';

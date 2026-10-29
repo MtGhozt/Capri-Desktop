@@ -27,8 +27,10 @@ function parseMusicCommand(text) {
   const value = normalizeCommandText(text).replace(/\s+por favor$/, '').trim();
   if (!value) return null;
   for (const [action, re] of PATTERNS) if (re.test(value)) return { action };
-  const spotify = /^(?:pon|ponme|reproduce|toca) (.+?) en spotify$/.exec(value);
+  const spotify = /^(?:pon|ponme|reproduce|toca|play) (.+?) en spotify$/.exec(value);
   if (spotify) return { action: 'query', query: spotify[1], player: 'spotify' };
+  const playEn = /^play (?!music(?:a)?$)(.+)$/.exec(value);
+  if (playEn) return { action: 'query', query: playEn[1].replace(/^en\s+/, '') };
   const query = /^(?:pon|ponme|reproduce|reproduceme|toca) (?!un |una |el timer|la alarma)(.+)$/.exec(value);
   if (query) return { action: 'query', query: query[1].replace(/^en\s+/, '') };
   return null;
