@@ -231,6 +231,12 @@ class Engine:
             "debugSave": False,
             "tts": "auto",
             "ttsRef": None,
+            "ttsMoods": {
+                "burla": "ref/capri_mood_burla.wav",
+                "emocion": "ref/capri_mood_emocion.wav",
+                "aburrida": "ref/capri_mood_aburrida.wav",
+                "seria": "ref/capri_mood_seria.wav",
+            },
             "ttsSpeed": 1.0,
             "ttsSteps": 16,
             "replyMode": "voice",
@@ -291,6 +297,7 @@ class Engine:
         self._speak_gen = 0
         self._live_id = 0
         self._held_phrase = ""
+        self._reply_mood = None
         self._out = None
         self._sleep_since = 0.0
         self._mic_off_since = 0.0
@@ -771,9 +778,10 @@ class Engine:
         rid = self._as_id(reply_id)
         if rid <= 0:
             rid = self._live_id + 1
+        self._reply_mood = None
         self._accept_reply(rid, "speak_start")
 
-    def enqueue_speak(self, text: str, reply_id=None) -> None:
+    def enqueue_speak(self, text: str, reply_id=None, mood=None, calm: bool = False) -> None:
         line = str(text or "").strip()
         if not line:
             return
@@ -791,6 +799,9 @@ class Engine:
         elif not self._accept_speak:
             log(f"speak drop cut id={rid} {line[:48]!r}")
             return
+        name = str(mood or ("seria" if calm else "") or "").strip().lower()
+        if name:
+            self._reply_mood = name
         if len(line) < SHORT_PHRASE:
             self._held_phrase = f"{self._held_phrase} {line}".strip() if self._held_phrase else line
             log(f"speak hold short id={rid} n={len(self._held_phrase)}")
@@ -798,7 +809,7 @@ class Engine:
         if self._held_phrase:
             line = f"{self._held_phrase} {line}".strip()
             self._held_phrase = ""
-        log(f"speak queued id={rid} n={len(line)} {line[:48]!r}")
+        log(f"speak queued id={rid} n={len(line)} mood={self._reply_mood or 'playful'} {line[:48]!r}")
         self._speak_q.put(("speak", rid, line))
 
     def flush_speak(self, reply_id=None) -> None:
@@ -1039,6 +1050,14 @@ class Engine:
     def _load_omni_bg(self) -> None:
         free, usable, _loaded = self._vram_budget()
         wav, txt = resolve_ref(ROOT, self.cfg.get("ttsRef"))
+        mood_refs = {}
+        for name, raw in dict(self.cfg.get("ttsMoods") or {}).items():
+            key = str(name or "").strip().lower()
+            if not key or not raw:
+                continue
+            m_wav, m_txt = resolve_ref(ROOT, raw)
+            if m_wav.is_file() and m_txt.is_file():
+                mood_refs[key] = (m_wav, m_txt)
         omni = OmniVoiceTTS(
             MODELS,
             log,
@@ -1046,6 +1065,7 @@ class Engine:
             txt,
             self.cfg.get("ttsSpeed"),
             tts_steps(self.cfg.get("ttsSteps")),
+            mood_refs=mood_refs,
         )
         try:
             omni.load(allow_cpu=str(self.cfg.get("tts") or "").lower() == "omnivoice", free_vram=usable)
@@ -1085,7 +1105,7 @@ class Engine:
         self._announce_tts("omnivoice", "ready")
         self._warn_low_vram()
 
-    def _synth(self, text: str, gain: bool = True) -> tuple[np.ndarray, int]:
+    def _synth(self, text: str, gain: bool = True, mood: str | None = None) -> tuple[np.ndarray, int]:
         if self._omni_loading and self._omni is None:
             # OmniVoice is on its way: stay silent here, the UI answers with blips.
             return np.zeros(0, dtype=np.float32), 24000
@@ -1095,9 +1115,13 @@ class Engine:
             engine = self._session_tts or self._omni or self._tts
         if engine is None:
             return np.zeros(0, dtype=np.float32), 24000
+        use_mood = str(mood or getattr(self, "_reply_mood", None) or "").strip().lower() or None
         try:
             with self._synth_lock:
-                pcm, sr = engine.speak(text)
+                try:
+                    pcm, sr = engine.speak(text, mood=use_mood)
+                except TypeError:
+                    pcm, sr = engine.speak(text)
         except Exception as err:
             log(f"tts failed: {err}")
             return np.zeros(0, dtype=np.float32), 24000
@@ -1441,7 +1465,12 @@ async def session(ws, engine: Engine) -> None:
             elif kind == "speak_start":
                 engine.arm_speak(msg.get("id"))
             elif kind == "speak":
-                engine.enqueue_speak(str(msg.get("text") or ""), msg.get("id"))
+                engine.enqueue_speak(
+                    str(msg.get("text") or ""),
+                    msg.get("id"),
+                    mood=msg.get("mood"),
+                    calm=bool(msg.get("calm")),
+                )
             elif kind == "greet_prepare":
                 engine.prepare_greetings(msg.get("items"))
             elif kind == "greet":

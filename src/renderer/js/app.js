@@ -930,6 +930,26 @@ async function boot() {
       case 'line': // a short notice from a menu action (memory, clip)
         panel.say({ kind: 'info', badge: cmd.badge, line: cmd.text, hold: 4600 });
         break;
+      case 'quit-ask': // Salir / "ciérrate": Sí / No before she actually quits
+        panel.say({
+          kind: 'info',
+          badge: 'SALIR',
+          line: cmd.text,
+          hold: null,
+          actions: [
+            { id: 'quit-yes', label: 'Sí', primary: true },
+            { id: 'quit-no', label: 'No' },
+          ],
+        });
+        panel.onAction = (id) => {
+          if (id !== 'quit-yes' && id !== 'quit-no') return;
+          host.menuAction({ id: 'quit-answer', value: id === 'quit-yes' ? 'si' : 'no' }).catch(() => {});
+          panel.hide();
+        };
+        break;
+      case 'quit-clear':
+        if (panel.visible && panel.current?.badge === 'SALIR') panel.hide();
+        break;
       case 'wake':
         await unfold();
         break;

@@ -65,3 +65,32 @@ test('normalizes PCM peak to about -1 dBFS', () => {
   );
   assert.equal(Number(out), 0.8913);
 });
+
+test('TTS turns colon, dash, ellipsis and newlines into pauses', () => {
+  const out = py(
+    'from tts_text import clean_for_tts; '
+    + 'print(clean_for_tts("Spoiler: no la va a poner")); '
+    + 'print(clean_for_tts("Uno—dos…tres")); '
+    + 'print(clean_for_tts("Hola\\nmundo"))',
+  );
+  const lines = out.split(/\r?\n/);
+  assert.match(lines[0], /Spoiler\.\s+no la va a poner/i);
+  assert.match(lines[1], /Uno,\s+dos\.\s+tres/i);
+  assert.match(lines[2], /Hola\.\s+mundo/i);
+});
+
+test('missing mood prompt falls back to the playful default', () => {
+  const out = py(
+    'from tts import pick_mood_prompt; '
+    + 'prompts={"burla":"B","seria":"S"}; '
+    + 'print(pick_mood_prompt("burla", prompts, "DEFAULT")); '
+    + 'print(pick_mood_prompt("emocion", prompts, "DEFAULT")); '
+    + 'print(pick_mood_prompt(None, prompts, "DEFAULT")); '
+    + 'print(pick_mood_prompt("seria", {}, "DEFAULT"))',
+  );
+  const lines = out.split(/\r?\n/);
+  assert.equal(lines[0], "('B', 'burla')");
+  assert.equal(lines[1], "('DEFAULT', 'playful')");
+  assert.equal(lines[2], "('DEFAULT', 'playful')");
+  assert.equal(lines[3], "('DEFAULT', 'playful')");
+});

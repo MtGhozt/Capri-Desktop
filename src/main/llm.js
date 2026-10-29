@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const { PROVIDERS, isCloud, requestFor, explain } = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
+const { stripMoodTag, createMoodStripper } = require('./mood-tag');
 
 const HISTORY_LIMIT = 20; // ~10 user+assistant turns
 const TIMEOUT_MS = 45000;
@@ -166,7 +167,7 @@ function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext,
     return full;
   }
 
-  async function chat({ user, onToken, onDone, onError }) {
+  async function chat({ user, onToken, onDone, onError, onMood }) {
     cancel();
     abort = new AbortController();
     const signal = abort.signal;
@@ -183,18 +184,29 @@ function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext,
     const cloud = isCloud(id);
     let streamed = false;
     let full = '';
-    const show = (piece) => {
-      streamed = true;
-      full += piece;
-      onToken(piece);
-    };
+    let replyMood = null;
     // A cloud answer is cleaned as it arrives, sentence by sentence, so what she shows and what she
-    // says are the same plain text. The local model is left exactly as it was.
+    // says are the same plain text. The local model is left exactly as it was. Mood tags are
+    // stripped before either path reaches the UI or TTS.
     const ask = async (target) => {
+      full = '';
+      replyMood = null;
+      const stripper = createMoodStripper({
+        onMood: (name) => {
+          replyMood = name;
+          onMood?.(name);
+        },
+        onText: (piece) => {
+          streamed = true;
+          full += piece;
+          onToken(piece);
+        },
+      });
+      const show = (piece) => stripper.push(piece);
       const cleaner = isCloud(target)
         ? createStreamCleaner({ onText: show })
         : null;
-      const raw = await streamChat(requestFor(target, {
+      await streamChat(requestFor(target, {
         model: modelFor(cfg, target),
         messages: messagesFor(cfg, isCloud(target), user),
         key: apiKey?.(target) || '',
@@ -204,11 +216,10 @@ function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext,
         if (cleaner) cleaner.push(piece);
         else show(piece);
       }, signal);
-      if (cleaner) {
-        cleaner.flush();
-        return full;
-      }
-      return raw;
+      if (cleaner) cleaner.flush();
+      stripper.flush();
+      replyMood = stripper.mood || replyMood;
+      return full;
     };
 
     const result = (outcome) => ({
@@ -220,13 +231,16 @@ function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext,
 
     const done = (text) => {
       clearTimeout(timer);
+      const cleaned = stripMoodTag(text);
+      const finalText = cleaned.text;
+      const mood = replyMood || cleaned.mood || null;
       history = [
         ...history,
         { role: 'user', content: user },
-        { role: 'assistant', content: text },
+        { role: 'assistant', content: finalText },
       ].slice(-HISTORY_LIMIT);
       lastTalkAt = now().getTime();
-      onDone({ text });
+      onDone({ text: finalText, mood });
     };
 
     const fail = (err) => {

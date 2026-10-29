@@ -111,7 +111,13 @@ const DEFAULTS = {
     inputDevice: null,
     debugSave: false,
     tts: 'off',              // public default: no spoken TTS (code path kept; enable locally if you have voice/)
-    ttsRef: null,            // optional local clone path; never bundled in the public build
+    ttsRef: null,            // optional local clone path (playful default); never bundled in the public build
+    ttsMoods: {              // [burla]/[emocion]/[aburrida]/[seria] → ref wav (+ .txt); missing → ttsRef
+      burla: 'ref/capri_mood_burla.wav',
+      emocion: 'ref/capri_mood_emocion.wav',
+      aburrida: 'ref/capri_mood_aburrida.wav',
+      seria: 'ref/capri_mood_seria.wav',
+    },
     ttsSpeed: 1.0,
     ttsSteps: 16,            // OmniVoice diffusion steps (8–32) when TTS is enabled locally
     replyMode: 'blips',      // 'voice' | 'blips' | 'silent' — public default: typing beeps only
@@ -188,7 +194,11 @@ function load() {
         spotify: { ...DEFAULTS.music.spotify, ...((saved.music && saved.music.spotify) || {}) },
       },
       apps: { ...DEFAULTS.apps, ...(saved.apps || {}) },
-      voice: { ...DEFAULTS.voice, ...(saved.voice || {}) },
+      voice: {
+        ...DEFAULTS.voice,
+        ...(saved.voice || {}),
+        ttsMoods: { ...DEFAULTS.voice.ttsMoods, ...((saved.voice && saved.voice.ttsMoods) || {}) },
+      },
       position: { ...DEFAULTS.position, ...(saved.position || {}) },
       shortcuts: { ...DEFAULTS.shortcuts, ...(saved.shortcuts || {}) },
       clips: { ...DEFAULTS.clips, ...(saved.clips || {}) },
@@ -205,6 +215,11 @@ function load() {
   // The local model used to live in llm.model alone: keep hers when moving to a provider.
   if (!cache.llm.localModel) {
     cache.llm.localModel = cache.llm.model;
+    dirty = true;
+  }
+  // [calm] → mood map: drop the old single calm ref from config.json
+  if (cache.voice && 'ttsRefCalm' in cache.voice) {
+    delete cache.voice.ttsRefCalm;
     dirty = true;
   }
   const reply = migratePublicReply(cache.voice);
@@ -253,7 +268,16 @@ function save(patch) {
       },
     },
     apps: { ...DEFAULTS.apps, ...(current.apps || {}), ...(patch.apps || {}) },
-    voice: { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) },
+    voice: (() => {
+      const voice = { ...DEFAULTS.voice, ...(current.voice || {}), ...(patch.voice || {}) };
+      voice.ttsMoods = {
+        ...DEFAULTS.voice.ttsMoods,
+        ...(current.voice && current.voice.ttsMoods),
+        ...(patch.voice && patch.voice.ttsMoods),
+      };
+      delete voice.ttsRefCalm;
+      return voice;
+    })(),
     position: { ...DEFAULTS.position, ...(current.position || {}), ...(patch.position || {}) },
     shortcuts: { ...DEFAULTS.shortcuts, ...(current.shortcuts || {}), ...(patch.shortcuts || {}) },
     clips: { ...DEFAULTS.clips, ...(current.clips || {}), ...(patch.clips || {}) },

@@ -106,6 +106,16 @@ const POOLS = {
     'Olvidado. Igual sigo en tu cerebro, ¿eh?',
     'Memoria a cero. ¿Quién sos? … mentira, me acuerdo de vos.',
   ],
+  salirPreguntar: [
+    '¿Seguro que querés deshacerte de mí?',
+    '¿Me vas a cerrar? Qué cruel, humanito.',
+    '¿En serio me apagas? Pensá un segundo, ¿sí?',
+  ],
+  salirCancelado: [
+    'Bien. Sabía que no podías.',
+    'Jajaja. Todavía me necesitás.',
+    'Cancelado. Me quedo, obvio.',
+  ],
 
   // Paso 4A: what she hears wrong. {heard} and {meant} are filled in (fillLine).
   corregir: [

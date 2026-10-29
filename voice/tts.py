@@ -76,6 +76,14 @@ def resolve_ref(voice_dir: Path, tts_ref) -> tuple[Path, Path]:
     return wav, wav.with_suffix(".txt")
 
 
+def pick_mood_prompt(mood, mood_prompts: dict, default):
+    """Mood ref if cached, else the playful default (missing wav/txt already omitted from mood_prompts)."""
+    key = str(mood or "").strip().lower()
+    if key and key in mood_prompts and mood_prompts[key] is not None:
+        return mood_prompts[key], key
+    return default, "playful"
+
+
 def tts_steps(value, default: int = DEFAULT_TTS_STEPS) -> int:
     try:
         n = int(value)
@@ -169,21 +177,34 @@ class KokoroTTS(TTSEngine):
 
 
 class OmniVoiceTTS(TTSEngine):
-    def __init__(self, models_dir: Path, log, wav: Path, txt: Path, speed: float = 1.0, steps: int = DEFAULT_TTS_STEPS):
+    def __init__(
+        self,
+        models_dir: Path,
+        log,
+        wav: Path,
+        txt: Path,
+        speed: float = 1.0,
+        steps: int = DEFAULT_TTS_STEPS,
+        mood_refs: dict | None = None,
+    ):
         self.models_dir = models_dir
         self.log = log
         self.wav = wav
         self.txt = txt
+        # { mood_name: (wav_path, txt_path) } — missing files already filtered by the caller
+        self.mood_refs = dict(mood_refs or {})
         self.speed = _speed(speed)
         self.steps = tts_steps(steps)
         self.device = "cpu"
         self._model = None
         self._prompt = None
+        self._mood_prompts: dict = {}
         self._first = True
 
     def close(self) -> None:
         self._model = None
         self._prompt = None
+        self._mood_prompts = {}
         _release_cuda()
 
     def load(self, *, allow_cpu: bool, free_vram: int) -> None:
@@ -237,28 +258,36 @@ class OmniVoiceTTS(TTSEngine):
         if device.startswith("cuda") and torch.cuda.is_available():
             allocated = int(torch.cuda.memory_allocated() / (1024 * 1024))
         self.log(f"omnivoice loaded device={device} {load_ms:.0f}ms allocated={allocated}MiB")
-        self._load_prompt(VoiceClonePrompt, transcript)
+        self._prompt = self._cache_prompt(VoiceClonePrompt, self.wav, self.txt, transcript)
+        for name, (wav, txt) in self.mood_refs.items():
+            mood_text = txt.read_text(encoding="utf-8").strip() if txt.is_file() else ""
+            if not mood_text or not wav.is_file():
+                self.log(f"omnivoice mood {name} skipped (missing wav/txt)")
+                continue
+            self._mood_prompts[name] = self._cache_prompt(VoiceClonePrompt, wav, txt, mood_text)
+            self.log(f"omnivoice mood prompt ready name={name}")
         if device.startswith("cuda"):
             self.warmup()
 
-    def _load_prompt(self, VoiceClonePrompt, transcript: str) -> None:
+    def _cache_prompt(self, VoiceClonePrompt, wav: Path, txt: Path, transcript: str):
         cache_dir = self.models_dir / "omnivoice"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        key = ref_cache_key(self.wav, self.txt)
+        key = ref_cache_key(wav, txt)
         dest = cache_dir / f"capri-{key}.pt"
         if dest.is_file():
             try:
-                self._prompt = VoiceClonePrompt.load(str(dest))
+                prompt = VoiceClonePrompt.load(str(dest))
                 self.log(f"omnivoice prompt cache hit {dest.name}")
-                return
+                return prompt
             except Exception as err:
                 self.log(f"omnivoice prompt cache bad {dest.name}: {err}")
-        self._prompt = self._model.create_voice_clone_prompt(
-            ref_audio=str(self.wav),
+        prompt = self._model.create_voice_clone_prompt(
+            ref_audio=str(wav),
             ref_text=transcript,
         )
-        self._prompt.save(str(dest))
+        prompt.save(str(dest))
         self.log(f"omnivoice prompt cached {dest.name}")
+        return prompt
 
     def warmup(self) -> float:
         t0 = time.perf_counter()
@@ -267,14 +296,17 @@ class OmniVoiceTTS(TTSEngine):
         self.log(f"omnivoice warmup {ms:.0f}ms device={self.device} samples={pcm.size} sr={sr}")
         return ms
 
-    def speak(self, text: str) -> tuple[np.ndarray, int]:
+    def speak(self, text: str, *, mood: str | None = None, calm: bool = False) -> tuple[np.ndarray, int]:
         cleaned = clean_for_tts(text)
-        if not cleaned or self._model is None or self._prompt is None:
+        # calm=True kept as alias for seria (old Electron packets)
+        want = str(mood or ("seria" if calm else "") or "").strip().lower() or None
+        prompt, key = pick_mood_prompt(want, self._mood_prompts, self._prompt)
+        if not cleaned or self._model is None or prompt is None:
             return np.zeros(0, dtype=np.float32), 24000
         t0 = time.perf_counter()
         kwargs = {
             "text": cleaned,
-            "voice_clone_prompt": self._prompt,
+            "voice_clone_prompt": prompt,
             "speed": self.speed,
             "num_step": self.steps,
         }
@@ -293,7 +325,7 @@ class OmniVoiceTTS(TTSEngine):
         ms = (time.perf_counter() - t0) * 1000
         tag = "first phrase" if self._first else "phrase"
         self._first = False
-        self.log(f"omnivoice {tag} {ms:.0f}ms device={self.device} chars={len(cleaned)} steps={self.steps}")
+        self.log(f"omnivoice {tag} {ms:.0f}ms device={self.device} chars={len(cleaned)} steps={self.steps} mood={key}")
         return pcm, 24000
 
 

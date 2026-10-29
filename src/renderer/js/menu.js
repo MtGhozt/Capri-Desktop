@@ -1062,7 +1062,7 @@ export class AppMenu {
     if (this.open && this.lastState) this.render(this.lastState);
   }
 
-  // Wake word sensitivity: a % of how sure she must be it was "hey Jarvis". Saved on release,
+  // Wake word sensitivity: a % of how sure she must be it was the active phrase. Saved on release,
   // and the sidecar takes it right away.
   sensitivityRow(hearing, build) {
     const wrap = build('div', 'appmenu__slider-wrap');
@@ -1089,7 +1089,8 @@ export class AppMenu {
     });
     for (const type of ['mousedown', 'click']) range.addEventListener(type, (e) => e.stopPropagation());
     paint();
-    wrap.append(row, range, build('div', 'appmenu__hint', 'Más alto: menos falsas alarmas, pero hay que decir «hey Jarvis» más claro.'));
+    const phrase = hearing.wakePhrase || 'hey Capri';
+    wrap.append(row, range, build('div', 'appmenu__hint', `Más alto: menos falsas alarmas, pero hay que decir «${phrase}» más claro.`));
     return wrap;
   }
 

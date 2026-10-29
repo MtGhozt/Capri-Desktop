@@ -49,6 +49,7 @@ function createSpeakQueue({ send }) {
   let live = 0;
   let nextId = 0;
   let held = '';
+  let mood = null;
 
   function emit(text) {
     const line = String(text || '').trim();
@@ -59,7 +60,7 @@ function createSpeakQueue({ send }) {
     }
     const out = held ? `${held} ${line}` : line;
     held = '';
-    send({ type: 'speak', text: out, id: live });
+    send({ type: 'speak', text: out, id: live, mood: mood || undefined });
   }
 
   function feed(piece) {
@@ -75,8 +76,13 @@ function createSpeakQueue({ send }) {
     live = nextId;
     buf = '';
     held = '';
+    mood = null;
     send({ type: 'speak_start', id: live });
     return live;
+  }
+
+  function setMood(name) {
+    mood = name || null;
   }
 
   function flush(id) {
@@ -86,7 +92,7 @@ function createSpeakQueue({ send }) {
       buf = '';
       const out = [held, rest].filter(Boolean).join(' ');
       held = '';
-      if (out) send({ type: 'speak', text: out, id: target });
+      if (out) send({ type: 'speak', text: out, id: target, mood: mood || undefined });
       live = 0;
     }
     send({ type: 'speak_flush', id: target || 0 });
@@ -98,11 +104,12 @@ function createSpeakQueue({ send }) {
       live = 0;
       buf = '';
       held = '';
+      mood = null;
     }
     send({ type: 'stop_speak', id: target || 0 });
   }
 
-  return { start, feed, flush, stop };
+  return { start, feed, flush, stop, setMood };
 }
 
 module.exports = { createSpeakQueue, pullSentences, packPhrases, SHORT };

@@ -20,6 +20,7 @@ const { createLms } = require('./lms');
 const { createVoice } = require('./voice');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
+const { isQuitCommand } = require('./quit-command');
 const { createGoodnight } = require('./goodnight');
 const { isClipCommand } = require('./clip-command');
 const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
@@ -27,6 +28,8 @@ const { isForgetCommand } = require('./forget-command');
 const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
 const { createSystemFlow, runSystem } = require('./system-command');
+const { createConfirm, readAnswer } = require('./app-confirm');
+const { wakePhraseLabel } = require('./wake-phrase');
 const { createMusic } = require('./music');
 const { createSpotify, createTokenStore, authorizeSpotify, spotifyFailureLine } = require('./spotify');
 const { pickLine, fillLine } = require('./lines-es');
@@ -642,6 +645,56 @@ const systemFlow = createSystemFlow({
   clearFx: () => sendCommand('system-fx-clear'),
   escape: (on) => systemEscape(on),
 });
+
+const QUIT_CONFIRM_MS = 10_000;
+const quitConfirm = createConfirm({ ttlMs: QUIT_CONFIRM_MS });
+let quitTimer = null;
+
+function resolveVoiceModelsRoot(cfg = config.load()) {
+  const raw = cfg?.voice?.dir;
+  if (raw != null && String(raw).trim()) return path.resolve(String(raw).trim());
+  return path.join(ROOT, 'voice');
+}
+
+function clearQuitAsk() {
+  if (quitTimer) {
+    clearTimeout(quitTimer);
+    quitTimer = null;
+  }
+  quitConfirm.cancel();
+}
+
+function askQuit({ chat = false } = {}) {
+  clearQuitAsk();
+  const line = pickLine('salirPreguntar');
+  const spoken = Boolean(speakLine(line));
+  followUp.reply(line, { spoken }); // "sí" / "ok" without the wake word
+  if (chat) showLine(line, { chat: true, badge: 'SALIR' });
+  sendCommand('quit-ask', { text: line });
+  quitConfirm.ask('quit');
+  quitTimer = setTimeout(() => {
+    quitTimer = null;
+    if (!quitConfirm.pending) return;
+    quitConfirm.cancel();
+    sendCommand('quit-clear');
+    announce(pickLine('salirCancelado'), { chat, badge: 'SALIR' });
+  }, QUIT_CONFIRM_MS);
+  return { ok: true, asked: true };
+}
+
+function answerQuit(value) {
+  const pending = quitConfirm.pending;
+  if (!pending) return { ok: false };
+  clearQuitAsk();
+  sendCommand('quit-clear');
+  const yes = value === 'yes' || value === 'si' || readAnswer(String(value || '')) === 'yes';
+  if (yes) {
+    app.quit();
+    return { ok: true, quit: true };
+  }
+  announce(pickLine('salirCancelado'), { chat: true, badge: 'SALIR' });
+  return { ok: true, cancelled: true };
+}
 
 function goSleepReply({ chat = true } = {}) {
   const line = pickLine('dormir');
@@ -1288,7 +1341,8 @@ function applyMenuAction(id, value) {
       break;
     case 'hooks-install': runHooks('install'); break;
     case 'hooks-remove': runHooks('uninstall'); break;
-    case 'quit': app.quit(); break;
+    case 'quit': return askQuit({ chat: false });
+    case 'quit-answer': return answerQuit(value);
     default: break;
   }
 }
@@ -1453,6 +1507,10 @@ function menuState(extra = {}) {
       talkHotkey: talkCombo || talkHotkey(cfg),
       talkActive: Boolean(talkCombo),
       followUpSec: followUpSec(cfg),
+      wakePhrase: wakePhraseLabel(
+        cfg.voice?.wakeModel,
+        path.join(resolveVoiceModelsRoot(cfg), 'models'),
+      ),
     },
     music: {
       clientId: String(cfg.music?.spotify?.clientId || ''),
@@ -1756,6 +1814,8 @@ function registerIpc() {
     const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
     if (musicOrder) return musicReply(musicOrder);
     if (isSleepCommand(line)) return goSleepReply();
+    if (quitConfirm.pending) return answerQuit(line);
+    if (isQuitCommand(line)) return askQuit({ chat: true });
     if (isClipCommand(line)) return goClipReply();
     if (isMuteCommand(line)) return goMicReply(false);
     if (isUnmuteCommand(line)) return goMicReply(true);
@@ -1780,13 +1840,17 @@ function registerIpc() {
     try {
       outcome = await llm.chat({
         user: line,
+        onMood: (name) => speakQueue?.setMood?.(name),
         onToken: (piece) => {
           said += typeof piece === 'string' ? piece : piece?.text || '';
           overlay?.webContents.send('chat:token', piece);
           if (speakId) speakQueue?.feed(piece);
         },
         onDone: (payload) => {
-          if (speakId) speakQueue?.flush(speakId);
+          if (speakId) {
+            if (payload?.mood) speakQueue?.setMood?.(payload.mood);
+            speakQueue?.flush(speakId);
+          }
           overlay?.webContents.send('chat:done', payload);
           followUp.reply(payload?.text || said, { spoken: Boolean(speakId) });
         },

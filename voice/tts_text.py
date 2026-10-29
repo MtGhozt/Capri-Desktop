@@ -81,6 +81,18 @@ def _strip_emoji(text: str) -> str:
     return "".join(out)
 
 
+def pause_for_tts(text: str) -> str:
+    """Turn colon / dash / ellipsis / line breaks into spoken pauses so she breathes."""
+    raw = str(text or "")
+    raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+    raw = re.sub(r"\n+", ". ", raw)
+    raw = raw.replace("…", ". ").replace("...", ". ")
+    raw = raw.replace("—", ", ").replace("–", ", ")
+    # times already expanded by _TIME; leftover "Spoiler:" becomes a pause
+    raw = re.sub(r"\s*:\s*", ". ", raw)
+    return raw
+
+
 def clean_for_tts(text: str) -> str:
     raw = str(text or "")
     raw = _MD_FENCE.sub(" ", raw)
@@ -90,9 +102,10 @@ def clean_for_tts(text: str) -> str:
     raw = _BOLD.sub("", raw)
     raw = _ITALIC.sub(r"\1", raw)
     raw = _HEADING.sub("", raw)
-    raw = raw.replace("\\n", " ")
+    raw = raw.replace("\\n", "\n")
     raw = _strip_emoji(raw)
     raw = _TIME.sub(_time_es, raw)
+    raw = pause_for_tts(raw)
     raw = _NUM.sub(lambda m: int_es(int(m.group(0))), raw)
     raw = raw.replace(">", " ").replace("<", " ")
     return _SPACE.sub(" ", raw).strip(" -—,:;")
