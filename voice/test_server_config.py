@@ -54,7 +54,8 @@ class UtteranceTests(unittest.TestCase):
         asyncio.run(engine.finish(reason="vad"))
         transcripts = [item for item in seen if item.get("type") == "transcript"]
         self.assertEqual(len(transcripts), 1)
-        self.assertEqual(transcripts[0]["text"], "Hola Capri, pon música")
+        # wake greeting stripped before the LLM sees the order
+        self.assertEqual(transcripts[0]["text"], "pon música")
 
 
 class ServerConfigTests(unittest.TestCase):
@@ -183,12 +184,23 @@ class TranscriptFilterTests(unittest.TestCase):
 
 class WakePhraseTests(unittest.TestCase):
     def test_spoken_capri_variants_wake_her(self):
-        for heard in ("Capri", "¡Capri!", "oye capri", "Hola, Kapri.", "hey cabri", "capry"):
+        for heard in ("Capri", "¡Capri!", "oye capri", "Hola, Kapri.", "hey cabri", "capry", "ACAPRI", "HEACAPRI."):
             self.assertTrue(server.wake_phrase_match(heard), heard)
 
     def test_other_speech_does_not_wake_her(self):
         for heard in ("quiero hablar contigo", "¿cómo estás?", "pon música", "hablar con capri"):
             self.assertFalse(server.wake_phrase_match(heard), heard)
+
+    def test_strip_wake_phrase(self):
+        cases = [
+            ("Hey Capri", ""),
+            ("ACAPRI", ""),
+            ("HEACAPRI.", ""),
+            ("hey capri pon tu canción", "pon tu canción"),
+            ("oye kapri abre spotify", "abre spotify"),
+        ]
+        for heard, want in cases:
+            self.assertEqual(server.strip_wake_phrase(heard), want, heard)
 
 
 class LowVramWarningTests(unittest.TestCase):

@@ -24,7 +24,15 @@ test('the wake word comes off the order, in any of its forms', () => {
 test('only the wake word is a greeting: nothing left, nothing to answer as an order', () => {
   assert.equal(stripWakeWord('Hola Capri'), '');
   assert.equal(stripWakeWord('Hey Capri,'), ''); // the original text is still what the chat shows
+  assert.equal(stripWakeWord('Hey Capri'), '');
+  assert.equal(stripWakeWord('ACAPRI'), '');
+  assert.equal(stripWakeWord('HEACAPRI.'), '');
   assert.deepEqual(parseMusicCommand('Hey Capri, pon música'), parseMusicCommand('pon música'));
+});
+
+test('wake strip keeps the real order after mangled or spoken greetings', () => {
+  assert.equal(stripWakeWord('hey capri pon tu canción'), 'pon tu canción');
+  assert.equal(stripWakeWord('oye kapri abre spotify'), 'abre spotify');
 });
 
 test('typed orders drop the wake word too, greeting included', () => {

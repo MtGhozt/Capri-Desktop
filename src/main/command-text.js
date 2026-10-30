@@ -8,26 +8,31 @@ const fold = (text) => String(text || '')
   .replace(/\p{M}/gu, '')
   .toLowerCase();
 
-// "capri, pon música", "hey capri pon música", "oye capri…": whisper keeps the greeting
-const WAKE = /^(?:(?:hey|hola|oye|oi|ey|che)\s+)?(?:capri|jarvis)\b/;
+const WAKE_PREFIX = new Set(['hey', 'hola', 'oye', 'oi', 'ey', 'che', 'e']);
+const WAKE_NAMES = new Set(['capri', 'kapri', 'cabri', 'capry', 'kapry', 'jarvis']);
+// fused Whisper mangling: "acapri", "heacapri", "ecapri", …
+const WAKE_MANGLED = /^(?:h?e+a?|a|e)?(?:capri|kapri|cabri|capry|kapry)$/;
+
+const isWakeName = (w) => WAKE_NAMES.has(w) || WAKE_MANGLED.test(w);
 
 /** The order without the wake word: "Hey Capri, pon música" -> "pon música". */
 function stripWakeWord(text) {
-  const words = String(text || '').trim().split(/\s+/);
-  const word = (i) => fold(words[i]).replace(/[^\p{L}]/gu, '');
+  const raw = String(text || '').trim();
+  if (!raw) return '';
+  const words = raw.split(/\s+/);
+  const word = (i) => fold(words[i] || '').replace(/[^\p{L}\p{N}]/gu, '');
   let i = 0;
-  if (['hey', 'hola', 'oye', 'oi', 'ey', 'che'].includes(word(i))) i += 1;
-  if (!['capri', 'jarvis'].includes(word(i))) return String(text || '').trim();
-  return words.slice(i + 1).join(' ').replace(/^[\s,.:;–-]+/u, '').trim();
+  if (WAKE_PREFIX.has(word(0)) && isWakeName(word(1))) i = 2;
+  else if (isWakeName(word(0))) i = 1;
+  else return raw;
+  return words.slice(i).join(' ').replace(/^[\s,.:;–-]+/u, '').trim();
 }
 
 function normalizeCommandText(text) {
-  let n = fold(text)
+  return fold(stripWakeWord(text))
     .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  while (WAKE.test(n)) n = n.replace(WAKE, '').trim();
-  return n;
 }
 
 module.exports = { normalizeCommandText, stripWakeWord };

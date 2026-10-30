@@ -28,6 +28,7 @@ from tts import (
     release_memory,
     resolve_ref,
     tts_steps,
+    verify_ref_transcript,
 )
 from vram import GEMMA_RESERVE_MIB, VRAM_WARN_MIB, llm_has_model, usable_vram_mib
 
@@ -56,7 +57,10 @@ PTT_HOLD_DELAY = 0.12
 FOLLOW_MAX_S = 30.0
 STT_PROMPT = "Capri, choom"
 WAKE_NAMES = {"capri", "kapri", "cabri", "capry", "kapry"}
-WAKE_PREFIX = {"hey", "hola", "oye", "ey", "oi"}
+WAKE_PREFIX = {"hey", "hola", "oye", "ey", "oi", "che", "e"}
+# fused Whisper mangling: "acapri", "heacapri", "ecapri", …
+WAKE_MANGLED = re.compile(r"^(?:h?e+a?|a|e)?(?:capri|kapri|cabri|capry|kapry)$")
+WAKE_FOLLOW_S = 6.0
 WAKE_SPEECH_MAX_S = 3.0
 WAKE_SILENCE_MS = 500.0
 WAKE_MIN_SPEECH_MS = 200.0
@@ -167,15 +171,53 @@ def is_hallucination(text: str, prompt: str = STT_PROMPT) -> bool:
     return all(word in allowed for word in words)
 
 
+def _is_wake_name(word: str) -> bool:
+    return word in WAKE_NAMES or bool(WAKE_MANGLED.match(word))
+
+
+def _plain_tokens(text: str) -> list[str]:
+    """Lowercase alphanumeric tokens aligned with whitespace-split words of `text`."""
+    out = []
+    for w in str(text or "").split():
+        token = unicodedata.normalize("NFD", w)
+        token = "".join(ch for ch in token if unicodedata.category(ch) != "Mn")
+        out.append(re.sub(r"[^a-z0-9]+", "", token.lower()))
+    return out
+
+
+def strip_wake_phrase(text: str) -> str:
+    """Drop a leading Capri wake form; empty means wake-only (nothing for the LLM)."""
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    words = raw.split()
+    plain = _plain_tokens(raw)
+    if not plain or not plain[0]:
+        return raw
+    if plain[0] in WAKE_PREFIX and len(plain) > 1 and _is_wake_name(plain[1]):
+        i = 2
+    elif _is_wake_name(plain[0]):
+        i = 1
+    else:
+        return raw
+    rest = " ".join(words[i:])
+    return re.sub(r"^[\s,.:;–—-]+", "", rest).strip()
+
+
+def wake_command_text(text: str) -> str | None:
+    """Remainder after a leading wake form, or None when the utterance is not a wake."""
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+    stripped = strip_wake_phrase(raw)
+    if stripped == raw:
+        return None
+    return stripped
+
+
 def wake_phrase_match(text: str) -> bool:
-    """"Capri", "oye capri", "kapri": a spoken wake word for the English-accent model."""
-    words = fold_words(text)
-    if not words or len(words) > 4:
-        return False
-    return any(
-        word in WAKE_NAMES and (i == 0 or words[i - 1] in WAKE_PREFIX)
-        for i, word in enumerate(words)
-    )
+    """True when the utterance starts with a Capri wake form (optional hey/hola/oye, mangled ok)."""
+    return wake_command_text(text) is not None
 
 
 def wasapi_extra_settings(device) -> object | None:
@@ -1165,14 +1207,19 @@ class Engine:
     def _load_omni_bg(self) -> None:
         free, usable, _loaded = self._vram_budget()
         wav, txt = resolve_ref(ROOT, self.cfg.get("ttsRef"))
+        verify_ref_transcript(txt, log, "ttsRef")
         mood_refs = {}
         for name, raw in dict(self.cfg.get("ttsMoods") or {}).items():
             key = str(name or "").strip().lower()
             if not key or not raw:
                 continue
             m_wav, m_txt = resolve_ref(ROOT, raw)
-            if m_wav.is_file() and m_txt.is_file():
-                mood_refs[key] = (m_wav, m_txt)
+            if not m_wav.is_file():
+                log(f"tts mood wav missing label={key} path={m_wav}")
+                continue
+            if not verify_ref_transcript(m_txt, log, f"mood:{key}"):
+                continue
+            mood_refs[key] = (m_wav, m_txt)
         omni = OmniVoiceTTS(
             MODELS,
             log,
@@ -1452,6 +1499,11 @@ class Engine:
         self._wake_stt = True
         threading.Thread(target=self._wake_transcribe, args=(audio,), name="capri-wake-stt", daemon=True).start()
 
+    def _open_wake_follow(self, heard: str) -> None:
+        """Wake-only utterance: rouse her and listen ~6s for the real command."""
+        log(f"wake-only follow-up {heard!r}")
+        self.begin_capture(hold=False, follow=WAKE_FOLLOW_S, wake=1.0)
+
     def _wake_transcribe(self, audio: np.ndarray) -> None:
         try:
             text = self.transcribe(audio)
@@ -1462,15 +1514,19 @@ class Engine:
             self._wake_stt = False
         if not text:
             return
-        if not wake_phrase_match(text):
+        command = wake_command_text(text)
+        if command is None:
             log(f"wake whisper miss {text!r}")
             return
         if self.capturing:
             # openWakeWord beat us to it: one transcript, not two
             log(f"wake whisper skip (already listening) {text!r}")
             return
-        log(f"wake whisper hit {text!r}")
-        self.broadcast({"type": "transcript", "text": text, "wake": "whisper"})
+        if not fold_words(command):
+            self._open_wake_follow(text)
+            return
+        log(f"wake whisper hit {text!r} -> {command!r}")
+        self.broadcast({"type": "transcript", "text": command, "wake": "whisper"})
 
     def _wake_chunk(self, chunk: np.ndarray) -> None:
         self.wake_buf = np.concatenate([self.wake_buf, chunk])
@@ -1572,10 +1628,17 @@ class Engine:
             log(f"stt failed: {err}")
             return
         text = (text or "").strip()
-        if text:
-            self.broadcast({"type": "transcript", "text": text, "followUp": follow})
-        else:
+        if not text:
             log("stt empty")
+            return
+        # wake phrase may leak into the first capture after openWakeWord / whisper follow-up
+        command = wake_command_text(text)
+        if command is not None:
+            if not fold_words(command):
+                self._open_wake_follow(text)
+                return
+            text = command
+        self.broadcast({"type": "transcript", "text": text, "followUp": follow})
 
     def transcribe(self, audio: np.ndarray) -> str:
         self.ensure_stt()
