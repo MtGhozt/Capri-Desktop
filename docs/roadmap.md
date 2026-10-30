@@ -43,9 +43,21 @@ Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
 - [x] **4K Traído de upstream:** proveedores de chat en la nube (LM Studio, OpenRouter, Groq, Gemini, OpenAI, Mistral, DeepSeek) con clave cifrada y vuelta automática a Gemma, clic recuperado con el puntero encima, y opción "Pantalla" para PCs donde su ventana sale negra. Ver `docs/THIRD_PARTY.md`.
 - Quitar "módulo no conectado" de `persona.md` a medida que cada cosa funcione.
 
-## Fase 5 — Vigilar agentes de código
-- Base: upstream hooks (`capri-hook.js`, `capri-codex-hook.js`, `capri-agy-hook.js`, `assistants.js`).
+## Fase 5 - Cerebro fácil para cualquiera + README
+- Primera ejecución (si no hay proveedor configurado) y en Ajustes: sección "Cerebro" que muestre todas las opciones a la vista, no un selector:
+  1. Gratis con key: botón "Key gratis" que abre la página de NVIDIA (build.nvidia.com, ~40 pedidos/min, sin cobro por token) o Google AI Studio (Gemini flash-lite). Pegar key, probar, listo.
+  2. En mi PC: Ollama/LM Studio con un modelo chico (8 GB RAM, GPU opcional, 3-5 GB de espacio).
+  3. Mi propia key: OpenAI, Claude, DeepSeek, Gemini, OpenRouter.
+  - Tabla de requisitos (en PC vs con key) como lachydotmcg. Keys solo locales, nunca en git ni logs.
+- Reescribir README: inicio rápido sin código, cerebro, voz, cómo usarla, atajos, seguridad, qué datos salen, FAQ, créditos. Estructura inspirada en lachydotmcg y upstream (solo estructura, texto propio).
+- Sin claves de suscripción de Claude Code/Codex/Cursor como cerebro (va contra sus términos).
+
+## Fase 6 - Vigilar agentes de código
+- Base: upstream hooks (capri-hook.js, capri-codex-hook.js, capri-agy-hook.js, assistants.js).
 - Agregar OpenCode (y Cursor). Avisar cuando un agente termina o pide permiso.
+
+## Fase 7 - Voz gratis para todos
+- Voz local gratis (p. ej. Kokoro) para quien no tiene voz clonada; voz por key opcional.
 
 ## Más adelante
 - Proveedor de LLM con API key (modelo pago) además de LM Studio local. Referencia: upstream multi-proveedor (`affea9d`, `bde7b42`). Key guardada local, nunca en git.
