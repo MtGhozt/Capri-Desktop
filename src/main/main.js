@@ -279,10 +279,13 @@ function createOverlay() {
 // styles (focusable, show, focus), and again on her heartbeat, so it can't stay off by itself.
 let clickThrough = true;
 let handedBackAt = 0; // when she last gave the keyboard back to the window before her
+let quitSolid = false; // ¿Salir? visible: ignoreMouseEvents stays off until clear + grace
 function setClickThrough(on) {
   clickThrough = Boolean(on);
   if (!overlay || overlay.isDestroyed()) return;
-  if (clickThrough) overlay.setIgnoreMouseEvents(true, { forward: true });
+  // While ¿Salir? is up, never re-enable ignoreMouseEvents (menu-guard / hover must not steal Sí).
+  const through = quitSolid ? false : clickThrough;
+  if (through) overlay.setIgnoreMouseEvents(true, { forward: true });
   else overlay.setIgnoreMouseEvents(false);
 }
 
@@ -577,6 +580,7 @@ const MUSIC_LINE = {
   volumeUp: 'musicaVolumen',
   volumeDown: 'musicaVolumen',
   mute: 'musicaMute',
+  unmute: 'musicaMute',
   start: 'musicaInicio',
   query: 'musicaPlay',
 };
@@ -722,6 +726,31 @@ function doQuit() {
 }
 
 let quitChat = false;
+let quitSolidTimer = 0;
+function setQuitSolid(on) {
+  if (quitSolidTimer) {
+    clearTimeout(quitSolidTimer);
+    quitSolidTimer = 0;
+  }
+  if (on) {
+    quitSolid = true;
+    if (!overlay || overlay.isDestroyed()) return;
+    setClickThrough(false);
+    overlay.setAlwaysOnTop(true, 'screen-saver');
+    overlay.setFocusable(true);
+    overlay.show();
+    try { overlay.focus(); } catch { /* focus can fail mid-quit */ }
+    return;
+  }
+  // restore normal click-through only after the confirm closes (+~300 ms)
+  quitSolidTimer = setTimeout(() => {
+    quitSolidTimer = 0;
+    quitSolid = false;
+    if (!overlay || overlay.isDestroyed()) return;
+    if (!chatOpen && !menuKeyboard) overlay.setFocusable(false);
+    setClickThrough(clickThrough);
+  }, 300);
+}
 const quitFlow = createQuitFlow({
   quit: doQuit,
   onAsk: () => {
@@ -729,12 +758,16 @@ const quitFlow = createQuitFlow({
     const spoken = Boolean(speakLine(line));
     followUp.reply(line, { spoken });
     if (quitChat) showLine(line, { chat: true, badge: 'SALIR' });
+    setQuitSolid(true);
     sendCommand('quit-ask', { text: line });
   },
   onCancel: () => {
     announce(pickLine('salirCancelado'), { chat: quitChat, badge: 'SALIR' });
   },
-  onClear: () => sendCommand('quit-clear'),
+  onClear: () => {
+    sendCommand('quit-clear');
+    setQuitSolid(false);
+  },
 });
 
 function askQuit({ chat = false } = {}) {
@@ -950,6 +983,20 @@ const music = createMusic({
     ], { windowsHide: true });
     child.once('error', reject);
     child.once('close', (code) => code === 0 ? resolve() : reject(new Error(`media key exited ${code}`)));
+  }),
+  sendVolume: (action, processNames, script) => new Promise((resolve, reject) => {
+    if (process.platform !== 'win32') return reject(new Error('session volume requires Windows'));
+    const child = spawn('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+      '-Action', action, '-ProcessNames', (processNames || []).join(','),
+    ], { windowsHide: true });
+    let out = '';
+    child.stdout?.on('data', (chunk) => { out += String(chunk); });
+    child.once('error', reject);
+    child.once('close', (code) => {
+      if (code === 0) return resolve({ ok: true, out });
+      reject(new Error(/NONE/i.test(out) ? 'no music session' : `session volume exited ${code}`));
+    });
   }),
 });
 const appLog = (text) => logEvent(voiceLogPath(), `[capri] ${text}`);

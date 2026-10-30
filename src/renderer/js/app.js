@@ -135,15 +135,32 @@ async function boot() {
   let folding = false;
   let foldingAt = 0; // when the fold/unfold started: one that never ends can't hold the screen
   let droneActive = false;
+  let quitConfirm = false; // ¿Salir? Sí/No: whole window solid until it closes (+300 ms)
+  let quitConfirmClearAt = 0;
   let lastLive = performance.now();
   const bumpIdle = () => { lastLive = performance.now(); };
   const setInteractive = (on) => {
+    if (quitConfirm) on = true;
     if (on === interactive) return;
     interactive = on;
     host.setInteractive(on);
   };
+  const holdQuitConfirm = (on) => {
+    quitConfirm = Boolean(on);
+    if (quitConfirm) {
+      quitConfirmClearAt = 0;
+      setInteractive(true);
+      return;
+    }
+    quitConfirmClearAt = performance.now() + 300;
+    setTimeout(() => {
+      if (quitConfirm || performance.now() < quitConfirmClearAt) return;
+      refreshHit();
+    }, 320);
+  };
   const onChip = () => Boolean(chip.visible && mouse && chip.contains(mouse.x, mouse.y, 0));
   const refreshHit = () => {
+    if (quitConfirm) return setInteractive(true);
     if (folding || capri.dragging || bubble.dragging || appMenu.visible) return setInteractive(true);
     if (!mouse) return setInteractive(false);
     const r = panel.rect();
@@ -976,9 +993,8 @@ async function boot() {
         panel.say({ kind: 'info', badge: cmd.badge, line: cmd.text, hold: 4600 });
         break;
       case 'quit-ask': { // Salir / "ciérrate": Sí / No before she actually quits
-        // Menu just closed: keep the overlay interactive so Sí/No are clickable (Guide owns
-        // panel.onAction by default — chain through it for anything else).
-        setInteractive(true);
+        // Solid window: no click-through / hover passthrough until confirm closes (+~300 ms).
+        holdQuitConfirm(true);
         const prevAction = panel.onAction;
         panel.say({
           kind: 'info',
@@ -992,9 +1008,11 @@ async function boot() {
         });
         panel.onAction = (id) => {
           if (id === 'quit-yes' || id === 'quit-no') {
-            host.menuAction({ id: 'quit-answer', value: id === 'quit-yes' ? 'si' : 'no' }).catch(() => {});
+            const yes = id === 'quit-yes';
+            host.menuAction({ id: 'quit-answer', value: yes ? 'si' : 'no' }).catch(() => {});
             panel.onAction = prevAction;
             panel.hide();
+            holdQuitConfirm(false);
             return;
           }
           prevAction?.(id);
@@ -1003,6 +1021,7 @@ async function boot() {
       }
       case 'quit-clear':
         if (panel.visible && panel.current?.badge === 'SALIR') panel.hide();
+        holdQuitConfirm(false);
         break;
       case 'wake':
         await unfold();

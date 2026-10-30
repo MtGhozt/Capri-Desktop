@@ -101,24 +101,29 @@ test('smoke: launch, menu, caress/drag/chat, recovery, Salir→Sí exits', async
   assert.equal(await app.e2e(() => window.__capriE2E.clickThroughOk()), true);
   await app.e2e(() => window.__capriE2E.pressEsc());
 
-  // --- Salir → Sí exits the process within 5 s (same IPC path as the menu buttons) ---
+  // --- Salir → one click on Sí exits (button handler → doQuit, not a quit-answer shortcut) ---
   await app.e2e(() => window.__capriE2E.pressEsc());
   await win.evaluate(() => window.host.menuAction({ id: 'quit' }));
-  await win.waitForFunction(
-    () => document.querySelector('.panel__actions button')?.textContent?.includes('Sí'),
-    null,
-    { timeout: 8_000 },
+  await win.waitForSelector('.panel__actions button.is-primary', { state: 'visible', timeout: 8_000 });
+  // Confirm window must be solid (no click-through) so a real pointer click would land.
+  assert.equal(await app.e2e(() => window.__capriE2E.interactive()), true);
+  assert.deepEqual(
+    await win.evaluate(() => [...document.querySelectorAll('.panel__actions button')].map((b) => b.textContent)),
+    ['Sí', 'No'],
   );
   const closed = new Promise((resolve) => {
     electronApp.once('close', () => resolve('closed'));
   });
-  // Quitting tears down the page mid-IPC — treat that as success if the process exits.
-  win.evaluate(() => window.host.menuAction({ id: 'quit-answer', value: 'si' })).catch(() => {});
+  // DOM click on Sí (same listener as a pointer). OS click is flaky under ignoreMouseEvents races
+  // in Playwright; the solid-window assert above covers click-through. Quitting tears the page down.
+  win.evaluate(() => {
+    document.querySelector('.panel__actions button.is-primary')?.click();
+  }).catch(() => {});
   const outcome = await Promise.race([
     closed,
-    new Promise((r) => setTimeout(() => r('timeout'), 5000)),
+    new Promise((r) => setTimeout(() => r('timeout'), 8000)),
   ]);
-  assert.equal(outcome, 'closed', 'Capri process did not exit within 5s after Sí');
+  assert.equal(outcome, 'closed', 'Capri process did not exit within 8s after one click on Sí');
 });
 
 test('smoke: emergency force-quit from main (Ctrl+Alt+Shift+Q path)', async (t) => {

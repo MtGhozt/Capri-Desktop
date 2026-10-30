@@ -59,7 +59,8 @@ test('No or timeout cancels and does not quit', () => {
   flow.ask();
   t = 51;
   assert.equal(flow.pending, false);
-  assert.deepEqual(flow.answer('si'), { ok: false });
-  assert.equal(quits, 0);
+  // Sí still quits after timeout: the button must never no-op
+  assert.deepEqual(flow.answer('si'), { ok: true, quit: true });
+  assert.equal(quits, 1);
   flow.clear(); // drop the real timer so the suite can exit
 });

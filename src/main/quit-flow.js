@@ -61,12 +61,14 @@ function createQuitFlow({
   }
 
   function answer(value) {
-    if (!pending()) return { ok: false };
-    clear();
+    // Sí always quits (even if the confirm timer already cleared): the button must never no-op.
     if (isYes(value)) {
+      clear();
       quit();
       return { ok: true, quit: true };
     }
+    if (!pending()) return { ok: false };
+    clear();
     onCancel('no');
     return { ok: true, cancelled: true };
   }
