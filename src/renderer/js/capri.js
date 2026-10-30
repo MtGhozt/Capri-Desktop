@@ -783,12 +783,16 @@ export class Capri {
   // Play an act from acting.js. Resolves when it's over (or cut off by a stronger one).
   perform(name, dir = 0, { reach = 1 } = {}) {
     if (this.stowed || this.dormant || this.lying) return Promise.resolve(); // nobody to act: she's in her biochip, or just her mask
-    const act = ACTS[name];
-    if (reducedMotion.matches && act.fps === 24) {
-      if (act.flip) this.facing *= -1;
+    // Unknown name: Player logs once and remaps to stand; don't install a looping idle as an act.
+    if (!ACTS[name]) {
+      new Player(name, { dir, reach });
       return Promise.resolve();
     }
     const next = new Player(name, { dir, reach });
+    if (reducedMotion.matches && next.act.fps === 24) {
+      if (next.act.flip) this.facing *= -1;
+      return Promise.resolve();
+    }
     if (this.act && this.act.player.priority > next.priority) return Promise.resolve();
     this.endAct(false);
     return new Promise((done) => {

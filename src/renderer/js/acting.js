@@ -431,8 +431,19 @@ export const ACTS = {
   },
 };
 
+// Unknown names used to throw in the constructor (reading `.keys` of undefined) and freeze the
+// overlay mid-promise. Log once per bad name, then play idle (`stand`).
+const unknownActs = new Set();
+
 export class Player {
   constructor(name, { dir = 0, reach = 1, at = performance.now() } = {}) {
+    if (!ACTS[name]) {
+      if (!unknownActs.has(name)) {
+        unknownActs.add(name);
+        console.error(`[capri] unknown act ${JSON.stringify(name)}, falling back to idle`);
+      }
+      name = 'stand';
+    }
     this.name = name;
     this.act = ACTS[name];
     this.dir = dir;

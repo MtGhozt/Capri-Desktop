@@ -281,7 +281,8 @@ async function boot() {
   };
   capri.onCaress = () => {
     if (config.behavior?.caresses === false || capri.busy || capri.hidden) return;
-    capri.perform('laugh');
+    // 'laugh' is a cut-in face / victory cue, not an ACTS name — hop is the playful beat.
+    capri.perform('hop');
     capri.voice?.play?.('land');
   };
   capri.onMode = (mode, prev) => chip.setMode(mode, prev);
@@ -738,6 +739,10 @@ async function boot() {
     refreshHit();
     beat();
   }
+
+  // A thrown act (or any other renderer fault) must not leave click-through / the menu stuck.
+  window.addEventListener('error', () => forceFree());
+  window.addEventListener('unhandledrejection', () => forceFree());
 
   // Click-through can't stay off by itself: a fold that never ended lets go, and what she asks
   // main for is sent again (main may have lost it to a focus change).
