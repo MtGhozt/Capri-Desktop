@@ -666,7 +666,9 @@ class Engine:
 
     def _idle_watch(self) -> None:
         while True:
-            time.sleep(0.25)
+            # Quicker while speaking / listening; slower when idle (fewer wakeups).
+            busy = self._speaking or self.capturing or bool(getattr(self, "_wake_stt", False))
+            time.sleep(0.25 if busy else 1.0)
             try:
                 self._maybe_idle_talk()
                 self._maybe_listen_timeout()
