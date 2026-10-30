@@ -54,3 +54,9 @@ Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
 - Refinar voz con más clips (ver docs/capri-personalidad.md).
 - Idiomas, solo si el repo se hace público.
 - Fijar versiones de torch/torchaudio en voice/setup (hoy torch 2.14.1+cu130 con torchaudio 2.11.0).
+
+## Ideas e inspiraciones (revisado 2026-10-30)
+- **Upstream mochiiwuff** (fork, se puede reutilizar código): mirar la pantalla cuando se le pide (e09878d); sentir la PC: CPU, batería, red, USB, juegos (2024660); notar lo que conectás: teléfono, control, audífonos, cargador (f167fd6); enojarse después de que la tiran o celos de otra IA (f7685d2); buscar archivos y abrir la carpeta (3cd5377, 7d6cc1b); chat con modelos cloud gratis de Ollama (3e6f529); abrir juegos de Roblox por nombre (135d6b8); dos pedidos en una frase (d6c8070).
+- **dark-anishi/capri-desktop-noir** (referencia): volumen de música sincronizado aparte del sistema (b959290); recuperar input del mouse y limpiar overlay de forma segura (8e6a699).
+- **lachydotmcg** (PolyForm Noncommercial: solo ideas, nada de código): no repetirse en el chat de voz; apodos de juegos ("cs" = Counter-Strike 2); usar el juego ya abierto en vez de abrir otra copia; que el wake word no interfiera con audífonos Bluetooth; dejar YouTube sonando; tamaño configurable; GitHub Pages, aviso SmartScreen, copiar detalles de error, actualizaciones con un clic.
+- **Fase 5** no necesita API: hooks locales de Cursor y plugin/eventos de OpenCode avisando a Capri por el WebSocket local.
