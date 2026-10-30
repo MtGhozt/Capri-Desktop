@@ -203,13 +203,19 @@ async function boot() {
     hoverChip();
     if (interactive) bumpIdle();
   });
+  // Only burn rAF while the game drone is visible (was always-on).
+  let droneRaf = 0;
   const drawDrone = (time) => {
-    if (!document.getElementById('drone').hidden) {
-      drone.update(time, { x: (mouse?.x || innerWidth / 2) / innerWidth * 270, y: (mouse?.y || innerHeight / 2) / innerHeight * 270 });
-    }
-    requestAnimationFrame(drawDrone);
+    droneRaf = 0;
+    if (document.getElementById('drone').hidden) return;
+    drone.update(time, { x: (mouse?.x || innerWidth / 2) / innerWidth * 270, y: (mouse?.y || innerHeight / 2) / innerHeight * 270 });
+    droneRaf = requestAnimationFrame(drawDrone);
   };
-  requestAnimationFrame(drawDrone);
+  const ensureDroneLoop = () => {
+    if (!droneRaf && !document.getElementById('drone').hidden) {
+      droneRaf = requestAnimationFrame(drawDrone);
+    }
+  };
   document.addEventListener('mouseleave', () => {
     mouse = null;
     refreshHit();
@@ -238,16 +244,16 @@ async function boot() {
     host.rearm();
   }, WATCH_MS);
 
-  // Click-through: no mousemove. Poll global cursor (~30 ms) over her head for caresses.
+  // Click-through: no mousemove. Poll global cursor over her head for caresses (~80 ms: same feel, less IPC).
   setInterval(async () => {
-    if (config.behavior?.caresses === false || capri.busy || capri.hidden || capri.dragging) return;
+    if (config.behavior?.caresses === false || capri.busy || capri.hidden || capri.dragging || capri.dormant) return;
     const at = await host.cursor().catch(() => null);
     if (!at?.inside) {
       capri._caressStroke = null;
       return;
     }
     capri.noteCursor(at.x, at.y);
-  }, 30);
+  }, 80);
   const menuAvoid = (x, y) => {
     if (dormant.contains(x, y)) return dormant.rect();
     if (chip.visible && chip.contains(x, y, 0)) {
@@ -564,7 +570,7 @@ async function boot() {
     try {
       await runArtKit({
         capri, panel, bubble, fx, dormant, drone, mask, chip, host, machine, unfold,
-        bumpIdle, shots: Boolean(evt?.shots),
+        bumpIdle, ensureDroneLoop, shots: Boolean(evt?.shots),
       });
     } finally {
       artKitRunning = false;
@@ -916,6 +922,7 @@ async function boot() {
           dormant.hide();
           mask.hide();
           drone.show();
+          ensureDroneLoop();
         } else {
           droneActive = false;
           drone.hide();

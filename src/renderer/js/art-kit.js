@@ -30,6 +30,7 @@ function ensureCaption() {
 
 export async function runArtKit({
   capri, panel, bubble, fx, dormant, drone, mask, chip, host, machine, unfold, bumpIdle, shots = false,
+  ensureDroneLoop = () => {},
 }) {
   const captionEl = ensureCaption();
   const free = () => !capri.busy && !capri.act && capri.stance !== 'fall'
@@ -177,6 +178,7 @@ export async function runArtKit({
   // --- game drone ---
   dormant.hide();
   drone.show();
+  ensureDroneLoop();
   await beat('drone', 'Dron modo juego', { frames: 5, ms: HOLD });
   drone.hide();
 
