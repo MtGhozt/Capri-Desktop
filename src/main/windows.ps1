@@ -67,7 +67,7 @@ public static class CapriWindows {
   }
 
   // Full path of the process that owns the window (game mode needs it); cached, since
-  // Snapshot runs every 150 ms.
+  // Snapshot runs every 300 ms (was 150: enough for sit/game; less EnumWindows CPU).
   static string ExeOf(long hwnd) {
     string cached;
     if (ExeCache.TryGetValue(hwnd, out cached)) return cached;
@@ -215,7 +215,7 @@ if ($Once) {
 $last = ''
 $tick = 0
 # The taskbar slides (auto-hide), and a poll can land mid-slide. Once it has stopped, the
-# snapshot is said again ~450 ms later even if nothing changed, so the last word on the bar is
+# snapshot is said again ~600 ms later even if nothing changed, so the last word on the bar is
 # always where it ended up.
 $lastBar = ''
 $settle = 0
@@ -224,7 +224,7 @@ while ($true) {
   $bar = if ($snap -match '"bar":(\{[^}]*\}|null)') { $Matches[1] } else { '' }
   if ($bar -ne $lastBar) {
     $lastBar = $bar
-    $settle = 3
+    $settle = 2
   } elseif ($settle -gt 0) {
     $settle--
     if ($settle -eq 0) { $last = '' }
@@ -236,6 +236,6 @@ while ($true) {
   }
   # stop with Capri, even if she crashed without telling us
   $tick++
-  if ($ParentPid -and ($tick % 20 -eq 0) -and -not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }
-  Start-Sleep -Milliseconds 150
+  if ($ParentPid -and ($tick % 10 -eq 0) -and -not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }
+  Start-Sleep -Milliseconds 300
 }
