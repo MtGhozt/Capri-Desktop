@@ -65,6 +65,19 @@ test('smoke: launch, menu, caress/drag/chat, recovery, Salir→Sí exits', async
 
   await app.e2e(async () => { await window.__capriE2E.openChat(); });
   await win.waitForSelector('.bubble__field', { state: 'visible', timeout: 10_000 });
+  // First entry into message-box "window" mode after launch: tab/box must be interactive + draggable.
+  const box = await app.e2e(async () => {
+    const perched = await window.__capriE2E.perchOnBox();
+    const dragged = window.__capriE2E.dragBubbleBy(36, -18);
+    return { perched, dragged, interactive: window.__capriE2E.interactive() };
+  });
+  assert.equal(box.perched.onBox, true, 'Capri should perch on the message box');
+  assert.equal(box.interactive, true, 'first window-mode entry must be interactive');
+  assert.ok(box.dragged, 'bubble tab drag should run');
+  assert.ok(
+    box.dragged.to.left !== box.dragged.from.left || box.dragged.to.top !== box.dragged.from.top,
+    'bubble should move on first window-mode drag',
+  );
   const chatErr = [];
   await win.evaluate(() => {
     window.__capriChatErr = null;

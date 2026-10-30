@@ -165,10 +165,16 @@ async function boot() {
   const refreshHit = () => {
     if (quitConfirm) return setInteractive(true);
     if (folding || capri.dragging || bubble.dragging || appMenu.visible) return setInteractive(true);
+    // First chat/box open after launch: mouse may be null until a move; keep the overlay live
+    // so the bubble tab is grabable (same as re-opening once the pointer already moved).
+    if (bubble.open && !mouse) return setInteractive(true);
     if (!mouse) return setInteractive(false);
     const r = panel.rect();
     const onPanel = r && mouse.x >= r.left && mouse.x <= r.right && mouse.y >= r.top && mouse.y <= r.bottom;
-    const onBubble = bubble.hitInput(mouse.x, mouse.y) || bubble.hitGrab(mouse.x, mouse.y);
+    const br = bubble.rect();
+    const onBubble = Boolean(
+      br && mouse.x >= br.left && mouse.x <= br.right && mouse.y >= br.top && mouse.y <= br.bottom,
+    ) || bubble.hitInput(mouse.x, mouse.y) || bubble.hitGrab(mouse.x, mouse.y);
     const m = appMenu.rect();
     const onMenu = m && mouse.x >= m.left && mouse.x <= m.right && mouse.y >= m.top && mouse.y <= m.bottom;
     const onDrone = !document.getElementById('drone').hidden && drone.hit(mouse.x, mouse.y);
@@ -333,7 +339,11 @@ async function boot() {
   bubble.onTalk = (talking) => talking && capri.perform('talk');
   bubble.onBlip = () => voice.typeBlip();
   bubble.onOpenChange = (open) => {
-    if (open) panel.hide();
+    if (open) {
+      panel.hide();
+      // First entry after launch: enable hit-testing before any mousemove (tab drag).
+      setInteractive(true);
+    }
     refreshHit();
   };
   // the box dragged by its tab: she rides along if she's on it
@@ -789,6 +799,18 @@ async function boot() {
       sendChat: (text) => host.sendChat(text),
       menuVisible: () => Boolean(appMenu.visible),
       menuHidden: () => Boolean(appMenu.el.hidden),
+      // Message-box "window": Capri on the bubble; tab must be interactive on first open.
+      perchOnBox: async () => {
+        await capri.perchOnBox('lieA');
+        return { onBox: capri.onBox(), interactive };
+      },
+      bubblePos: () => (bubble.at ? { left: bubble.at.left, top: bubble.at.top } : null),
+      dragBubbleBy: (dx, dy) => {
+        if (!bubble.open || !bubble.at) return null;
+        const from = { left: bubble.at.left, top: bubble.at.top };
+        bubble.moveTo({ left: from.left + dx, top: from.top + dy });
+        return { from, to: { left: bubble.at.left, top: bubble.at.top }, interactive };
+      },
       clickThroughOk: () => {
         // Fail-closed for E2E: folding stuck or menu drawn while closed = bad.
         if (folding && performance.now() - foldingAt > 3000) return false;
