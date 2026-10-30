@@ -4,10 +4,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
 import time
+import unicodedata
 import urllib.request
 from pathlib import Path
 from queue import Empty, Full, Queue
@@ -52,7 +54,12 @@ DEFAULT_IDLE_UNLOAD_MIN = 10.0
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
 FOLLOW_MAX_S = 30.0
-STT_PROMPT = "Capri, choom, Matias"
+STT_PROMPT = "Capri, choom"
+WAKE_NAMES = {"capri", "kapri", "cabri", "capry", "kapry"}
+WAKE_PREFIX = {"hey", "hola", "oye", "ey", "oi"}
+WAKE_SPEECH_MAX_S = 3.0
+WAKE_SILENCE_MS = 500.0
+WAKE_MIN_SPEECH_MS = 200.0
 SILERO_URL = (
     "https://github.com/snakers4/silero-vad/raw/v5.1.2/"
     "src/silero_vad/data/silero_vad.onnx"
@@ -142,6 +149,35 @@ def wake_score_max(scores) -> tuple[float, dict]:
     return (max(out.values()) if out else 0.0), out
 
 
+def fold_words(text: str) -> list[str]:
+    """Lowercase words without accents or punctuation, for matching what Whisper wrote."""
+    plain = unicodedata.normalize("NFD", str(text or ""))
+    plain = "".join(ch for ch in plain if unicodedata.category(ch) != "Mn")
+    return re.findall(r"[a-z0-9]+", plain.lower())
+
+
+def is_hallucination(text: str, prompt: str = STT_PROMPT) -> bool:
+    """Whisper on silence invents the prompt: "Matías, Matías, Matías" is not speech."""
+    words = fold_words(text)
+    if not words:
+        return True
+    if len(words) >= 3 and len(set(words)) == 1:
+        return True
+    allowed = set(fold_words(prompt)) | {"matias"}
+    return all(word in allowed for word in words)
+
+
+def wake_phrase_match(text: str) -> bool:
+    """"Capri", "oye capri", "kapri": a spoken wake word for the English-accent model."""
+    words = fold_words(text)
+    if not words or len(words) > 4:
+        return False
+    return any(
+        word in WAKE_NAMES and (i == 0 or words[i - 1] in WAKE_PREFIX)
+        for i, word in enumerate(words)
+    )
+
+
 def ptt_held() -> bool:
     if sys.platform != "win32":
         return False
@@ -223,6 +259,7 @@ class Engine:
         self.cfg = {
             "enabled": True,
             "wakeWord": True,
+            "wakeMode": "both",
             "wakeThreshold": WAKE_THRESHOLD,
             "wakeModel": "hey_capri",
             "sttModel": "auto",
@@ -258,6 +295,12 @@ class Engine:
         self.buffer = np.zeros(0, dtype=np.float32)
         self.vad_buf = np.zeros(0, dtype=np.float32)
         self.wake_buf = np.zeros(0, dtype=np.float32)
+        # whisper wake: short utterance heard while asleep, checked for "capri"
+        self.wake_audio = np.zeros(0, dtype=np.float32)
+        self.wake_vad = np.zeros(0, dtype=np.float32)
+        self.wake_speech_ms = 0.0
+        self.wake_silence_ms = 0.0
+        self._wake_stt = False
         self.speech_ms = 0.0
         self.silence_ms = 0.0
         self.started_at = 0.0
@@ -327,7 +370,7 @@ class Engine:
         elif before[0]:
             self._mic_off_since = now
         after = (self.cfg.get("enabled"), self.cfg.get("inputDevice"))
-        if after != before:
+        if after != before or self.stream_needed() != (self.stream is not None):
             self.restart_stream()
         if bool(self.cfg.get("muted")) and not was_muted:
             self.stop_speak()
@@ -397,7 +440,7 @@ class Engine:
                 except Exception as err:
                     log(f"silero vad fallback to energy: {err}")
                     self._vad = EnergyVAD()
-            if self._wake is None and self.cfg.get("wakeWord"):
+            if self._wake is None and self.cfg.get("wakeWord") and self.wake_mode() != "whisper":
                 self._wake = self._load_wake()
             if self._whisper is None:
                 self._whisper = self._load_whisper()
@@ -582,10 +625,22 @@ class Engine:
             if self._whisper is not None:
                 self._unload_whisper()
 
+    def stream_needed(self) -> bool:
+        """Who needs the mic: not her while asleep with no wake word, not while muted."""
+        if not self.cfg.get("enabled"):
+            return False
+        if self.cfg.get("muted"):
+            return False
+        return not (self.cfg.get("sleeping") and not self.cfg.get("wakeWord"))
+
     def restart_stream(self) -> None:
         self.stop_stream()
-        if not self.cfg.get("enabled"):
-            log("mic disabled")
+        if not self.stream_needed():
+            log(
+                f"mic released enabled={bool(self.cfg.get('enabled'))} "
+                f"muted={bool(self.cfg.get('muted'))} sleeping={bool(self.cfg.get('sleeping'))} "
+                f"wake={bool(self.cfg.get('wakeWord'))}"
+            )
             return
         device = None
         raw = self.cfg.get("inputDevice")
@@ -594,6 +649,13 @@ class Engine:
                 device = int(raw)
             except (TypeError, ValueError):
                 device = None
+        # shared mode: exclusive WASAPI would lock the mic away from push-to-talk apps
+        extra = None
+        if sys.platform == "win32" and hasattr(sd, "WasapiSettings"):
+            try:
+                extra = sd.WasapiSettings(exclusive=False)
+            except Exception:
+                extra = None
         try:
             self._audio_q = Queue(maxsize=MIC_QUEUE)
             self._audio_run = True
@@ -606,6 +668,7 @@ class Engine:
                 blocksize=MIC_BLOCK,
                 latency="high",
                 device=device,
+                extra_settings=extra,
                 callback=self._on_audio,
             )
             self.stream.start()
@@ -679,10 +742,11 @@ class Engine:
         self.begin_capture(hold=False, follow=secs)
 
     def request_ptt(self) -> None:
+        """Ctrl+Alt+V toggles listening: the mic stays open until you speak and pause."""
         if self.capturing:
             return
         time.sleep(PTT_HOLD_DELAY)
-        self.begin_capture(hold=ptt_held())
+        self.begin_capture(hold=False)
 
     def _on_audio(self, indata, frames, tinfo, status) -> None:
         if status and "overflow" not in str(status).lower():
@@ -716,7 +780,10 @@ class Engine:
             if self.capturing:
                 self._capture_chunk(chunk, now)
             elif self.wake_live():
-                self._wake_chunk(chunk)
+                if self.oww_live():
+                    self._wake_chunk(chunk)
+                if self.whisper_wake_live() and not self.capturing:
+                    self._wake_listen_chunk(chunk)
 
     def reply_mode(self) -> str:
         mode = str(self.cfg.get("replyMode") or "voice").strip().lower()
@@ -972,7 +1039,12 @@ class Engine:
         free = free_vram_mib()
         log(f"vram_free after tts {free} MiB")
         if free < VRAM_WARN_MIB:
-            msg = f"VRAM baja (~{free} MiB). Gemma y OmniVoice están al límite."
+            msg = f"VRAM baja (~{free} MiB). La voz puede fallar; cerrá apps que usen la GPU."
+            if self.cfg.get("localLlm", True) is not False:
+                msg = (
+                    f"VRAM baja (~{free} MiB). La voz puede fallar; cerrá apps que usen la GPU "
+                    "o bajá el modelo de LM Studio."
+                )
             log(msg)
             self.broadcast({"type": "notice", "message": msg})
 
@@ -1269,11 +1341,30 @@ class Engine:
                     pass
                 self._out = None
 
+    def wake_mode(self) -> str:
+        mode = str(self.cfg.get("wakeMode") or "both").strip().lower()
+        return mode if mode in ("both", "oww", "whisper") else "both"
+
+    def oww_live(self) -> bool:
+        return (
+            bool(self.cfg.get("wakeWord"))
+            and self.wake_mode() != "whisper"
+            and self._wake not in (None, False)
+        )
+
+    def whisper_wake_live(self) -> bool:
+        return (
+            bool(self.cfg.get("wakeWord"))
+            and self.wake_mode() != "oww"
+            and self._whisper is not None
+        )
+
     def wake_live(self) -> bool:
-        return bool(self.cfg.get("wakeWord")) and self._wake not in (None, False)
+        return self.oww_live() or self.whisper_wake_live()
 
     def arm_wake(self) -> None:
         self.wake_buf = np.zeros(0, dtype=np.float32)
+        self._wake_reset_listen()
         if self._wake not in (None, False):
             try:
                 self._wake.reset()
@@ -1281,6 +1372,62 @@ class Engine:
                 log(f"wake reset failed: {err}")
         if DEV:
             log("wake armed")
+
+    def _wake_reset_listen(self) -> None:
+        self.wake_audio = np.zeros(0, dtype=np.float32)
+        self.wake_vad = np.zeros(0, dtype=np.float32)
+        self.wake_speech_ms = 0.0
+        self.wake_silence_ms = 0.0
+
+    def _wake_listen_chunk(self, chunk: np.ndarray) -> None:
+        """Whisper wake: a short utterance while asleep, checked for "capri"."""
+        if self._speaking or self.capturing or self._wake_stt:
+            return
+        self.wake_audio = np.concatenate([self.wake_audio, chunk])
+        self.wake_vad = np.concatenate([self.wake_vad, chunk])
+        while self.wake_vad.size >= VAD_FRAME:
+            frame = self.wake_vad[:VAD_FRAME]
+            self.wake_vad = self.wake_vad[VAD_FRAME:]
+            p = self._vad.prob(frame) if self._vad else 0.0
+            dt = 1000.0 * VAD_FRAME / SAMPLE_RATE
+            if p >= SPEECH_THRESHOLD:
+                self.wake_speech_ms += dt
+                self.wake_silence_ms = 0.0
+            else:
+                self.wake_silence_ms += dt
+        ended = (
+            self.wake_speech_ms >= WAKE_MIN_SPEECH_MS
+            and self.wake_silence_ms >= WAKE_SILENCE_MS
+        )
+        duration = self.wake_audio.size / SAMPLE_RATE
+        if not ended and duration < WAKE_SPEECH_MAX_S:
+            return
+        audio = self.wake_audio.copy()
+        self._wake_reset_listen()
+        if not ended or audio.size < SAMPLE_RATE * 0.25:
+            return
+        self._wake_stt = True
+        threading.Thread(target=self._wake_transcribe, args=(audio,), name="capri-wake-stt", daemon=True).start()
+
+    def _wake_transcribe(self, audio: np.ndarray) -> None:
+        try:
+            text = self.transcribe(audio)
+        except Exception as err:
+            log(f"wake whisper failed: {err}")
+            return
+        finally:
+            self._wake_stt = False
+        if not text:
+            return
+        if not wake_phrase_match(text):
+            log(f"wake whisper miss {text!r}")
+            return
+        if self.capturing:
+            # openWakeWord beat us to it: one transcript, not two
+            log(f"wake whisper skip (already listening) {text!r}")
+            return
+        log(f"wake whisper hit {text!r}")
+        self.broadcast({"type": "transcript", "text": text, "wake": "whisper"})
 
     def _wake_chunk(self, chunk: np.ndarray) -> None:
         self.wake_buf = np.concatenate([self.wake_buf, chunk])
@@ -1397,10 +1544,22 @@ class Engine:
             language="es",
             task="transcribe",
             initial_prompt=STT_PROMPT,
-            vad_filter=False,
+            vad_filter=True,
             beam_size=self._stt_beam,
         )
-        return " ".join(seg.text.strip() for seg in segments if seg.text).strip()
+        # whisper invents text on silence: drop the segments that are noise, then the echo
+        text = " ".join(
+            seg.text.strip()
+            for seg in segments
+            if seg.text
+            and getattr(seg, "no_speech_prob", 0.0) <= 0.6
+            and getattr(seg, "avg_logprob", 0.0) >= -1.0
+        ).strip()
+        if is_hallucination(text):
+            if text:
+                log(f"stt drop hallucination {text!r}")
+            return ""
+        return text
 
     def _debug_wav(self, audio: np.ndarray) -> None:
         import wave

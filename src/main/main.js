@@ -93,6 +93,7 @@ let speakQueue = null;
 let comments = null;
 let ttsLoading = false;
 let voiceTalking = false;
+let voiceListening = false;
 let llmBusy = false;
 let voiceQueue = [];
 let chatOpen = false;
@@ -1397,6 +1398,11 @@ function talkHotkey(cfg) {
 }
 
 function talkNow() {
+  // Ctrl+Alt+V toggles: once more stops listening
+  if (voiceListening) {
+    voice?.pttStop();
+    return;
+  }
   llm?.cancel();
   speakQueue?.stop();
   goodnight.cancel();
@@ -1548,7 +1554,7 @@ function menuState(extra = {}) {
     shortcuts: [
       { label: 'Mostrar / ocultar Capri', accel: cfg.shortcuts?.toggle || '' },
       { label: 'Abrir el chat', accel: cfg.shortcuts?.chat || '' },
-      { label: 'Hablar (push to talk)', accel: talkCombo || talkHotkey(cfg) },
+      { label: 'Escuchar / detener', accel: talkCombo || talkHotkey(cfg) },
     ],
     micDevices: voice?.devices() || [],
     displays: displays.map((d, i) => ({
@@ -1679,7 +1685,7 @@ function runHooks(action, { quiet = false } = {}) {
 function createTray() {
   const icon = nativeImage.createFromPath(path.join(ROOT, 'assets', 'icons', 'tray.png'));
   tray = new Tray(icon);
-  tray.setToolTip('Capri');
+  tray.setToolTip(`Capri — ${talkCombo || talkHotkey(config.load())} escucha / detiene`);
   tray.on('click', () => sendCommand('status'));
   rebuildTray();
 }
@@ -2030,7 +2036,11 @@ function main() {
           voiceTalking = false;
           speechOver(); // her goodbye before a power-off is over (Paso 4G)
         }
-        if (payload?.type === 'listening') openChat();
+        if (payload?.type === 'listening') {
+          voiceListening = true;
+          openChat();
+        }
+        if (payload?.type === 'stopped') voiceListening = false;
         if (payload?.type === 'devices') rebuildTray();
         goodnight.onVoiceEvent(payload); // her goodnight line over: now she folds
         if (overlay?.webContents && !overlay.webContents.isDestroyed()) {

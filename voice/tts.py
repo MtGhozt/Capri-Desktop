@@ -116,6 +116,18 @@ def _is_oom(err: BaseException) -> bool:
     return "out of memory" in text or "cuda oom" in text
 
 
+def _free_vram_mib() -> int:
+    """Free GPU memory, for the mood logs; 0 on CPU."""
+    try:
+        torch = import_torch()
+        if not torch.cuda.is_available():
+            return 0
+        free, _total = torch.cuda.mem_get_info()
+        return int(free / (1024 * 1024))
+    except Exception:
+        return 0
+
+
 def _release_cuda() -> None:
     gc.collect()
     try:
@@ -198,12 +210,14 @@ class OmniVoiceTTS(TTSEngine):
         self.device = "cpu"
         self._model = None
         self._prompt = None
+        self._vcp = None
         self._mood_prompts: dict = {}
         self._first = True
 
     def close(self) -> None:
         self._model = None
         self._prompt = None
+        self._vcp = None
         self._mood_prompts = {}
         _release_cuda()
 
@@ -246,6 +260,7 @@ class OmniVoiceTTS(TTSEngine):
 
     def _boot(self, OmniVoice, VoiceClonePrompt, torch, device: str, dtype, transcript: str) -> None:
         self.device = device
+        self._vcp = VoiceClonePrompt
         t0 = time.perf_counter()
         kwargs = {"device_map": device, "dtype": dtype, "load_asr": False}
         try:
@@ -259,13 +274,10 @@ class OmniVoiceTTS(TTSEngine):
             allocated = int(torch.cuda.memory_allocated() / (1024 * 1024))
         self.log(f"omnivoice loaded device={device} {load_ms:.0f}ms allocated={allocated}MiB")
         self._prompt = self._cache_prompt(VoiceClonePrompt, self.wav, self.txt, transcript)
-        for name, (wav, txt) in self.mood_refs.items():
-            mood_text = txt.read_text(encoding="utf-8").strip() if txt.is_file() else ""
-            if not mood_text or not wav.is_file():
-                self.log(f"omnivoice mood {name} skipped (missing wav/txt)")
-                continue
-            self._mood_prompts[name] = self._cache_prompt(VoiceClonePrompt, wav, txt, mood_text)
-            self.log(f"omnivoice mood prompt ready name={name}")
+        if self.mood_refs:
+            # one model for every mood: each prompt is built the first time that mood speaks
+            names = ",".join(sorted(self.mood_refs))
+            self.log(f"omnivoice moods lazy count={len(self.mood_refs)} names={names} vram_free={_free_vram_mib()}")
         if device.startswith("cuda"):
             self.warmup()
 
@@ -286,7 +298,35 @@ class OmniVoiceTTS(TTSEngine):
             ref_text=transcript,
         )
         prompt.save(str(dest))
+        # the prompt waits on the CPU (a few MB) until generate() moves it to the model device
+        tokens = getattr(prompt, "ref_audio_tokens", None)
+        if tokens is not None and hasattr(tokens, "cpu"):
+            prompt.ref_audio_tokens = tokens.detach().cpu()
+        _release_cuda()  # drop the encoder's intermediate tensors, keep the prompt
         self.log(f"omnivoice prompt cached {dest.name}")
+        return prompt
+
+    def _prompt_for(self, mood):
+        """Mood prompt built on first use, once per engine; None falls back to the default."""
+        name = str(mood or "").strip().lower()
+        if name in self._mood_prompts:
+            return self._mood_prompts[name]
+        wav_txt = self.mood_refs.get(name)
+        if not wav_txt or self._model is None or self._vcp is None:
+            return None
+        wav, txt = wav_txt
+        text = txt.read_text(encoding="utf-8").strip() if txt.is_file() else ""
+        if not text or not wav.is_file():
+            self.log(f"omnivoice mood {name} skipped (missing wav/txt)")
+            self.mood_refs.pop(name, None)
+            return None
+        before = _free_vram_mib()
+        prompt = self._cache_prompt(self._vcp, wav, txt, text)
+        self._mood_prompts[name] = prompt
+        self.log(
+            f"omnivoice mood prompt ready name={name} "
+            f"vram_free_before={before} after={_free_vram_mib()}"
+        )
         return prompt
 
     def warmup(self) -> float:
@@ -300,7 +340,10 @@ class OmniVoiceTTS(TTSEngine):
         cleaned = clean_for_tts(text)
         # calm=True kept as alias for seria (old Electron packets)
         want = str(mood or ("seria" if calm else "") or "").strip().lower() or None
-        prompt, key = pick_mood_prompt(want, self._mood_prompts, self._prompt)
+        prompt = self._prompt_for(want) if want else None
+        key = want if prompt is not None else "playful"
+        if prompt is None:
+            prompt = self._prompt
         if not cleaned or self._model is None or prompt is None:
             return np.zeros(0, dtype=np.float32), 24000
         t0 = time.perf_counter()

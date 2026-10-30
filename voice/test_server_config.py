@@ -70,6 +70,7 @@ class ServerConfigTests(unittest.TestCase):
             "localLlm": True,
         }
         engine.cfg.update(cfg or {})
+        engine.stream = None
         engine._omni = None
         engine._omni_loading = False
         engine._tts = None
@@ -95,6 +96,59 @@ class ServerConfigTests(unittest.TestCase):
              patch.object(server, "usable_vram_mib", side_effect=lambda free, loaded, reserve: free - reserve):
             free, usable, loaded = engine._vram_budget()
         self.assertEqual((free, usable, loaded), (2400, 2400, False))
+
+
+class TranscriptFilterTests(unittest.TestCase):
+    def test_whisper_echoes_on_silence_are_dropped(self):
+        for heard in (
+            "Matías, Matías, Matías.",
+            "Capri",
+            "Capri, choom",
+            "Sí, sí, sí, sí",
+            "   ",
+        ):
+            self.assertTrue(server.is_hallucination(heard), heard)
+
+    def test_real_speech_is_kept(self):
+        for heard in (
+            "Hola Capri, ¿cómo estás?",
+            "Pon música",
+            "Sí, cuéntame",
+        ):
+            self.assertFalse(server.is_hallucination(heard), heard)
+
+
+class WakePhraseTests(unittest.TestCase):
+    def test_spoken_capri_variants_wake_her(self):
+        for heard in ("Capri", "¡Capri!", "oye capri", "Hola, Kapri.", "hey cabri", "capry"):
+            self.assertTrue(server.wake_phrase_match(heard), heard)
+
+    def test_other_speech_does_not_wake_her(self):
+        for heard in ("quiero hablar contigo", "¿cómo estás?", "pon música", "hablar con capri"):
+            self.assertFalse(server.wake_phrase_match(heard), heard)
+
+
+class LowVramWarningTests(unittest.TestCase):
+    def test_warning_text_is_neutral_on_cloud(self):
+        engine = server.Engine.__new__(server.Engine)
+        engine.cfg = {"localLlm": False}
+        seen = []
+        engine.broadcast = seen.append
+        with patch.object(server, "free_vram_mib", return_value=50):
+            engine._warn_low_vram()
+        message = seen[-1]["message"]
+        self.assertIn("La voz puede fallar", message)
+        self.assertNotIn("Gemma y OmniVoice", message)
+        self.assertNotIn("LM Studio", message)
+
+    def test_warning_text_mentions_lm_studio_when_local(self):
+        engine = server.Engine.__new__(server.Engine)
+        engine.cfg = {"localLlm": True}
+        seen = []
+        engine.broadcast = seen.append
+        with patch.object(server, "free_vram_mib", return_value=50):
+            engine._warn_low_vram()
+        self.assertIn("LM Studio", seen[-1]["message"])
 
 
 if __name__ == "__main__":

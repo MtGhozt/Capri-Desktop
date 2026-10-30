@@ -104,6 +104,7 @@ const DEFAULTS = {
     dir: null,               // null → repo voice/ in dev; set an absolute path for the installed exe
     pushToTalk: 'Ctrl+Alt+V',
     wakeWord: true,
+    wakeMode: 'both',        // 'both' | 'oww' | 'whisper': openWakeWord, spoken "capri", or both
     wakeThreshold: 0.2,
     wakeModel: 'hey_capri',  // voice/models/hey_capri.onnx if it exists; otherwise hey_jarvis (see docs/wake-word.md)
     sttModel: 'auto',

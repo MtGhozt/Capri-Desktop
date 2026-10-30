@@ -94,3 +94,23 @@ test('missing mood prompt falls back to the playful default', () => {
   assert.equal(lines[2], "('DEFAULT', 'playful')");
   assert.equal(lines[3], "('DEFAULT', 'playful')");
 });
+
+test('mood prompts are built once, on first use, not all at boot', () => {
+  const out = py(
+    'from pathlib import Path; from tts import OmniVoiceTTS; '
+    + 'o = OmniVoiceTTS(Path("."), print, Path("a.wav"), Path("a.txt"), '
+    + 'mood_refs={"burla": (Path("b.wav"), Path("b.txt"))}); '
+    + 'o._model = object(); o._vcp = object; o.device = "cpu"; '
+    + 'calls = []; '
+    + 'o._cache_prompt = lambda vcp, wav, txt, text: calls.append(wav.name) or f"P-{wav.stem}"; '
+    + 'print(len(o._mood_prompts)); '
+    + 'print(o._prompt_for("burla")); '
+    + 'print(o._prompt_for("burla")); '
+    + 'print(calls)',
+  );
+  const lines = out.split(/\r?\n/);
+  assert.equal(lines[0], '0');
+  assert.equal(lines[1], 'P-b');
+  assert.equal(lines[2], 'P-b');
+  assert.equal(lines[3], "['b.wav']");
+});
