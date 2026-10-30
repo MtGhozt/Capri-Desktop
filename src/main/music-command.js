@@ -7,8 +7,17 @@ const { normalizeCommandText } = require('./command-text');
 const DEFAULT_HER_SONG = "I'm in love with myself";
 const HER_SONG = /^(?:(?:pon|ponme|reproduce|reproduceme|toca|play) )?(?:tu cancion(?: favorita)?|your song)$/;
 const SONG = '(?: (?:la |el )?(?:musica|cancion|tema|rola|pista))?';
+// Pause before any "pon <query>" search: "pon pausa a la música" is pause, not a song named pausa.
+const PAUSE = new RegExp(
+  `^(?:`
+  + `(?:pausa|pausala|pausar|para|deten|detene|stop)${SONG}`
+  + `|(?:pon|ponme|pone) pausa(?: a(?: la)? musica)?`
+  + `|(?:pon|ponme|pone)(?: la)? musica en pausa`
+  + `|(?:pon|ponme|pone)(?:la|le)? en pausa(?: a(?: la)? musica)?`
+  + `)$`,
+);
 const PATTERNS = [
-  ['pause', new RegExp(`^(?:pausa|pausala|pausar|para|deten|stop)${SONG}$`)],
+  ['pause', PAUSE],
   ['play', new RegExp(`^(?:sigue|seguir|continua|reanuda|resume|despausa|despauza|despausala|despauzala|quita (?:la )?pausa|dale play|play)${SONG}$`)],
   ['next', new RegExp(`^(?:(?:pasa|pon|cambia|salta)(?: a)? (?:la |el )?(?:siguiente|otra|proxima)${SONG}|(?:la |el )?(?:siguiente|proxima)${SONG}|(?:pasa|cambia|salta)${SONG}|otra (?:cancion|rola)|skip)$`)],
   ['previous', new RegExp(`^(?:(?:pon|regresa|vuelve)(?: a)? (?:la |el )?(?:anterior|de antes)${SONG}|(?:la |el )?anterior${SONG}|la de antes)$`)],

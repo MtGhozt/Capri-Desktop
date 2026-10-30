@@ -16,6 +16,27 @@ test('parses media commands without matching ordinary phrases', () => {
   assert.equal(parseMusicCommand('la siguiente pregunta'), null);
 });
 
+test('pause intents win over pon/play search (not a song named pausa)', () => {
+  for (const said of [
+    'Pon pausa a la música',
+    'pon la música en pausa',
+    'ponme en pausa',
+    'pausa',
+    'pausá la música',
+    'detené la canción',
+    'stop',
+  ]) {
+    assert.deepEqual(parseMusicCommand(said), { action: 'pause' }, said);
+  }
+  // real searches still go through
+  assert.deepEqual(parseMusicCommand('pon never gonna give you up'), {
+    action: 'query', query: 'never gonna give you up',
+  });
+  assert.deepEqual(parseMusicCommand('pon bohemian rhapsody'), {
+    action: 'query', query: 'bohemian rhapsody',
+  });
+});
+
 test('her song phrases map to music.herSong (default)', () => {
   assert.equal(DEFAULT_HER_SONG, "I'm in love with myself");
   for (const said of ['pon tu canción', 'pon tu canción favorita', 'tu canción', 'play your song']) {
