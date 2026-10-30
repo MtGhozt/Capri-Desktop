@@ -586,6 +586,11 @@ export class Capri {
   }
 
   loop(now) {
+    // Folded / stowed: don't keep a 60 fps rAF chain alive for a no-op.
+    if (this.hidden && !this.busy) {
+      setTimeout(() => requestAnimationFrame(this.loop), 200);
+      return;
+    }
     requestAnimationFrame(this.loop);
     if (this.hidden) return;
     if (now - this.lastDraw < this.interval() - 1) return;
