@@ -1722,6 +1722,10 @@ async def session(ws, engine: Engine) -> None:
             if kind == "config":
                 engine.apply_cfg(msg)
                 if engine.cfg.get("enabled"):
+                    # torch only for the engine that needs it: a light install (no -OmniVoice)
+                    # has no torch, and preloading it used to take the whole sidecar down.
+                    if engine._tts_wants_gpu():
+                        await asyncio.to_thread(preload_torch, log)
                     # STT loads in the background from boot: waiting here used to keep the
                     # control loop from answering a cached greet until Whisper was ready.
                     asyncio.get_running_loop().run_in_executor(None, engine.ensure_stt)
@@ -1763,7 +1767,6 @@ async def amain() -> None:
         log("CAPRI_VOICE_TOKEN missing")
         sys.exit(1)
     MODELS.mkdir(parents=True, exist_ok=True)
-    preload_torch(log)
     loop = asyncio.get_running_loop()
     engine = Engine(loop, token)
     engine.restart_stream()

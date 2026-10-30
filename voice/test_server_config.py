@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 import numpy as np
+import heavy
 import server
 
 
@@ -97,6 +98,37 @@ class ServerConfigTests(unittest.TestCase):
              patch.object(server, "usable_vram_mib", side_effect=lambda free, loaded, reserve: free - reserve):
             free, usable, loaded = engine._vram_budget()
         self.assertEqual((free, usable, loaded), (2400, 2400, False))
+
+
+class TorchOptionalTests(unittest.TestCase):
+    """Light install (setup.ps1 without -OmniVoice): no torch, and the sidecar still boots."""
+
+    def setUp(self):
+        self._saved = (heavy._ready, heavy._missing)
+        heavy._ready = False
+        heavy._missing = False
+
+    def tearDown(self):
+        heavy._ready, heavy._missing = self._saved
+
+    def test_preload_without_torch_does_not_raise(self):
+        lines = []
+        with patch.dict(sys.modules, {"torch": None}):
+            self.assertFalse(heavy.preload_torch(lines.append))
+        self.assertTrue(any("torch not installed" in line for line in lines), lines)
+
+    def test_missing_torch_is_logged_once(self):
+        lines = []
+        with patch.dict(sys.modules, {"torch": None}):
+            heavy.preload_torch(lines.append)
+            heavy.preload_torch(lines.append)
+        self.assertEqual(len(lines), 1)
+
+    def test_only_the_gpu_tts_asks_for_torch(self):
+        engine = server.Engine.__new__(server.Engine)
+        for kind, wants in (("auto", True), ("omnivoice", True), ("kokoro", False), ("off", False)):
+            engine.cfg = {"tts": kind}
+            self.assertEqual(engine._tts_wants_gpu(), wants, kind)
 
 
 class MicDeviceTests(unittest.TestCase):
