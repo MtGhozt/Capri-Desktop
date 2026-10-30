@@ -76,6 +76,21 @@ def resolve_ref(voice_dir: Path, tts_ref) -> tuple[Path, Path]:
     return wav, wav.with_suffix(".txt")
 
 
+def verify_ref_transcript(txt: Path, log, label: str) -> str:
+    """Ensure a clone transcript exists, is non-empty and trimmed; warn in voice.log if not."""
+    if not txt.is_file():
+        log(f"tts transcript missing label={label} path={txt}")
+        return ""
+    raw = txt.read_text(encoding="utf-8")
+    text = raw.strip()
+    if not text:
+        log(f"tts transcript empty label={label} path={txt}")
+        return ""
+    if raw != text and raw != text + "\n" and raw != text + "\r\n":
+        log(f"tts transcript not trimmed label={label} path={txt}")
+    return text
+
+
 def pick_mood_prompt(mood, mood_prompts: dict, default):
     """Mood ref if cached, else the playful default (missing wav/txt already omitted from mood_prompts)."""
     key = str(mood or "").strip().lower()
@@ -229,9 +244,16 @@ class OmniVoiceTTS(TTSEngine):
 
         if not self.wav.is_file():
             raise FileNotFoundError(f"tts ref missing: {self.wav}")
-        transcript = self.txt.read_text(encoding="utf-8").strip() if self.txt.is_file() else ""
+        transcript = verify_ref_transcript(self.txt, self.log, "ttsRef")
         if not transcript:
             raise RuntimeError(f"tts ref transcript missing: {self.txt} (refusing OmniVoice ASR)")
+        for name, (mwav, mtxt) in list(self.mood_refs.items()):
+            if not mwav.is_file():
+                self.log(f"tts mood wav missing label={name} path={mwav}")
+                self.mood_refs.pop(name, None)
+                continue
+            if not verify_ref_transcript(mtxt, self.log, f"mood:{name}"):
+                self.mood_refs.pop(name, None)
 
         cuda_ok = bool(torch.cuda.is_available()) and int(free_vram or 0) >= OMNI_MIN_GPU_MIB
         self.log(f"omnivoice vram free ~{free_vram} MiB cuda={torch.cuda.is_available()} min={OMNI_MIN_GPU_MIB}")
@@ -347,22 +369,32 @@ class OmniVoiceTTS(TTSEngine):
         if not cleaned or self._model is None or prompt is None:
             return np.zeros(0, dtype=np.float32), 24000
         t0 = time.perf_counter()
+        # Safer / more deterministic: greedy class sampling, no position jitter.
         kwargs = {
             "text": cleaned,
             "voice_clone_prompt": prompt,
             "speed": self.speed,
             "num_step": self.steps,
+            "guidance_scale": 2.0,
+            "class_temperature": 0.0,
+            "position_temperature": 0.0,
         }
         try:
             from omnivoice.models.omnivoice import OmniVoiceGenerationConfig
-            kwargs["generation_config"] = OmniVoiceGenerationConfig(num_step=self.steps)
+            kwargs["generation_config"] = OmniVoiceGenerationConfig(
+                num_step=self.steps,
+                guidance_scale=2.0,
+                class_temperature=0.0,
+                position_temperature=0.0,
+            )
         except Exception:
             pass
         try:
             audio = self._model.generate(**kwargs)
         except TypeError:
             kwargs.pop("generation_config", None)
-            kwargs.pop("num_step", None)
+            for drop in ("num_step", "guidance_scale", "class_temperature", "position_temperature"):
+                kwargs.pop(drop, None)
             audio = self._model.generate(**kwargs)
         pcm = np.asarray(audio[0] if isinstance(audio, (list, tuple)) else audio, dtype=np.float32).reshape(-1)
         ms = (time.perf_counter() - t0) * 1000
