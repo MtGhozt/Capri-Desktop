@@ -14,7 +14,8 @@
     "hooks:install": "node scripts/install-hooks.js",
     "hooks:uninstall": "node scripts/install-hooks.js --uninstall",
     "dist": "electron-builder --win",
-    "test": "node --test"
+    "test": "node --test test/*.test.js --test-force-exit",
+    "test:e2e": "node --test test/e2e/smoke.e2e.js --test-force-exit --test-timeout=180000"
   },
   "keywords": [
     "claude-code",
@@ -30,7 +31,8 @@
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {
     "electron": "^44.9.3",
-    "electron-builder": "^26.18.0"
+    "electron-builder": "^26.18.0",
+    "playwright-core": "^1.64.1"
   },
   "dependencies": {
     "@fontsource/chakra-petch": "^5.3.0",
@@ -67,7 +69,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icons/capri.ico"
@@ -82,3 +86,4 @@
     }
   }
 }
+

@@ -57,6 +57,14 @@ En esta versión pública responde con **blips** (beeps al escribir en la burbuj
 - SmartScreen avisa porque el `.exe` no está firmado, no porque haga algo oculto.
 - Se desinstala como cualquier app (Configuración de Windows → Aplicaciones).
 
+## Si Capri se traba
+
+Si el overlay se congela, no responde al clic o no puedes cerrarla:
+
+1. **`Ctrl+Alt+Shift+Q`** — cierra Capri **al instante** (sin preguntar Sí/No). También corta el sidecar de voz.
+2. **Icono de la bandeja → Salir, dos veces en menos de 10 s** — la primera pide confirmación; la segunda sale sin esperar el Sí.
+3. Si el menú quedó pegado encima: bandeja → **Cerrar menú**, o `Ctrl+Alt+M` (o el atajo que muestre la bandeja).
+
 ## FAQ
 
 - **¿Mac / Linux?** Aún no hay instalador; el enfoque actual es Windows x64.
@@ -171,6 +179,12 @@ Public build defaults to **typing blips** only — no spoken TTS. Voice clone/mo
 ## Is it safe?
 
 Source is here; keys use Windows `safeStorage`; traffic only goes to `127.0.0.1` (LM Studio) or the cloud provider you configure. SmartScreen warns because the binary is unsigned.
+
+## If Capri freezes
+
+1. **`Ctrl+Alt+Shift+Q`** — quit immediately (no confirmation); also stops the voice sidecar.
+2. **Tray icon → Quit twice within 10 s** — first click asks; second quits without waiting for Yes.
+3. Stuck menu: tray → **Close menu**, or `Ctrl+Alt+M`.
 
 ## FAQ
 

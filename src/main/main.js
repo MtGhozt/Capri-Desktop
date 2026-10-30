@@ -53,6 +53,7 @@ const { createAppFlow } = require('./app-flow');
 const { createAppActions, isProtected } = require('./app-actions');
 const { createAppFx } = require('./app-fx');
 const { createMenuGuard } = require('./menu-guard');
+const { createRendererRecover } = require('./renderer-recover');
 const { toOverlayRect } = require('./rects');
 const appScan = require('./app-scan');
 const appHost = require('./app-host');
@@ -68,7 +69,10 @@ const { needsModelSetup, probeLocalLlm, SETUP_HINT } = require('./setup');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DEV = process.argv.includes('--dev');
+const E2E = process.env.CAPRI_E2E === '1' || process.env.CAPRI_E2E === 'true';
 const PORT = Number(process.env.CAPRI_PORT) || 47823;
+// Public escape hatch: always registered, no confirm (see README "Si Capri se traba").
+const FORCE_QUIT_ACCEL = 'Ctrl+Alt+Shift+Q';
 const SOUND_EXT = /\.(mp3|wav|ogg|m4a)$/i;
 const CLAUDE_CODE_HELP = 'https://code.claude.com/docs/en/quickstart';
 // the word in the corner of the panel when she talks to the room
@@ -239,15 +243,17 @@ function createOverlay() {
   });
   overlay.webContents.on('render-process-gone', (_e, details) => {
     console.error('[capri] renderer gone:', details.reason);
-    logEvent(voiceLogPath(), `[capri] renderer gone: ${details.reason}`);
-    setClickThrough(true); // nobody left to answer the clicks: they go to the windows under her
+    rendererRecover.gone(details.reason);
   });
-  // a stalled page can't take clicks back from the screen: give them back to the other windows
+  // a stalled page can't take clicks back from the screen: give them back / reload once
   overlay.webContents.on('unresponsive', () => {
-    logEvent(voiceLogPath(), '[capri] renderer unresponsive: click-through on');
-    setClickThrough(true);
+    rendererRecover.unresponsive();
   });
-  overlay.webContents.on('responsive', () => logEvent(voiceLogPath(), '[capri] renderer responsive again'));
+  overlay.webContents.on('responsive', () => {
+    logEvent(voiceLogPath(), '[capri] renderer responsive again');
+    rendererRecover.reset();
+  });
+  overlay.webContents.on('did-finish-load', () => rendererRecover.reset());
   // another window came to the front (a click, Alt+Tab, the taskbar): her menu goes away
   // (not when she hands the keyboard back herself: that's her menu changing page)
   overlay.on('blur', () => {
@@ -279,6 +285,24 @@ function setClickThrough(on) {
   if (clickThrough) overlay.setIgnoreMouseEvents(true, { forward: true });
   else overlay.setIgnoreMouseEvents(false);
 }
+
+function trayNotice(text) {
+  const line = String(text || '').trim();
+  if (!line) return;
+  logEvent(voiceLogPath(), `[capri] tray notice: ${line}`);
+  try { tray?.displayBalloon?.({ title: 'Capri', content: line }); } catch { /* tray gone */ }
+}
+
+// Crash / hang: reload once, then tray notice — never loop forever holding the desktop.
+const rendererRecover = createRendererRecover({
+  reload: () => {
+    if (!overlay || overlay.isDestroyed()) return;
+    overlay.webContents.reloadIgnoringCache();
+  },
+  notice: trayNotice,
+  log: (line) => logEvent(voiceLogPath(), line),
+  setClickThrough,
+});
 
 // Her menu can't hold the screen (menu-guard.js): heartbeat, forced close, Esc while it's open.
 const menuGuard = createMenuGuard({
@@ -469,7 +493,15 @@ function rendererConfig() {
   const idle = { ...cfg.idle };
   // --dev only: 10 s idle for testing. Never written to config.json.
   if (DEV) idle.dormantAfterMs = 10_000;
-  return { ...cfg, idle, lang: resolveLang(cfg.lang), langSetting: cfg.lang, dev: DEV, floorGap: overlayArea().gap };
+  return {
+    ...cfg,
+    idle,
+    lang: resolveLang(cfg.lang),
+    langSetting: cfg.lang,
+    dev: DEV,
+    e2e: E2E,
+    floorGap: overlayArea().gap,
+  };
 }
 
 // Sleep by command: her goodnight line first, then her corner and the fold (goodnight.js).
@@ -1388,6 +1420,8 @@ function registerShortcuts() {
   const s = config.load().shortcuts || {};
   bind(s.toggle, () => toggleVisible());
   bind(s.chat, () => toggleChat());
+  // Always on: emergency quit with no confirmation (README "Si Capri se traba").
+  bind(FORCE_QUIT_ACCEL, () => doQuit());
   // Close her menu: the first of these that's free (another app may hold Ctrl+Alt+M)
   menuCloseCombo = '';
   for (const combo of [s.menuClose, 'Ctrl+Alt+Shift+M', 'Ctrl+Alt+F12']) {
@@ -2019,12 +2053,31 @@ function applyRender() {
 
 function main() {
   applyRender();
-  if (!app.requestSingleInstanceLock()) {
+  // E2E needs a parallel instance against a temp userData; never steal the user's Capri.
+  if (!E2E && !app.requestSingleInstanceLock()) {
     app.quit();
     return;
   }
-  app.on('second-instance', () => sendCommand('status'));
+  if (!E2E) app.on('second-instance', () => sendCommand('status'));
   if (process.platform === 'win32') app.setAppUserModelId('capri.desktop');
+
+  // Main must stay up so the tray / Ctrl+Alt+Shift+Q can still kill a wedged overlay.
+  process.on('uncaughtException', (err) => {
+    console.error('[capri] uncaughtException:', err);
+    try { logEvent(voiceLogPath(), `[capri] uncaughtException: ${err?.stack || err}`); } catch { /* log gone */ }
+    try { trayNotice(`Error interno: ${String(err?.message || err).slice(0, 120)}`); } catch { /* tray gone */ }
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('[capri] unhandledRejection:', reason);
+    try {
+      logEvent(voiceLogPath(), `[capri] unhandledRejection: ${reason?.stack || reason}`);
+    } catch { /* log gone */ }
+  });
+
+  if (E2E) {
+    // Playwright drives her; expose an instant quit without going through the menu.
+    global.__capriForceQuit = () => doQuit();
+  }
 
   app.whenReady().then(async () => {
     restoreSpotifyToken();

@@ -744,6 +744,46 @@ async function boot() {
   window.addEventListener('error', () => forceFree());
   window.addEventListener('unhandledrejection', () => forceFree());
 
+  // Playwright E2E (fresh profile): drive menu / faults without fighting OS click-through.
+  if (config.e2e) {
+    window.__capriE2E = {
+      openMenu: (x = Math.round(innerWidth / 2), y = Math.round(innerHeight / 2)) => {
+        openAppMenu(x, y);
+      },
+      forceFree,
+      interactive: () => interactive,
+      setInteractive: (on) => setInteractive(Boolean(on)),
+      pos: () => ({ x: capri.pos.x, y: capri.pos.y }),
+      throwError: () => { setTimeout(() => { throw new Error('e2e-sync'); }, 0); },
+      reject: () => { Promise.reject(new Error('e2e-reject')); },
+      sleep: () => fold({ force: true }),
+      wake: () => unfold(),
+      openChat: () => unfold({ chat: true }),
+      caress: () => capri.onCaress?.(),
+      sendChat: (text) => host.sendChat(text),
+      menuVisible: () => Boolean(appMenu.visible),
+      menuHidden: () => Boolean(appMenu.el.hidden),
+      clickThroughOk: () => {
+        // Fail-closed for E2E: folding stuck or menu drawn while closed = bad.
+        if (folding && performance.now() - foldingAt > 3000) return false;
+        if (!appMenu.visible && !appMenu.el.hidden) return false;
+        return true;
+      },
+      pressEsc: () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        appMenu.hide({ force: true });
+        forceFree();
+      },
+      dragBy: (dx, dy) => {
+        const from = { x: capri.pos.x, y: capri.pos.y };
+        capri.pos = { x: from.x + dx, y: from.y + dy };
+        capri.pivot?.();
+        capri.onMove?.(capri.head());
+        return { from, to: { ...capri.pos } };
+      },
+    };
+  }
+
   // Click-through can't stay off by itself: a fold that never ended lets go, and what she asks
   // main for is sent again (main may have lost it to a focus change).
   setInterval(() => {
