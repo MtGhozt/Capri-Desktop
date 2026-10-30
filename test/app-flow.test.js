@@ -24,7 +24,9 @@ function flow({ close = () => ({ status: 'closed', ids: [5] }), open = () => ({ 
 
 test('a plain order does it and logs it', async () => {
   const { f, did, logs } = flow();
-  assert.equal((await f.command('abre Discord y YouTube')).line, 'appAbrirVarias:Discord y YouTube');
+  const done = await f.command('abre Discord y YouTube');
+  assert.equal(done.line, 'appAbrirVarias:Discord y YouTube');
+  assert.equal(done.ok, true);
   assert.deepEqual(did, [['open', 'Discord'], ['open', 'YouTube']]);
   assert.match(logs[0], /^app open Discord type=program ok$/);
   assert.equal(await f.command('cuéntame un chiste'), null);
@@ -69,7 +71,9 @@ test('not running, denied, links, failures and unknown names', async () => {
   assert.equal((await f.command('cierra Steam')).line, 'appProhibido:Steam');
   assert.equal((await flow().f.command('Abre Fortnite')).line, 'appNoEncontrada:«Fortnite»');
   const bad = flow({ open: () => ({ ok: false, error: 'no existe el archivo' }) });
-  assert.equal((await bad.f.command('abre Namida')).line, 'appFallo:Namida');
+  const failed = await bad.f.command('abre Namida');
+  assert.equal(failed.line, 'appFallo:Namida');
+  assert.equal(failed.ok, false);
   assert.match(bad.logs[0], /failed: no existe el archivo/);
 });
 

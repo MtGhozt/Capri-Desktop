@@ -178,6 +178,25 @@ def wake_phrase_match(text: str) -> bool:
     )
 
 
+def wasapi_extra_settings(device) -> object | None:
+    """Shared-mode WASAPI only for a WASAPI device: other host APIs reject it (PaError -9984)."""
+    if sys.platform != "win32" or not hasattr(sd, "WasapiSettings"):
+        return None
+    try:
+        if device is None:
+            device = sd.default.device[0]
+        hostapi = int(sd.query_devices(device)["hostapi"])
+        name = str(sd.query_hostapis(hostapi).get("name") or "")
+    except Exception:
+        return None
+    if "WASAPI" not in name.upper():
+        return None
+    try:
+        return sd.WasapiSettings(exclusive=False)
+    except Exception:
+        return None
+
+
 def ptt_held() -> bool:
     if sys.platform != "win32":
         return False
@@ -286,6 +305,7 @@ class Engine:
             "volume": 0.7,
         }
         self.stream = None
+        self._mic_error = None
         self.capturing = False
         self.hold = False
         # follow-up: she asked something, the mic opens without the wake word for follow_s seconds;
@@ -636,11 +656,13 @@ class Engine:
     def restart_stream(self) -> None:
         self.stop_stream()
         if not self.stream_needed():
+            self._mic_error = None
             log(
                 f"mic released enabled={bool(self.cfg.get('enabled'))} "
                 f"muted={bool(self.cfg.get('muted'))} sleeping={bool(self.cfg.get('sleeping'))} "
                 f"wake={bool(self.cfg.get('wakeWord'))}"
             )
+            self.broadcast({"type": "mic", "open": False, "needed": False, "message": ""})
             return
         device = None
         raw = self.cfg.get("inputDevice")
@@ -650,38 +672,59 @@ class Engine:
             except (TypeError, ValueError):
                 device = None
         # shared mode: exclusive WASAPI would lock the mic away from push-to-talk apps
-        extra = None
-        if sys.platform == "win32" and hasattr(sd, "WasapiSettings"):
-            try:
-                extra = sd.WasapiSettings(exclusive=False)
-            except Exception:
-                extra = None
+        extra = wasapi_extra_settings(device)
         try:
             self._audio_q = Queue(maxsize=MIC_QUEUE)
             self._audio_run = True
             self._audio_thread = threading.Thread(target=self._audio_loop, name="capri-mic", daemon=True)
             self._audio_thread.start()
-            self.stream = sd.InputStream(
-                samplerate=SAMPLE_RATE,
-                channels=1,
-                dtype="float32",
-                blocksize=MIC_BLOCK,
-                latency="high",
-                device=device,
-                extra_settings=extra,
-                callback=self._on_audio,
-            )
-            self.stream.start()
-            log(
-                f"mic stream device={device if device is not None else 'default'} "
-                f"sr={self.stream.samplerate} ch={self.stream.channels} "
-                f"block={MIC_BLOCK} queue={MIC_QUEUE}"
-            )
+            self.stream = self._open_stream(device, extra)
         except Exception as err:
-            log(f"mic failed: {err}")
-            self.broadcast({"type": "error", "message": str(err)})
-            self.stream = None
-            self.stop_stream()
+            if extra is None:
+                self._mic_failed(err)
+                return
+            log(f"mic failed with WASAPI shared mode ({err}); retrying without extra settings")
+            try:
+                self.stream = self._open_stream(device, None)
+            except Exception as retry:
+                self._mic_failed(retry)
+                return
+        self._mic_error = None
+        log(
+            f"mic stream device={device if device is not None else 'default'} "
+            f"sr={self.stream.samplerate} ch={self.stream.channels} "
+            f"block={MIC_BLOCK} queue={MIC_QUEUE}"
+        )
+        self.broadcast({"type": "mic", "open": True, "needed": True, "message": ""})
+
+    def _open_stream(self, device, extra):
+        stream = sd.InputStream(
+            samplerate=SAMPLE_RATE,
+            channels=1,
+            dtype="float32",
+            blocksize=MIC_BLOCK,
+            latency="high",
+            device=device,
+            extra_settings=extra,
+            callback=self._on_audio,
+        )
+        try:
+            stream.start()
+        except Exception:
+            try:
+                stream.close()
+            except Exception:
+                pass
+            raise
+        return stream
+
+    def _mic_failed(self, err) -> None:
+        log(f"mic failed: {err}")
+        self.stream = None
+        self._mic_error = str(err)
+        self.broadcast({"type": "error", "message": str(err)})
+        self.broadcast({"type": "mic", "open": False, "needed": True, "message": str(err)})
+        self.stop_stream()
 
     def stop_stream(self) -> None:
         self._audio_run = False
@@ -1601,6 +1644,12 @@ async def session(ws, engine: Engine) -> None:
     engine.clients.add(ws)
     await ws.send(json.dumps({"type": "ready"}))
     await ws.send(json.dumps({"type": "devices", "devices": engine.list_devices()}))
+    await ws.send(json.dumps({
+        "type": "mic",
+        "open": engine.stream is not None,
+        "needed": engine.stream_needed(),
+        "message": engine._mic_error or "",
+    }))
     try:
         async for raw in ws:
             msg = parse_json(raw)

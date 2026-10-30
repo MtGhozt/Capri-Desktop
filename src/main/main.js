@@ -94,6 +94,7 @@ let comments = null;
 let ttsLoading = false;
 let voiceTalking = false;
 let voiceListening = false;
+let voiceMic = { open: true, needed: true, message: '' };
 let llmBusy = false;
 let voiceQueue = [];
 let chatOpen = false;
@@ -584,6 +585,31 @@ async function musicReply(parsed, { chat = true } = {}) {
     logEvent(voiceLogPath(), `[capri] music ${parsed.action} failed: ${err.message}`);
     showLine('No pude controlar la música.', { chat, badge: 'MUSIC' });
     return { ok: false };
+  }
+}
+
+// Hidden [open:<app>] / [play:<query>] tag on her reply: the same paths a typed order takes,
+// without her generic "opening X" line (she already answered in her own words).
+async function runReplyAction(action) {
+  const value = String(action?.value || '').trim();
+  if (!value) return;
+  const kind = String(action?.kind || '').toLowerCase();
+  try {
+    if (kind === 'open') {
+      const result = await apps().command(`abre ${value}`);
+      if (result && result.ok === false) showLine(result.line, { chat: true, badge: 'APPS' });
+      return;
+    }
+    if (kind === 'play') {
+      const parsed = parseMusicCommand(action.herSong ? 'tu canción' : `pon ${value}`, {
+        herSong: config.load().music?.herSong,
+      });
+      if (!parsed) return;
+      const result = await music.command(parsed);
+      if (!result?.ok) showLine(result?.error || 'No pude poner esa música.', { chat: true, badge: 'MUSIC' });
+    }
+  } catch (err) {
+    logEvent(voiceLogPath(), `[capri] reply action ${kind} failed: ${err.message}`);
   }
 }
 
@@ -1403,6 +1429,15 @@ function talkNow() {
     voice?.pttStop();
     return;
   }
+  if (voiceMic.needed && !voiceMic.open) {
+    // the mic could not open: say why instead of looking dead
+    if (voiceMic.message) logEvent(voiceLogPath(), `[capri] mic unavailable: ${voiceMic.message}`);
+    sendCommand('line', {
+      badge: 'MIC',
+      text: 'No pude abrir el micrófono. Revisa el dispositivo en OÍDO.',
+    });
+    return;
+  }
   llm?.cancel();
   speakQueue?.stop();
   goodnight.cancel();
@@ -1711,7 +1746,14 @@ function registerIpc() {
   ipcMain.handle('config:set', (_e, patch) => updateConfig(patch));
   ipcMain.handle('demo:window', (_e, open) => demoWindow(open));
   // right-clicking her: the same menu as the tray icon (which Windows often hides behind the ^ by the clock)
-  ipcMain.on('menu:open', () => trayMenu?.popup({ window: overlay }));
+  ipcMain.on('menu:open', () => {
+    if (!trayMenu) rebuildTray();
+    try {
+      trayMenu?.popup({ window: overlay });
+    } catch (err) {
+      console.error('[capri] tray menu:', err.message);
+    }
+  });
   // her welcome panel's buttons
   ipcMain.handle('hooks:install', () => runHooks('install', { quiet: true }));
   ipcMain.handle('claude:found', () => fs.existsSync(path.dirname(hooks.status().file))); // Claude Code keeps its settings there
@@ -1859,6 +1901,7 @@ function registerIpc() {
           }
           overlay?.webContents.send('chat:done', payload);
           followUp.reply(payload?.text || said, { spoken: Boolean(speakId) });
+          if (payload?.action) void runReplyAction(payload.action);
         },
         onError: (payload) => {
           if (speakId) speakQueue?.stop(speakId);
@@ -2041,6 +2084,13 @@ function main() {
           openChat();
         }
         if (payload?.type === 'stopped') voiceListening = false;
+        if (payload?.type === 'mic') {
+          voiceMic = {
+            open: payload.open !== false,
+            needed: payload.needed !== false,
+            message: String(payload.message || ''),
+          };
+        }
         if (payload?.type === 'devices') rebuildTray();
         goodnight.onVoiceEvent(payload); // her goodnight line over: now she folds
         if (overlay?.webContents && !overlay.webContents.isDestroyed()) {

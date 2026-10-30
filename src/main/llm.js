@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const { PROVIDERS, isCloud, requestFor, explain } = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
-const { stripMoodTag, createMoodStripper } = require('./mood-tag');
+const { stripReplyTags, createMoodStripper } = require('./mood-tag');
 
 const HISTORY_LIMIT = 20; // ~10 user+assistant turns
 const TIMEOUT_MS = 45000;
@@ -185,16 +185,21 @@ function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext,
     let streamed = false;
     let full = '';
     let replyMood = null;
+    let replyAction = null;
     // A cloud answer is cleaned as it arrives, sentence by sentence, so what she shows and what she
     // says are the same plain text. The local model is left exactly as it was. Mood tags are
     // stripped before either path reaches the UI or TTS.
     const ask = async (target) => {
       full = '';
       replyMood = null;
+      replyAction = null;
       const stripper = createMoodStripper({
         onMood: (name) => {
           replyMood = name;
           onMood?.(name);
+        },
+        onAction: (act) => {
+          replyAction = act;
         },
         onText: (piece) => {
           streamed = true;
@@ -219,6 +224,7 @@ function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext,
       if (cleaner) cleaner.flush();
       stripper.flush();
       replyMood = stripper.mood || replyMood;
+      replyAction = stripper.action || replyAction;
       return full;
     };
 
@@ -231,16 +237,17 @@ function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext,
 
     const done = (text) => {
       clearTimeout(timer);
-      const cleaned = stripMoodTag(text);
+      const cleaned = stripReplyTags(text);
       const finalText = cleaned.text;
       const mood = replyMood || cleaned.mood || null;
+      const action = replyAction || cleaned.action || null;
       history = [
         ...history,
         { role: 'user', content: user },
         { role: 'assistant', content: finalText },
       ].slice(-HISTORY_LIMIT);
       lastTalkAt = now().getTime();
-      onDone({ text: finalText, mood });
+      onDone({ text: finalText, mood, action });
     };
 
     const fail = (err) => {

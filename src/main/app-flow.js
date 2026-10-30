@@ -30,7 +30,7 @@ function createAppFlow({ apps, actions, line, log = () => {}, event = () => {}, 
     if (ok.length === 1) lines.unshift(line('appAbrir', { app: ok[0].name }));
     if (ok.length > 1) lines.unshift(line('appAbrirVarias', { apps: names(ok) }));
     if (missing.length) lines.push(line('appNoEncontrada', { app: quoted(missing) }));
-    return lines.join(' ');
+    return { line: lines.join(' '), ok: ok.length > 0 };
   }
 
   // `mode` null: each app's own close mode ('ask' ones get a question)
@@ -65,7 +65,7 @@ function createAppFlow({ apps, actions, line, log = () => {}, event = () => {}, 
       confirm.ask({ type: 'close', apps: by.force, mode: 'force' });
       lines.push(line('appForzar', { app: names(by.force) }));
     }
-    return lines.join(' ');
+    return { line: lines.join(' '), ok: by.closed.length > 0 || by.notRunning.length > 0 };
   }
 
   function run({ type, apps: list, mode = null, missing = [] }) {
@@ -78,7 +78,7 @@ function createAppFlow({ apps, actions, line, log = () => {}, event = () => {}, 
     const answer = confirm.take(text);
     if (answer?.kind === 'yes') {
       log(`app confirm yes: ${answer.action.type} ${names(answer.action.apps)}`);
-      return { line: await run(answer.action) };
+      return await run(answer.action);
     }
     if (answer?.explicit) {
       log(`app confirm no: ${answer.action.type} ${names(answer.action.apps)}`);
@@ -101,7 +101,7 @@ function createAppFlow({ apps, actions, line, log = () => {}, event = () => {}, 
       confirm.ask({ type: plan.action, apps: plan.apps, mode: null, missing: plan.missing });
       return { line: line('appQuisiste', { apps: names(plan.suggest) }) };
     }
-    return { line: await run({ type: plan.action, apps: plan.apps, missing: plan.missing }) };
+    return await run({ type: plan.action, apps: plan.apps, missing: plan.missing });
   }
 
   async function handle(text) {

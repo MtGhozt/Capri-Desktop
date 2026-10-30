@@ -98,6 +98,69 @@ class ServerConfigTests(unittest.TestCase):
         self.assertEqual((free, usable, loaded), (2400, 2400, False))
 
 
+class MicDeviceTests(unittest.TestCase):
+    def test_extra_settings_only_for_wasapi(self):
+        default = type("Default", (), {"device": (3, 4)})()
+        with patch.object(server.sys, "platform", "win32"), \
+             patch.object(server.sd, "default", default), \
+             patch.object(server.sd, "query_devices", return_value={"hostapi": 0}), \
+             patch.object(server.sd, "query_hostapis", return_value={"name": "MME"}), \
+             patch.object(server.sd, "WasapiSettings") as wasapi:
+            self.assertIsNone(server.wasapi_extra_settings(None))
+            wasapi.assert_not_called()
+
+    def test_extra_settings_for_wasapi_host(self):
+        sentinel = object()
+        default = type("Default", (), {"device": (3, 4)})()
+        with patch.object(server.sys, "platform", "win32"), \
+             patch.object(server.sd, "default", default), \
+             patch.object(server.sd, "query_devices", return_value={"hostapi": 0}), \
+             patch.object(server.sd, "query_hostapis", return_value={"name": "Windows WASAPI"}), \
+             patch.object(server.sd, "WasapiSettings", return_value=sentinel) as wasapi:
+            self.assertIs(server.wasapi_extra_settings(None), sentinel)
+            wasapi.assert_called_once_with(exclusive=False)
+
+    def test_stream_retries_once_without_extra_settings(self):
+        engine = server.Engine.__new__(server.Engine)
+        engine.cfg = {"enabled": True, "muted": False, "sleeping": False, "wakeWord": True, "inputDevice": None}
+        engine.stream = None
+        engine._audio_thread = None
+        engine._audio_run = False
+        engine._audio_q = server.Queue(maxsize=4)
+        engine.events = []
+        engine.broadcast = engine.events.append
+
+        class FakeStream:
+            samplerate = server.SAMPLE_RATE
+            channels = 1
+
+            def start(self):
+                pass
+
+            def stop(self):
+                pass
+
+            def close(self):
+                pass
+
+        calls = []
+
+        def open_stream(**kwargs):
+            calls.append(kwargs.get("extra_settings"))
+            if len(calls) == 1:
+                raise RuntimeError("Incompatible host API specific stream info [PaErrorCode -9984]")
+            return FakeStream()
+
+        sentinel = object()
+        with patch.object(server, "wasapi_extra_settings", return_value=sentinel), \
+             patch.object(server.sd, "InputStream", side_effect=open_stream):
+            engine.restart_stream()
+
+        self.assertEqual(calls, [sentinel, None])
+        self.assertIsNotNone(engine.stream)
+        self.assertIsNone(engine._mic_error)
+
+
 class TranscriptFilterTests(unittest.TestCase):
     def test_whisper_echoes_on_silence_are_dropped(self):
         for heard in (
