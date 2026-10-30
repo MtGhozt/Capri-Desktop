@@ -101,21 +101,51 @@ test('smoke: launch, menu, caress/drag/chat, recovery, Salir→Sí exits', async
   assert.equal(await app.e2e(() => window.__capriE2E.clickThroughOk()), true);
   await app.e2e(() => window.__capriE2E.pressEsc());
 
-  // --- Salir → one click on Sí exits (button handler → doQuit, not a quit-answer shortcut) ---
+  // --- Salir: Sí must be the hit target at several Capri positions (not only over the textbox) ---
   await app.e2e(() => window.__capriE2E.pressEsc());
-  await win.evaluate(() => window.host.menuAction({ id: 'quit' }));
-  await win.waitForSelector('.panel__actions button.is-primary', { state: 'visible', timeout: 8_000 });
-  // Confirm window must be solid (no click-through) so a real pointer click would land.
-  assert.equal(await app.e2e(() => window.__capriE2E.interactive()), true);
-  assert.deepEqual(
-    await win.evaluate(() => [...document.querySelectorAll('.panel__actions button')].map((b) => b.textContent)),
-    ['Sí', 'No'],
-  );
+  const quitHitOk = async (x, y) => {
+    // Move her away from the bubble input so a Capri-covered panel would fail.
+    await win.evaluate(({ x: nx, y: ny }) => {
+      const c = window.__capriE2E;
+      const from = c.pos();
+      c.dragBy(nx - from.x, ny - from.y);
+    }, { x, y });
+    await win.evaluate(() => window.host.menuAction({ id: 'quit' }));
+    await win.waitForSelector('.panel__actions button.is-primary', { state: 'visible', timeout: 8_000 });
+    // Wait out transmit-in clip-path so Sí is actually hit-testable.
+    await win.waitForTimeout(300);
+    assert.equal(await app.e2e(() => window.__capriE2E.interactive()), true);
+    const hit = await win.evaluate(() => {
+      const btn = document.querySelector('.panel__actions button.is-primary');
+      const r = btn.getBoundingClientRect();
+      const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {
+        ok: Boolean(el && (el === btn || btn.contains(el))),
+        className: String(el?.className || el?.tagName || ''),
+        labels: [...document.querySelectorAll('.panel__actions button')].map((b) => b.textContent),
+      };
+    });
+    assert.deepEqual(hit.labels, ['Sí', 'No'], `buttons at Capri (${x},${y})`);
+    assert.equal(hit.ok, true, `Sí covered at Capri (${x},${y}): hit=${hit.className}`);
+    return hit;
+  };
+  // Probe two spots that are not the default bubble/textbox perch; cancel with No.
+  await quitHitOk(140, 120);
+  await win.evaluate(() => {
+    document.querySelector('.panel__actions button:not(.is-primary)')?.click();
+  });
+  await win.waitForTimeout(400);
+  await quitHitOk(820, 520);
+  await win.evaluate(() => {
+    document.querySelector('.panel__actions button:not(.is-primary)')?.click();
+  });
+  await win.waitForTimeout(400);
+
+  // Final position + Sí exits.
+  await quitHitOk(200, 480);
   const closed = new Promise((resolve) => {
     electronApp.once('close', () => resolve('closed'));
   });
-  // DOM click on Sí (same listener as a pointer). OS click is flaky under ignoreMouseEvents races
-  // in Playwright; the solid-window assert above covers click-through. Quitting tears the page down.
   win.evaluate(() => {
     document.querySelector('.panel__actions button.is-primary')?.click();
   }).catch(() => {});

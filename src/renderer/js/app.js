@@ -147,6 +147,9 @@ async function boot() {
   };
   const holdQuitConfirm = (on) => {
     quitConfirm = Boolean(on);
+    // Capri's canvas used to sit above the panel and eat Sí/No; also force her off hit-testing.
+    const capriRoot = document.getElementById('capri');
+    if (capriRoot) capriRoot.style.pointerEvents = quitConfirm ? 'none' : '';
     if (quitConfirm) {
       quitConfirmClearAt = 0;
       setInteractive(true);
@@ -1013,6 +1016,17 @@ async function boot() {
             { id: 'quit-no', label: 'No' },
           ],
         });
+        // Diagnose cover-ups after enter clip-path clears (Capri canvas / leftover is-entering).
+        setTimeout(() => {
+          const btn = panel.el.querySelector('.panel__action.is-primary');
+          if (!btn) return;
+          const r = btn.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          const ok = Boolean(hit && (hit === btn || btn.contains(hit)));
+          console.warn(
+            `[capri] quit Sí elementFromPoint=${hit?.className || hit?.tagName || hit} ok=${ok}`,
+          );
+        }, 280);
         panel.onAction = (id) => {
           if (id === 'quit-yes' || id === 'quit-no') {
             const yes = id === 'quit-yes';

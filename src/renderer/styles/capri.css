@@ -181,11 +181,13 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  z-index: 3;
+  /* Above Capri (5) and the bubble (4): otherwise her canvas steals Sí/No clicks. */
+  z-index: 7;
   width: clamp(290px, 21vw, 380px);
   color: var(--paper);
   filter: drop-shadow(6px 6px 0 var(--violet));
   will-change: transform;
+  pointer-events: auto;
 }
 
 .panel[data-kind='work'] { --accent: var(--green); }
@@ -790,7 +792,7 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  z-index: 6;
+  z-index: 8; /* above the transmission panel (7) */
   display: flex;
   min-width: 320px;
   max-width: min(430px, 92vw);

@@ -192,7 +192,18 @@ export class Panel {
   replayEnter() {
     this.el.classList.remove('is-entering');
     void this.el.offsetWidth; // restart the CSS animation
+    if (reducedMotion.matches) return;
     this.el.classList.add('is-entering');
+    // clip-path on .panel__frame blocks hit-testing on Sí/No until the anim ends;
+    // drop the class after so buttons stay clickable (fill-mode alone is flaky in Electron).
+    const frame = this.el.querySelector('.panel__frame');
+    const clear = (e) => {
+      if (e && e.animationName && e.animationName !== 'transmit-in') return;
+      frame?.removeEventListener('animationend', clear);
+      this.el.classList.remove('is-entering');
+    };
+    frame?.addEventListener('animationend', clear);
+    setTimeout(clear, 260);
   }
 
   decode(text, kind) {
