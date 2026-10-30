@@ -930,7 +930,11 @@ async function boot() {
       case 'line': // a short notice from a menu action (memory, clip)
         panel.say({ kind: 'info', badge: cmd.badge, line: cmd.text, hold: 4600 });
         break;
-      case 'quit-ask': // Salir / "ciérrate": Sí / No before she actually quits
+      case 'quit-ask': { // Salir / "ciérrate": Sí / No before she actually quits
+        // Menu just closed: keep the overlay interactive so Sí/No are clickable (Guide owns
+        // panel.onAction by default — chain through it for anything else).
+        setInteractive(true);
+        const prevAction = panel.onAction;
         panel.say({
           kind: 'info',
           badge: 'SALIR',
@@ -942,11 +946,16 @@ async function boot() {
           ],
         });
         panel.onAction = (id) => {
-          if (id !== 'quit-yes' && id !== 'quit-no') return;
-          host.menuAction({ id: 'quit-answer', value: id === 'quit-yes' ? 'si' : 'no' }).catch(() => {});
-          panel.hide();
+          if (id === 'quit-yes' || id === 'quit-no') {
+            host.menuAction({ id: 'quit-answer', value: id === 'quit-yes' ? 'si' : 'no' }).catch(() => {});
+            panel.onAction = prevAction;
+            panel.hide();
+            return;
+          }
+          prevAction?.(id);
         };
         break;
+      }
       case 'quit-clear':
         if (panel.visible && panel.current?.badge === 'SALIR') panel.hide();
         break;

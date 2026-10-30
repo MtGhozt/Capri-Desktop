@@ -21,6 +21,7 @@ const { createVoice } = require('./voice');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
 const { isQuitCommand } = require('./quit-command');
+const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
 const { isClipCommand } = require('./clip-command');
 const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
@@ -28,7 +29,6 @@ const { isForgetCommand } = require('./forget-command');
 const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
 const { createSystemFlow, runSystem } = require('./system-command');
-const { createConfirm, readAnswer } = require('./app-confirm');
 const { wakePhraseLabel } = require('./wake-phrase');
 const { createMusic } = require('./music');
 const { createSpotify, createTokenStore, authorizeSpotify, spotifyFailureLine } = require('./spotify');
@@ -673,54 +673,45 @@ const systemFlow = createSystemFlow({
   escape: (on) => systemEscape(on),
 });
 
-const QUIT_CONFIRM_MS = 10_000;
-const quitConfirm = createConfirm({ ttlMs: QUIT_CONFIRM_MS });
-let quitTimer = null;
-
 function resolveVoiceModelsRoot(cfg = config.load()) {
   const raw = cfg?.voice?.dir;
   if (raw != null && String(raw).trim()) return path.resolve(String(raw).trim());
   return path.join(ROOT, 'voice');
 }
 
-function clearQuitAsk() {
-  if (quitTimer) {
-    clearTimeout(quitTimer);
-    quitTimer = null;
-  }
-  quitConfirm.cancel();
+// Real exit: stop the voice sidecar first (will-quit also does; do it here so it can't linger),
+// then app.quit(). A delayed exit covers anything that holds the process open.
+function doQuit() {
+  try { voice?.stop(); } catch { /* already gone */ }
+  app.quit();
+  setTimeout(() => {
+    try { app.exit(0); } catch { /* process already exiting */ }
+  }, 1500);
 }
 
+let quitChat = false;
+const quitFlow = createQuitFlow({
+  quit: doQuit,
+  onAsk: () => {
+    const line = pickLine('salirPreguntar');
+    const spoken = Boolean(speakLine(line));
+    followUp.reply(line, { spoken });
+    if (quitChat) showLine(line, { chat: true, badge: 'SALIR' });
+    sendCommand('quit-ask', { text: line });
+  },
+  onCancel: () => {
+    announce(pickLine('salirCancelado'), { chat: quitChat, badge: 'SALIR' });
+  },
+  onClear: () => sendCommand('quit-clear'),
+});
+
 function askQuit({ chat = false } = {}) {
-  clearQuitAsk();
-  const line = pickLine('salirPreguntar');
-  const spoken = Boolean(speakLine(line));
-  followUp.reply(line, { spoken }); // "sí" / "ok" without the wake word
-  if (chat) showLine(line, { chat: true, badge: 'SALIR' });
-  sendCommand('quit-ask', { text: line });
-  quitConfirm.ask('quit');
-  quitTimer = setTimeout(() => {
-    quitTimer = null;
-    if (!quitConfirm.pending) return;
-    quitConfirm.cancel();
-    sendCommand('quit-clear');
-    announce(pickLine('salirCancelado'), { chat, badge: 'SALIR' });
-  }, QUIT_CONFIRM_MS);
-  return { ok: true, asked: true };
+  quitChat = Boolean(chat);
+  return quitFlow.ask();
 }
 
 function answerQuit(value) {
-  const pending = quitConfirm.pending;
-  if (!pending) return { ok: false };
-  clearQuitAsk();
-  sendCommand('quit-clear');
-  const yes = value === 'yes' || value === 'si' || readAnswer(String(value || '')) === 'yes';
-  if (yes) {
-    app.quit();
-    return { ok: true, quit: true };
-  }
-  announce(pickLine('salirCancelado'), { chat: true, badge: 'SALIR' });
-  return { ok: true, cancelled: true };
+  return quitFlow.answer(value);
 }
 
 function goSleepReply({ chat = true } = {}) {
@@ -1862,7 +1853,7 @@ function registerIpc() {
     const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
     if (musicOrder) return musicReply(musicOrder);
     if (isSleepCommand(line)) return goSleepReply();
-    if (quitConfirm.pending) return answerQuit(line);
+    if (quitFlow.pending) return answerQuit(line);
     if (isQuitCommand(line)) return askQuit({ chat: true });
     if (isClipCommand(line)) return goClipReply();
     if (isMuteCommand(line)) return goMicReply(false);
