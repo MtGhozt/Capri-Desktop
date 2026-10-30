@@ -120,7 +120,34 @@ function createSpotify({ token, request = defaultRequest } = {}) {
     return item?.item ? { ok: true, track: item.item.name, artist: item.item.artists?.[0]?.name || '' } : { ok: false };
   }
 
-  return { playQuery, resume, nowPlaying };
+  // Music volume only (Web API). Never the PC master volume.
+  async function volume(action) {
+    const access = token?.();
+    if (!access) return { ok: false, fallback: true };
+    let player;
+    try {
+      player = await request('/v1/me/player', access);
+    } catch {
+      return { ok: false, fallback: true };
+    }
+    if (!player?.device) return { ok: false, fallback: true };
+    const cur = Number(player.device.volume_percent);
+    const base = Number.isFinite(cur) ? cur : 50;
+    let next = base;
+    if (action === 'mute') next = 0;
+    else if (action === 'unmute') next = base < 5 ? 50 : base;
+    else if (action === 'volumeUp') next = Math.min(100, base + 10);
+    else if (action === 'volumeDown') next = Math.max(0, base - 10);
+    else return { ok: false, error: 'volume action desconocida' };
+    try {
+      await request(`/v1/me/player/volume?volume_percent=${next}`, access, undefined, 'PUT');
+      return { ok: true, player: 'spotify', volume: next };
+    } catch {
+      return { ok: false, fallback: true };
+    }
+  }
+
+  return { playQuery, resume, nowPlaying, volume };
 }
 
 function defaultRequest(endpoint, access, body, method = 'GET') {

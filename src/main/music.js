@@ -8,17 +8,47 @@ const { findNamidaTrack } = require('./namida-search');
 // PowerShell can't read inside app.asar: in the packaged app the script sits in app.asar.unpacked
 const unpackedPath = (p) => p.split(`app.asar${path.sep}`).join(`app.asar.unpacked${path.sep}`);
 const KEY_SCRIPT = unpackedPath(path.join(__dirname, 'media-keys.ps1'));
+const VOLUME_SCRIPT = unpackedPath(path.join(__dirname, 'session-volume.ps1'));
 
-const ACTIONS = new Set(['pause', 'play', 'next', 'previous', 'volumeUp', 'volumeDown', 'mute']);
+const ACTIONS = new Set(['pause', 'play', 'next', 'previous', 'volumeUp', 'volumeDown', 'mute', 'unmute']);
+const VOLUME_ACTIONS = new Set(['volumeUp', 'volumeDown', 'mute', 'unmute']);
 const NO_PLAYER = 'No tienes un reproductor de música elegido. Elige uno en el menú, en MÚSICA.';
+const NO_MUSIC_APP = 'No encuentro el reproductor de música sonando, choom. Abrilo y pedime de nuevo.';
 
 function createMusic({
-  config, apps, sendKey, spotify, isRunning = () => false, spawnProcess = spawn,
+  config, apps, sendKey, sendVolume, spotify, isRunning = () => false, spawnProcess = spawn,
   wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   openExternal = null, findTrack = findNamidaTrack, log = () => {},
 } = {}) {
   const key = (action) => sendKey(action, KEY_SCRIPT);
+  const volumeSession = (action, processNames) => {
+    if (!sendVolume) return Promise.reject(new Error('session volume unavailable'));
+    return sendVolume(action, processNames, VOLUME_SCRIPT);
+  };
   const playerApp = () => apps?.().find((item) => item.name.toLowerCase() === 'namida');
+
+  function volumeProcesses(preferred) {
+    if (preferred === 'spotify') return ['Spotify', 'SpotifyEXE'];
+    return ['namida', 'Namida'];
+  }
+
+  // Music only: Spotify Web API when connected, else that app's Windows audio session. Never master.
+  async function adjustVolume(action) {
+    const preferred = config.load().music?.player || 'namida';
+    if (preferred === 'none') return { ok: false, error: NO_PLAYER };
+    if (preferred === 'spotify' && spotify?.volume) {
+      const api = await spotify.volume(action).catch(() => null);
+      if (api?.ok) return { ...api, action };
+    }
+    const processes = volumeProcesses(preferred);
+    try {
+      await volumeSession(action, processes);
+      return { ok: true, action, player: preferred, via: 'session' };
+    } catch (err) {
+      log(`session volume failed: ${err.message}`);
+      return { ok: false, error: NO_MUSIC_APP };
+    }
+  }
 
   // Spotify through its own URI: the desktop app or the Store one answers it
   async function openSpotify() {
@@ -116,14 +146,14 @@ function createMusic({
 
   async function command(parsed) {
     const cfg = config.load();
+    if (VOLUME_ACTIONS.has(parsed.action)) return adjustVolume(parsed.action);
     if (ACTIONS.has(parsed.action)) {
       if (parsed.action === 'previous') {
         await key(parsed.action);
         await wait(150);
         await key(parsed.action);
       } else {
-        const presses = parsed.action === 'volumeUp' || parsed.action === 'volumeDown' ? 5 : 1;
-        for (let i = 0; i < presses; i += 1) await key(parsed.action);
+        await key(parsed.action);
       }
       return { ok: true, action: parsed.action };
     }
@@ -144,4 +174,4 @@ function createMusic({
   return { command, redactSpotifyConfig, playQuery };
 }
 
-module.exports = { createMusic, KEY_SCRIPT, unpackedPath };
+module.exports = { createMusic, KEY_SCRIPT, VOLUME_SCRIPT, unpackedPath, NO_MUSIC_APP };

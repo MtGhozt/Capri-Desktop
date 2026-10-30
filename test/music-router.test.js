@@ -8,20 +8,34 @@ const { createMusic, KEY_SCRIPT, unpackedPath } = require('../src/main/music');
 const { readTranscript } = require('../src/main/fix-command');
 
 // a transcript as Whisper wrote it, through her fixes, the parser and the player
-async function route(said, { cfg = { music: { player: 'namida' } }, running = true } = {}) {
+async function route(said, {
+  cfg = { music: { player: 'namida' } }, running = true, spotify = null, volumeOk = true,
+} = {}) {
   const keys = [];
+  const volumes = [];
   const spawned = [];
   const music = createMusic({
     config: { load: () => cfg },
     apps: () => [{ name: 'Namida', target: 'C:\\Software\\Namida\\namida\\namida.exe' }],
     sendKey: async (action, script) => { keys.push({ action, script }); },
+    sendVolume: async (action, processNames, script) => {
+      volumes.push({ action, processNames, script });
+      if (!volumeOk) throw new Error('no music session');
+    },
+    spotify,
     isRunning: async () => running,
     spawnProcess: (target) => { spawned.push(target); return { unref() {} }; },
     wait: async () => {},
   });
   const parsed = parseMusicCommand(readTranscript(said, []).text);
   const result = parsed ? await music.command(parsed) : null;
-  return { parsed, result, keys: keys.map((k) => k.action), scripts: keys.map((k) => k.script), spawned };
+  return {
+    parsed, result,
+    keys: keys.map((k) => k.action),
+    scripts: keys.map((k) => k.script),
+    volumes,
+    spawned,
+  };
 }
 
 test('real Whisper transcripts reach the media keys', async () => {
@@ -42,15 +56,55 @@ test('real Whisper transcripts reach the media keys', async () => {
     ['La anterior', 'previous', ['previous', 'previous']],
     ['Pausa la música', 'pause', ['pause']],
     ['Pausa.', 'pause', ['pause']],
-    ['Silencia la música', 'mute', ['mute']],
-    ['sube la música, sube el volumen', 'volumeUp', ['volumeUp', 'volumeUp', 'volumeUp', 'volumeUp', 'volumeUp']],
   ];
   for (const [said, action, keys] of cases) {
     const r = await route(said);
     assert.equal(r.parsed?.action, action, said);
     assert.equal(r.result.ok, true, said);
     assert.deepEqual(r.keys, keys, said);
+    assert.deepEqual(r.volumes, [], said);
   }
+});
+
+test('volume/mute hit the music session, never master media keys', async () => {
+  const { VOLUME_SCRIPT } = require('../src/main/music');
+  const cases = [
+    ['Silencia la música', 'mute'],
+    ['sube el volumen', 'volumeUp'],
+    ['baja el volumen', 'volumeDown'],
+    ['quita el silencio', 'unmute'],
+  ];
+  for (const [said, action] of cases) {
+    const r = await route(said);
+    assert.equal(r.parsed?.action, action, said);
+    assert.equal(r.result.ok, true, said);
+    assert.deepEqual(r.keys, [], said); // no VK_VOLUME_* 
+    assert.equal(r.volumes.length, 1, said);
+    assert.equal(r.volumes[0].action, action, said);
+    assert.deepEqual(r.volumes[0].processNames, ['namida', 'Namida'], said);
+    assert.equal(r.volumes[0].script, VOLUME_SCRIPT, said);
+  }
+});
+
+test('volume uses Spotify API when that player is connected', async () => {
+  const calls = [];
+  const r = await route('sube el volumen', {
+    cfg: { music: { player: 'spotify' } },
+    spotify: {
+      volume: async (action) => { calls.push(action); return { ok: true, player: 'spotify', volume: 60 }; },
+    },
+  });
+  assert.equal(r.result.ok, true);
+  assert.deepEqual(calls, ['volumeUp']);
+  assert.deepEqual(r.volumes, []); // API handled it
+  assert.deepEqual(r.keys, []);
+});
+
+test('volume with no music session says so playfully', async () => {
+  const r = await route('silencio', { volumeOk: false });
+  assert.equal(r.result.ok, false);
+  assert.match(r.result.error, /reproductor de música/i);
+  assert.deepEqual(r.keys, []);
 });
 
 test('ordinary phrases stay with the model', async () => {

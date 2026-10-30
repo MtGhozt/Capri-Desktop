@@ -15,6 +15,7 @@ const PATTERNS = [
   ['volumeUp', /^(?:sube(?: la musica| el volumen)?|subele|mas(?: alto| volumen))$/],
   ['volumeDown', /^(?:baja(?: la musica| el volumen)?|bajale|menos(?: alto| volumen))$/],
   ['mute', /^(?:silencio|silencia(?: la musica)?|mutea(?: la musica)?|mute|quita(?: el )?sonido)$/],
+  ['unmute', /^(?:desmutea(?: la musica)?|unmute|quita(?: el )?silencio|con sonido|restaura(?: el )?sonido)$/],
   ['start', /^(?:pon|ponme|pone|reproduce|reproduceme|toca|quiero|inicia)(?: algo de| un poco de)? musica(?: en namida)?$/],
   // before the generic "abre <app>": the player is whatever MÚSICA has chosen, not a fixed app
   ['open', /^(?:abre|abreme|abrime|abrir|open)(?: (?:el|la|the))? (?:reproductor(?: de musica)?|player|musica|music(?: player)?)$/],
