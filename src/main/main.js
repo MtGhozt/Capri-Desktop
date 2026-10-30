@@ -2156,7 +2156,11 @@ function main() {
       root: ROOT,
       loadConfig: () => config.load(),
       onEvent: (event) => {
-        const payload = event?.type === 'transcript' ? hearTranscript(event) : event;
+        const payload = event?.type === 'transcript'
+          ? hearTranscript(event)
+          : event?.type === 'voice-missing'
+            ? { type: 'notice', message: TRAY[resolveLang(config.load().lang)].voiceMissing }
+            : event;
         if (payload?.type === 'transcript') {
           if (payload.followUp) comments?.heard();
           followUp.heard({ followUp: Boolean(payload.followUp) });

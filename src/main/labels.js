@@ -16,6 +16,7 @@ const TRAY = {
     micOn: 'Microphone : on', micOff: 'Microphone : off', micDevice: 'Entrée micro', micDefault: 'Par défaut',
     hooksOn: 'Hooks Claude Code : installés', hooksOff: 'Installer les hooks Claude Code',
     hooksRemove: 'Retirer les hooks Claude Code', quit: 'Quitter',
+    voiceMissing: 'La voix n’est pas installée ; va dans Réglages → Voix.',
   },
   en: {
     name: 'English',
@@ -29,6 +30,7 @@ const TRAY = {
     micOn: 'Microphone: on', micOff: 'Microphone: off', micDevice: 'Input device', micDefault: 'Default',
     hooksOn: 'Claude Code hooks: installed', hooksOff: 'Install Claude Code hooks',
     hooksRemove: 'Remove Claude Code hooks', quit: 'Quit',
+    voiceMissing: 'Voice is not installed; check Settings → Voice.',
   },
   es: {
     name: 'Español',
@@ -42,6 +44,7 @@ const TRAY = {
     micOn: 'Micrófono: on', micOff: 'Micrófono: off', micDevice: 'Entrada', micDefault: 'Predeterminado',
     hooksOn: 'Hooks de Claude Code: instalados', hooksOff: 'Instalar los hooks de Claude Code',
     hooksRemove: 'Quitar los hooks de Claude Code', quit: 'Salir',
+    voiceMissing: 'La voz no está instalada; mirá Ajustes → Voz.',
   },
   pt: {
     name: 'Português (Brasil)',
@@ -55,6 +58,7 @@ const TRAY = {
     micOn: 'Microfone: on', micOff: 'Microfone: off', micDevice: 'Entrada', micDefault: 'Padrão',
     hooksOn: 'Hooks do Claude Code: instalados', hooksOff: 'Instalar os hooks do Claude Code',
     hooksRemove: 'Remover os hooks do Claude Code', quit: 'Sair',
+    voiceMissing: 'A voz não está instalada; veja Ajustes → Voz.',
   },
   ru: {
     name: 'Русский',
@@ -68,6 +72,7 @@ const TRAY = {
     micOn: 'Микрофон: вкл.', micOff: 'Микрофон: выкл.', micDevice: 'Вход', micDefault: 'По умолчанию',
     hooksOn: 'Хуки Claude Code: установлены', hooksOff: 'Установить хуки Claude Code',
     hooksRemove: 'Удалить хуки Claude Code', quit: 'Выйти',
+    voiceMissing: 'Голос не установлен; откройте Настройки → Голос.',
   },
 };
 

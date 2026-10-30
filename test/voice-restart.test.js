@@ -11,7 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const Module = require('node:module');
 
-function setup(t) {
+function setup(t, cfg) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-'));
   const dir = path.join(home, 'voice');
   fs.mkdirSync(path.join(dir, '.venv', 'bin'), { recursive: true });
@@ -54,7 +54,7 @@ function setup(t) {
   const events = [];
   const voice = voiceMod.createVoice({
     root: home,
-    loadConfig: () => ({ voice: { dir } }),
+    loadConfig: () => cfg || { voice: { dir } },
     onEvent: (evt) => events.push(evt),
   });
   return { voice, children, events };
@@ -98,4 +98,23 @@ test('after too many crashes she stops trying and says so', (t) => {
   const notice = events.find((e) => e.type === 'notice' && /se cayó 4 veces/.test(e.message));
   assert.ok(notice, 'she says it in Spanish');
   voice.stop();
+});
+
+// A light install: nothing to spawn. Ctrl+Alt+V and the wake word cannot do anything, so she
+// says it in the bubble once, not on every attempt.
+test('no voice.dir says so once, on boot and on Ctrl+Alt+V', (t) => {
+  const { voice, children, events } = setup(t, { voice: { dir: null } });
+  voice.start();
+  voice.pttStart();
+  voice.pttStart();
+  assert.equal(children.length, 0);
+  assert.equal(events.filter((e) => e.type === 'voice-missing').length, 1);
+});
+
+test('a voice folder without .venv says so once too', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-bare-'));
+  const { voice, events } = setup(t, { voice: { dir } });
+  voice.start();
+  voice.pttStart();
+  assert.equal(events.filter((e) => e.type === 'voice-missing').length, 1);
 });

@@ -50,6 +50,7 @@ function createVoice({ root, loadConfig, onEvent }) {
   let forced = false; // started by game mode's end even with the mic off
   let crashes = [];
   let restartTimer = null;
+  let missing = false; // one bubble line per session, not one per Ctrl+Alt+V
   const logFile = voiceLogPath();
 
   function emit(payload) {
@@ -63,6 +64,16 @@ function createVoice({ root, loadConfig, onEvent }) {
     logLines(logFile, `[capri] ${message}`);
     console.log(`[capri] ${message}`);
     emit({ type: 'notice', message });
+  }
+
+  // No voice.dir / no .venv: Ctrl+Alt+V and the wake word cannot do anything, so say it once
+  // instead of only writing it to voice.log.
+  function voiceMissing(message) {
+    logLines(logFile, `[capri] ${message}`);
+    console.log(`[capri] ${message}`);
+    if (missing) return;
+    missing = true;
+    emit({ type: 'voice-missing' });
   }
 
   function speakCfg() {
@@ -172,13 +183,13 @@ function createVoice({ root, loadConfig, onEvent }) {
     }
     const dir = resolveVoiceDir(root, cfg);
     if (!dir) {
-      skip('Voice sidecar is off: set voice.dir in %APPDATA%\\capri-desktop\\config.json to your voice folder (the one with setup.ps1). Chat still works.');
+      voiceMissing('Voice sidecar is off: set voice.dir in %APPDATA%\\capri-desktop\\config.json to your voice folder (the one with setup.ps1). Chat still works.');
       return;
     }
     const py = resolvePython(dir);
     const script = path.join(dir, 'server.py');
     if (!py || !fs.existsSync(script)) {
-      skip(`Voice sidecar is off: no venv in ${dir}. Run setup.ps1 there. Chat still works.`);
+      voiceMissing(`Voice sidecar is off: no venv in ${dir}. Run setup.ps1 there. Chat still works.`);
       return;
     }
     token = crypto.randomBytes(24).toString('hex');
@@ -289,7 +300,13 @@ function createVoice({ root, loadConfig, onEvent }) {
       }
       send({ type: 'greet', id, greetId, text });
     },
-    pttStart: () => send({ type: 'ptt_start' }),
+    pttStart: () => {
+      if (!child) {
+        voiceMissing('ptt ignored: voice sidecar is off');
+        return;
+      }
+      send({ type: 'ptt_start' });
+    },
     pttStop: () => send({ type: 'ptt_stop' }),
     followUp: (seconds) => send({ type: 'follow_up', seconds }),
     push: send,
