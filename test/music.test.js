@@ -20,6 +20,7 @@ test('pause intents win over pon/play search (not a song named pausa)', () => {
   for (const said of [
     'Pon pausa a la música',
     'pon la música en pausa',
+    'pausa la música',
     'ponme en pausa',
     'pausa',
     'pausá la música',
@@ -35,6 +36,22 @@ test('pause intents win over pon/play search (not a song named pausa)', () => {
   assert.deepEqual(parseMusicCommand('pon bohemian rhapsody'), {
     action: 'query', query: 'bohemian rhapsody',
   });
+});
+
+test('resume/unpause intents are play, never a song search', () => {
+  for (const said of [
+    'despausa',
+    'despausa la música',
+    'despauza la canción',
+    'reanuda',
+    'reanuda la música',
+    'continúa la música',
+    'continua la musica',
+    'sigue la música',
+    'dale play',
+  ]) {
+    assert.deepEqual(parseMusicCommand(said), { action: 'play' }, said);
+  }
 });
 
 test('her song phrases map to music.herSong (default)', () => {

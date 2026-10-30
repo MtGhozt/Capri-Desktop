@@ -3,7 +3,9 @@
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { redactSpotifyConfig } = require('./spotify');
-const { findNamidaTrack } = require('./namida-search');
+const {
+  findNamidaTrack, listNamidaFiles, shuffleInPlace, writeNamidaM3u,
+} = require('./namida-search');
 
 // PowerShell can't read inside app.asar: in the packaged app the script sits in app.asar.unpacked
 const unpackedPath = (p) => p.split(`app.asar${path.sep}`).join(`app.asar.unpacked${path.sep}`);
@@ -14,11 +16,13 @@ const ACTIONS = new Set(['pause', 'play', 'next', 'previous', 'volumeUp', 'volum
 const VOLUME_ACTIONS = new Set(['volumeUp', 'volumeDown', 'mute', 'unmute']);
 const NO_PLAYER = 'No tienes un reproductor de música elegido. Elige uno en el menú, en MÚSICA.';
 const NO_MUSIC_APP = 'No encuentro el reproductor de música sonando, choom. Abrilo y pedime de nuevo.';
+const QUEUE_CAP = 80;
 
 function createMusic({
   config, apps, sendKey, sendVolume, spotify, isRunning = () => false, spawnProcess = spawn,
   wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  openExternal = null, findTrack = findNamidaTrack, log = () => {},
+  openExternal = null, findTrack = findNamidaTrack, listFiles = listNamidaFiles,
+  writePlaylist = writeNamidaM3u, log = () => {},
 } = {}) {
   const key = (action) => sendKey(action, KEY_SCRIPT);
   const volumeSession = (action, processNames) => {
@@ -78,18 +82,51 @@ function createMusic({
     if (preferred === 'none') return { ok: false, error: NO_PLAYER };
     if (preferred !== 'spotify') return startNamida();
     const api = spotify?.resume ? await spotify.resume(openSpotify).catch(() => null) : null;
-    if (api?.ok) return { ok: true, action: 'start', player: 'spotify' };
-    const opened = await openSpotify(); // no token: just bring it up, no key
-    return opened.ok ? { ok: true, action: 'start', player: 'spotify' } : opened;
+    // API play worked (Premium + active device)
+    if (api?.ok && !api.opened && !api.fallback) {
+      return { ok: true, action: 'start', player: 'spotify' };
+    }
+    // Free / no token / no device: media play (toggle). resume() may already have opened the app.
+    if (!api?.opened) {
+      const opened = await openSpotify();
+      if (!opened.ok) return opened;
+    }
+    await wait(900);
+    await key('play');
+    return {
+      ok: true, action: 'start', player: 'spotify', via: 'media-keys',
+      freeHint: true,
+    };
+  }
+
+  function namidaQueue(leadPath = null) {
+    const files = listFiles();
+    if (!files.length) return null;
+    const rest = files.filter((p) => p !== leadPath);
+    shuffleInPlace(rest);
+    const ordered = leadPath ? [leadPath, ...rest] : shuffleInPlace(files.slice());
+    return writePlaylist(ordered.slice(0, QUEUE_CAP));
   }
 
   async function startNamida() {
     const app = playerApp();
-    if (!app) return { ok: false, error: 'No encuentro Namida en tus apps. Agrégala en el menú APPS.' };
-    spawnProcess(app.target, [], { detached: true, stdio: 'ignore' }).unref(); // single instance: brings it up
-    if (!(await isRunning('namida'))) await wait(3000); // Namida needs a moment before it listens to media keys
-    await key('play'); // the key lands on Namida, not on the video you had paused
-    return { ok: true, action: 'start' };
+    if (!app?.target) {
+      return { ok: false, error: 'No encuentro Namida en tus apps. Agrégala en el menú APPS.' };
+    }
+    // Hand Namida a shuffled .m3u so next/previous walk the library. Opening a bare exe + play
+    // key toggles pause (VK_MEDIA_PLAY_PAUSE) and leaves a one-track queue.
+    const playlist = namidaQueue();
+    const running = await isRunning('namida');
+    if (playlist) {
+      spawnProcess(app.target, [playlist], { detached: true, stdio: 'ignore' }).unref();
+      await wait(running ? 500 : 2500);
+      // file/m3u handoff already starts playback — a play key would pause it
+      return { ok: true, action: 'start', player: 'namida', queue: true };
+    }
+    spawnProcess(app.target, [], { detached: true, stdio: 'ignore' }).unref();
+    if (!running) await wait(3000);
+    await key('play');
+    return { ok: true, action: 'start', player: 'namida', queue: false };
   }
 
   async function playNamidaQuery(query) {
@@ -100,13 +137,15 @@ function createMusic({
     if (!app?.target) {
       return { ok: false, error: 'No encuentro Namida en tus apps. Agrégala en el menú APPS.' };
     }
-    // handing Namida the file already plays it: a play key here would just pause it
+    // Lead with the match inside a library queue when we can; bare file = one-track next/prev.
+    const playlist = namidaQueue(hit.path) || hit.path;
     const running = await isRunning('namida');
-    spawnProcess(app.target, [hit.path], { detached: true, stdio: 'ignore' }).unref();
+    spawnProcess(app.target, [playlist], { detached: true, stdio: 'ignore' }).unref();
     await wait(running ? 400 : 2500);
     return {
       ok: true, action: 'query', player: 'namida',
       track: hit.title, artist: hit.artist || '', path: hit.path,
+      queue: playlist !== hit.path,
     };
   }
 

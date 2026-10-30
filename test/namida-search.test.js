@@ -57,7 +57,7 @@ test('query uses preferred player then falls back', async () => {
   assert.deepEqual(opened, ['spotify:search:nights']);
 });
 
-test('namida query launches the matched file', async () => {
+test('namida query launches a queue headed by the matched file', async () => {
   const spawned = [];
   const music = createMusic({
     config: { load: () => ({ music: { player: 'namida' } }) },
@@ -65,6 +65,11 @@ test('namida query launches the matched file', async () => {
     spotify: { playQuery: async () => ({ ok: false, fallback: true }) },
     openExternal: async () => {},
     findTrack: () => ({ path: 'C:\\lib\\song.mp3', title: 'song', artist: '' }),
+    listFiles: () => ['C:\\lib\\song.mp3', 'C:\\lib\\other.mp3'],
+    writePlaylist: (paths) => {
+      assert.equal(paths[0], 'C:\\lib\\song.mp3');
+      return 'C:\\Temp\\q.m3u';
+    },
     sendKey: async () => {},
     isRunning: async () => true,
     spawnProcess: (t, args) => { spawned.push([t, ...args]); return { unref() {} }; },
@@ -74,7 +79,8 @@ test('namida query launches the matched file', async () => {
   assert.equal(r.ok, true);
   assert.equal(r.player, 'namida');
   assert.equal(r.track, 'song');
-  assert.ok(spawned.some((row) => row[0] === 'C:\\Namida\\namida.exe' && row[1] === 'C:\\lib\\song.mp3'));
+  assert.equal(r.queue, true);
+  assert.deepEqual(spawned, [['C:\\Namida\\namida.exe', 'C:\\Temp\\q.m3u']]);
 });
 
 test('opening a song never sends the play key (Namida already started it)', async () => {
@@ -86,6 +92,8 @@ test('opening a song never sends the play key (Namida already started it)', asyn
     spotify: { playQuery: async () => ({ ok: false, fallback: true }) },
     openExternal: async () => {},
     findTrack: () => ({ path: 'C:\\lib\\My Alcoholic Friends.mp3', title: 'My Alcoholic Friends', artist: '', score: 1230 }),
+    listFiles: () => ['C:\\lib\\My Alcoholic Friends.mp3'],
+    writePlaylist: () => 'C:\\Temp\\one.m3u',
     sendKey: async (action) => { keys.push(action); },
     isRunning: async () => true,
     spawnProcess: () => ({ unref() {} }),

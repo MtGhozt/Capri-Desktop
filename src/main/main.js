@@ -603,6 +603,8 @@ async function musicReply(parsed, { chat = true } = {}) {
       line = pickLine('musicaSuCancion');
     } else if (result.searchOnly) {
       line = `Abrí la búsqueda de «${result.query}» en Spotify — dale play al primero, choom.`;
+    } else if (result.freeHint || result.via === 'media-keys') {
+      line = 'Spotify free no me deja el play por API, choom — te mandé la tecla de medios. Si sigue quieto, dale play tú.';
     } else if (parsed.action === 'query' && result.track) {
       line = result.artist
         ? `Va, pongo «${result.track}» de ${result.artist}.`

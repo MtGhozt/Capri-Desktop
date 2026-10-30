@@ -40,14 +40,12 @@ async function route(said, {
 
 test('real Whisper transcripts reach the media keys', async () => {
   const cases = [
-    ['Reproduce música', 'start', ['play']],
-    ['Pon música', 'start', ['play']],
-    ['Ponme música, por favor.', 'start', ['play']],
-    ['pon musica', 'start', ['play']],
     ['Despauza la canción', 'play', ['play']],
     ['Despausa', 'play', ['play']],
+    ['Despausa la música', 'play', ['play']],
     ['Sigue.', 'play', ['play']],
     ['Reanuda la música', 'play', ['play']],
+    ['Continúa la música', 'play', ['play']],
     ['Siguiente canción', 'next', ['next']],
     ['Siguiente cancion', 'next', ['next']],
     ['Anterior canción', 'previous', ['previous', 'previous']],
@@ -55,6 +53,7 @@ test('real Whisper transcripts reach the media keys', async () => {
     ['Capri, siguiente.', 'next', ['next']],
     ['La anterior', 'previous', ['previous', 'previous']],
     ['Pausa la música', 'pause', ['pause']],
+    ['Pon la música en pausa', 'pause', ['pause']],
     ['Pausa.', 'pause', ['pause']],
   ];
   for (const [said, action, keys] of cases) {
@@ -121,10 +120,72 @@ test('a song search with no local hit is reported, not faked', async () => {
   assert.deepEqual(r.keys, []);
 });
 
-test('pon música opens Namida first when it is closed', async () => {
-  const r = await route('Pon música', { running: false });
-  assert.deepEqual(r.spawned, ['C:\\Software\\Namida\\namida\\namida.exe']);
-  assert.deepEqual(r.keys, ['play']);
+test('pon música hands Namida a queue playlist (no play-toggle key)', async () => {
+  const playlists = [];
+  const keys = [];
+  const spawned = [];
+  const music = createMusic({
+    config: { load: () => ({ music: { player: 'namida' } }) },
+    apps: () => [{ name: 'Namida', target: 'C:\\Software\\Namida\\namida\\namida.exe' }],
+    sendKey: async (action) => { keys.push(action); },
+    isRunning: async () => false,
+    spawnProcess: (target, args = []) => { spawned.push([target, ...args]); return { unref() {} }; },
+    wait: async () => {},
+    listFiles: () => ['C:\\lib\\a.mp3', 'C:\\lib\\b.mp3', 'C:\\lib\\c.mp3'],
+    writePlaylist: (paths) => {
+      playlists.push(paths.slice());
+      return 'C:\\Temp\\capri-queue.m3u';
+    },
+  });
+  const r = await music.command(parseMusicCommand('Pon música'));
+  assert.equal(r.ok, true);
+  assert.equal(r.queue, true);
+  assert.deepEqual(keys, [], 'play key would toggle Namida into pause');
+  assert.deepEqual(spawned, [['C:\\Software\\Namida\\namida\\namida.exe', 'C:\\Temp\\capri-queue.m3u']]);
+  assert.equal(playlists[0].length, 3);
+});
+
+test('pon <song> leads a Namida queue with that track', async () => {
+  const spawned = [];
+  const music = createMusic({
+    config: { load: () => ({ music: { player: 'namida' } }) },
+    apps: () => [{ name: 'Namida', target: 'C:\\Namida\\namida.exe' }],
+    sendKey: async () => {},
+    isRunning: async () => true,
+    spawnProcess: (t, args = []) => { spawned.push([t, ...args]); return { unref() {} }; },
+    wait: async () => {},
+    findTrack: () => ({ path: 'C:\\lib\\song.mp3', title: 'song', artist: '', score: 100 }),
+    listFiles: () => ['C:\\lib\\song.mp3', 'C:\\lib\\other.mp3'],
+    writePlaylist: (paths) => {
+      assert.equal(paths[0], 'C:\\lib\\song.mp3');
+      return 'C:\\Temp\\capri-song.m3u';
+    },
+  });
+  const r = await music.command({ action: 'query', query: 'song' });
+  assert.equal(r.ok, true);
+  assert.equal(r.queue, true);
+  assert.deepEqual(spawned, [['C:\\Namida\\namida.exe', 'C:\\Temp\\capri-song.m3u']]);
+});
+
+test('Spotify free start falls back to media keys', async () => {
+  const keys = [];
+  const opened = [];
+  const music = createMusic({
+    config: { load: () => ({ music: { player: 'spotify' } }) },
+    apps: () => [],
+    sendKey: async (action) => { keys.push(action); },
+    wait: async () => {},
+    openExternal: async (uri) => { opened.push(uri); },
+    spotify: {
+      resume: async (openApp) => { await openApp(); return { ok: true, opened: true }; },
+    },
+  });
+  const r = await music.command({ action: 'start' });
+  assert.equal(r.ok, true);
+  assert.equal(r.via, 'media-keys');
+  assert.equal(r.freeHint, true);
+  assert.deepEqual(opened, ['spotify:']);
+  assert.deepEqual(keys, ['play']);
 });
 
 test('the media key script is read from outside app.asar', () => {
@@ -142,10 +203,12 @@ function playerHarness({ player, connected = true, resumeOk = true, namida = tru
     apps: () => (namida ? [{ name: 'Namida', target: NAMIDA_EXE }] : []),
     sendKey: async (action) => { out.keys.push(action); },
     isRunning: async () => true,
-    spawnProcess: (target, args) => { out.spawned.push([target, ...args]); return { unref() {} }; },
+    spawnProcess: (target, args = []) => { out.spawned.push([target, ...args]); return { unref() {} }; },
     wait: async () => {},
     openExternal: async (uri) => { out.opened.push(uri); },
     findTrack: () => null,
+    listFiles: () => [], // no real library: fall back to bare open + play key
+    writePlaylist: () => null,
     spotify: {
       playQuery: async () => ({ ok: false, fallback: true }),
       resume: async (openApp) => {
@@ -187,8 +250,9 @@ test('opening the player follows MÚSICA', async () => {
 
 test('"pon música" plays in the chosen player, never a stray media key', async () => {
   const namida = playerHarness({ player: 'namida' });
+  // No library in the harness → open exe + play key as last resort
   assert.equal((await namida.music.command({ action: 'start' })).ok, true);
-  assert.deepEqual(namida.spawned, [[NAMIDA_EXE]]); // brought up (single instance) before the key
+  assert.deepEqual(namida.spawned, [[NAMIDA_EXE]]);
   assert.deepEqual(namida.keys, ['play']);
 
   const premium = playerHarness({ player: 'spotify', connected: true });
@@ -196,13 +260,17 @@ test('"pon música" plays in the chosen player, never a stray media key', async 
   assert.equal(premium.resumed.length, 1);
   assert.deepEqual([premium.keys, premium.opened], [[], []]);
 
-  const free = playerHarness({ player: 'spotify', resumeOk: false }); // 403: the app is opened instead
-  assert.equal((await free.music.command({ action: 'start' })).ok, true);
-  assert.deepEqual([free.keys, free.opened], [[], ['spotify:']]);
+  const free = playerHarness({ player: 'spotify', resumeOk: false }); // 403 → media keys
+  const freeR = await free.music.command({ action: 'start' });
+  assert.equal(freeR.ok, true);
+  assert.equal(freeR.via, 'media-keys');
+  assert.deepEqual([free.keys, free.opened], [['play'], ['spotify:']]);
 
   const offline = playerHarness({ player: 'spotify', connected: false }); // not connected
-  assert.equal((await offline.music.command({ action: 'start' })).ok, true);
-  assert.deepEqual([offline.keys, offline.opened], [[], ['spotify:']]);
+  const offR = await offline.music.command({ action: 'start' });
+  assert.equal(offR.ok, true);
+  assert.equal(offR.via, 'media-keys');
+  assert.deepEqual([offline.keys, offline.opened], [['play'], ['spotify:']]);
 
   const none = playerHarness({ player: 'none' });
   const r = await none.music.command({ action: 'start' });

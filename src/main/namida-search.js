@@ -83,11 +83,16 @@ function titleFromFile(filePath) {
   return { title: base, artist: '' };
 }
 
+function listNamidaFiles({ home = os.homedir(), listFiles = walkAudio, dirs = null, limit = 8000 } = {}) {
+  const files = [];
+  for (const dir of (dirs || readScanDirs(home))) listFiles(dir, files, limit);
+  return files;
+}
+
 function findNamidaTrack(query, { home = os.homedir(), listFiles = walkAudio, dirs = null } = {}) {
   const queryTokens = tokens(query);
   if (!queryTokens.length) return null;
-  const files = [];
-  for (const dir of (dirs || readScanDirs(home))) listFiles(dir, files);
+  const files = listNamidaFiles({ home, listFiles, dirs });
   let best = null;
   let bestScore = 0;
   for (const file of files) {
@@ -101,4 +106,30 @@ function findNamidaTrack(query, { home = os.homedir(), listFiles = walkAudio, di
   return { path: best, ...titleFromFile(best), score: bestScore };
 }
 
-module.exports = { findNamidaTrack, fold, tokens, scorePath, readScanDirs, AUDIO_EXT };
+// Shuffle in place (Fisher–Yates); returns the same array.
+function shuffleInPlace(items, rand = Math.random) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+}
+
+// Temp .m3u so Namida gets a queue (next/previous move), not a lone file.
+function writeNamidaM3u(paths, {
+  writeFileSync = fs.writeFileSync,
+  tmpdir = os.tmpdir(),
+  join = path.join,
+  name = `capri-namida-${Date.now()}.m3u`,
+} = {}) {
+  const list = (paths || []).filter(Boolean);
+  if (!list.length) return null;
+  const file = join(tmpdir, name);
+  writeFileSync(file, `#EXTM3U\n${list.join('\n')}\n`, 'utf8');
+  return file;
+}
+
+module.exports = {
+  findNamidaTrack, listNamidaFiles, shuffleInPlace, writeNamidaM3u,
+  fold, tokens, scorePath, readScanDirs, AUDIO_EXT,
+};
