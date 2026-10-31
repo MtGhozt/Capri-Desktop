@@ -389,6 +389,10 @@ export class AppMenu {
   }
 
   renderFull(state) {
+    // Re-render replaces the scrollable body; keep the user's place in Cerebro / long tabs.
+    const prevScroll = this.settingsMode
+      ? (this.el.querySelector('.appmenu__body')?.scrollTop || 0)
+      : 0;
     this.lastState = state;
     const { cfg } = state;
     this.setTheme(cfg.theme);
@@ -500,6 +504,7 @@ export class AppMenu {
       plate.append(rail, body, keys);
       this.filterSettingsBody(body);
       this.el.replaceChildren(plate);
+      this.restoreSettingsScroll(prevScroll);
       if (this.open && this.at && !this.settingsMode) this.place();
       this.useKeyboard(true); // its text fields
       return;
@@ -742,8 +747,17 @@ export class AppMenu {
     plate.append(rail, body, keys);
     this.filterSettingsBody(body);
     this.el.replaceChildren(plate);
+    this.restoreSettingsScroll(prevScroll);
     if (this.open && this.at && !this.settingsMode) this.place();
     this.useKeyboard(this.expanded === 'fixes' || this.settingsSection === 'model' || this.capturing);
+  }
+
+  restoreSettingsScroll(top) {
+    if (!this.settingsMode) return;
+    const scroller = this.el.querySelector('.appmenu__body');
+    if (!scroller) return;
+    scroller.scrollTop = top;
+    requestAnimationFrame(() => { scroller.scrollTop = top; });
   }
 
   filterSettingsBody(body) {
@@ -1145,7 +1159,10 @@ export class AppMenu {
         const btn = build('button', `appmenu__toggle-btn${active === id ? ' is-active' : ''}`, labelOf(id));
         btn.type = 'button';
         if (active === id) btn.dataset.state = 'on';
+        // Avoid focus scrolling the panel to the top on re-render.
+        btn.addEventListener('mousedown', (e) => e.preventDefault());
         btn.addEventListener('click', (e) => {
+          e.preventDefault();
           e.stopPropagation();
           onPick(id);
         });
@@ -1195,11 +1212,23 @@ export class AppMenu {
       if (!link?.url) continue;
       const btn = build('button', 'appmenu__toggle-btn', `Key gratis · ${link.label}`);
       btn.type = 'button';
+      btn.addEventListener('mousedown', (e) => e.preventDefault());
       btn.addEventListener('click', (e) => {
+        e.preventDefault();
         e.stopPropagation();
         this.host.menuAction({ id: 'open-url', value: link.url }).catch(() => {});
       });
-      freeLinksRow.append(btn);
+      if (id === 'nvidia') {
+        const block = build('div', 'appmenu__brain-free-link');
+        block.append(btn, build(
+          'div',
+          'appmenu__hint',
+          'Logueate, elegí un modelo y tocá Get API Key (empieza con nvapi-).',
+        ));
+        freeLinksRow.append(block);
+      } else {
+        freeLinksRow.append(btn);
+      }
     }
     freeCard.append(freeLinksRow);
     freeCard.append(pickRow(freeIds, (id) => this.act('model-provider', id)));
