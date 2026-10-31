@@ -1207,12 +1207,12 @@ export class AppMenu {
     // —— Gratis con key ——
     const freeIds = groups.free || ['gemini', 'nvidia'];
     const freeCard = card('Gratis con key', 'Sin cobro por token (límites del sitio). Abre el enlace, copia la key y pruébala.');
-    const freeLinksRow = build('div', 'appmenu__brain-picks');
+    const freeLinksRow = build('div', 'appmenu__brain-free-links');
     for (const id of freeIds) {
       const link = freeLinks[id];
       if (!link?.url) continue;
       const keyLabel = link.recommended
-        ? `Key gratis · ${link.label} · recomendado`
+        ? `Key gratis · ${link.label} ★`
         : `Key gratis · ${link.label}`;
       const btn = build('button', 'appmenu__toggle-btn', keyLabel);
       btn.type = 'button';
@@ -1222,19 +1222,16 @@ export class AppMenu {
         e.stopPropagation();
         this.host.menuAction({ id: 'open-url', value: link.url }).catch(() => {});
       });
-      if (id === 'nvidia') {
-        const block = build('div', 'appmenu__brain-free-link');
-        block.append(btn, build(
-          'div',
-          'appmenu__hint',
-          'Logueate, elegí un modelo y tocá Get API Key (empieza con nvapi-). NVIDIA pide verificar tu teléfono.',
-        ));
-        freeLinksRow.append(block);
-      } else {
-        freeLinksRow.append(btn);
-      }
+      freeLinksRow.append(btn);
     }
-    freeCard.append(freeLinksRow);
+    freeCard.append(
+      freeLinksRow,
+      build(
+        'div',
+        'appmenu__hint',
+        'NVIDIA: logueate, elegí un modelo y tocá Get API Key (empieza con nvapi-). NVIDIA pide verificar tu teléfono.',
+      ),
+    );
     freeCard.append(pickRow(freeIds, (id) => this.act('model-provider', id), { recommend: 'gemini' }));
     const freeId = freeIds.includes(active) ? active : freeIds[0];
     const freeKey = textField(

@@ -5,9 +5,10 @@
 .appmenu__brain-card{display:flex;flex-direction:column;gap:12px;padding:14px 14px 14px;border:1px solid color-mix(in srgb,var(--line) 40%,transparent);background:color-mix(in srgb,var(--bg) 55%,transparent);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
 .appmenu__brain-card-title{margin:0;color:var(--label);font:600 15px Rajdhani,sans-serif;letter-spacing:.06em;text-transform:uppercase}
 .appmenu__brain-card .appmenu__hint{margin:0}
-.appmenu__brain-picks{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;margin:2px 0}
+.appmenu__brain-picks{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:2px 0}
 .appmenu__brain-picks .appmenu__toggle-btn{clip-path:none;border:1px solid color-mix(in srgb,var(--line) 45%,transparent)}
-.appmenu__brain-free-link{display:flex;flex-direction:column;gap:6px;max-width:100%}
+.appmenu__brain-free-links{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0}
+.appmenu__brain-free-links .appmenu__toggle-btn{flex:0 0 auto;width:auto;text-align:left;clip-path:none;border:1px solid color-mix(in srgb,var(--line) 45%,transparent)}
 .appmenu__brain-card .appmenu__fix-field{margin:0}
 .appmenu__brain-card > .appmenu__fix-save{margin-top:8px;align-self:flex-start}
 .appmenu__brain-status{min-height:1.2em;margin:0}

@@ -30,7 +30,7 @@ test('providers: two local, free NVIDIA/Gemini, and own-key clouds', () => {
   assert.ok(!BRAIN_GROUPS.own.includes('anthropic'));
   assert.equal(FREE_KEY_LINKS.nvidia.url, 'https://build.nvidia.com/');
   assert.equal(FREE_KEY_LINKS.gemini.url, 'https://aistudio.google.com/apikey');
-  assert.equal(FREE_KEY_LINKS.gemini.recommended, true);
+  assert.equal(FREE_KEY_LINKS.gemini.recommended, true); // UI: ★ on link, "recomendado" only on Gemini chip
   assert.equal(FREE_KEY_LINKS.nvidia.recommended, undefined);
   assert.deepEqual(providerOptions().map((p) => p.id), Object.keys(PROVIDERS));
 });
