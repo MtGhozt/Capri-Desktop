@@ -44,11 +44,8 @@ Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
 - Quitar "módulo no conectado" de `persona.md` a medida que cada cosa funcione.
 
 ## Fase 5 - Cerebro fácil para cualquiera + README
-- Primera ejecución (si no hay proveedor configurado) y en Ajustes: sección "Cerebro" que muestre todas las opciones a la vista, no un selector:
-  1. Gratis con key: botón "Key gratis" que abre la página de NVIDIA (build.nvidia.com, ~40 pedidos/min, sin cobro por token) o Google AI Studio (Gemini flash-lite). Pegar key, probar, listo.
-  2. En mi PC: Ollama/LM Studio con un modelo chico (8 GB RAM, GPU opcional, 3-5 GB de espacio).
-  3. Mi propia key: OpenAI, Claude, DeepSeek, Gemini, OpenRouter.
-  - Tabla de requisitos (en PC vs con key) como lachydotmcg. Keys solo locales, nunca en git ni logs.
+- [x] Primera ejecución (si no hay proveedor usable) y en Ajustes: sección "Cerebro" con 3 tarjetas a la vista (no dropdown): Gratis con key (NVIDIA + Gemini), En mi PC (Ollama / LM Studio), Mi propia key (OpenAI, DeepSeek, Gemini, OpenRouter, Groq, Mistral). Tabla de requisitos. "Probar" con pedido mínimo. Keys solo locales.
+- Claude/Anthropic: **no por ahora** (API no OpenAI-compatible; no queremos SDK nuevo). Anotar si algún día hay proxy compatible.
 - Reescribir README: inicio rápido sin código, cerebro, voz, cómo usarla, atajos, seguridad, qué datos salen, FAQ, créditos. Estructura inspirada en lachydotmcg y upstream (solo estructura, texto propio).
 - Sin claves de suscripción de Claude Code/Codex/Cursor como cerebro (va contra sus términos).
 

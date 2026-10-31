@@ -59,7 +59,7 @@ window.host.getMenu({ folded: false }).then((state) => {
     menu.expanded = 'model';
     menu.settingsSection = 'model';
     nav.querySelector('.is-active')?.classList.remove('is-active');
-    [...nav.children].find((item) => item.textContent === 'Modelo y clave')?.classList.add('is-active');
+    [...nav.children].find((item) => item.textContent === 'Cerebro')?.classList.add('is-active');
   }
   menu.render(state);
 }).catch((err) => {

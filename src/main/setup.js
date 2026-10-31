@@ -1,8 +1,8 @@
 'use strict';
 
-// First-run: nothing can answer yet → open Modelo y clave with a short Spanish hint.
+// First-run: nothing can answer yet → open Cerebro with a short Capri welcome.
 
-const SETUP_HINT = 'Todavía no hay modelo que me conteste. Pega una clave gratis de Gemini en https://aistudio.google.com/apikey (o usa OpenRouter / LM Studio en local).';
+const SETUP_HINT = 'Choom, todavía no tengo cerebro. Elige una tarjeta: key gratis (NVIDIA o Gemini), en tu PC, o tu propia key. Luego dale a Probar.';
 
 function needsModelSetup({ hasAnyKey = false, localReachable = false } = {}) {
   if (hasAnyKey) return false;

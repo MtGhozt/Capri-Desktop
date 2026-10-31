@@ -46,7 +46,7 @@ export const QUICK_MENU_ITEMS = [
 ];
 
 export const SETTINGS_TABS = [
-  { id: 'model', label: 'Modelo y clave' }, { id: 'memory', label: 'Memoria' },
+  { id: 'model', label: 'Cerebro' }, { id: 'memory', label: 'Memoria' },
   { id: 'hearing', label: 'Oído' }, { id: 'apps', label: 'Mis apps' },
   { id: 'bubble', label: 'Apariencia' }, { id: 'music', label: 'Música / Reproductor' },
   { id: 'shortcuts', label: 'Atajos' }, { id: 'behavior', label: 'Comportamiento' },
@@ -79,7 +79,9 @@ export class AppMenu {
     this.foundOpen = null;
     this.foundNote = '';
     this.scanning = false;
-    this.modelNote = '';   // what came of the last model / key save (Paso 4K)
+    this.modelNote = '';   // first-run Capri welcome (or last cerebro note)
+    this.probeNote = '';   // last Probar result
+    this.probeOk = false;
     this.settingsMode = false;
     this.settingsSection = 'model';
     this.quickOpen = null;
@@ -551,33 +553,36 @@ export class AppMenu {
       build('div', 'appmenu__hint', state.music?.connected ? 'CONECTADO' : 'SIN CONEXIÓN'));
     body.append(spotify);
 
-    // MODELO: who answers her, where the key lives, and what may leave the PC (Paso 4K)
-    section('MODELO', 'model');
-    const model = state.model || { providers: [{ id: 'local', label: 'LM Studio' }], provider: 'local', model: '', local: true };
-    selector('Proveedor', {
-      options: model.providers,
-      current: model.provider,
-      onChange: (id) => this.act('model-provider', id),
-    });
-    action('Modelo y clave', {
-      value: model.local ? 'LOCAL' : (model.hasKey ? 'CLAVE GUARDADA' : 'SIN CLAVE'),
-      chevron: 'model',
-      onClick: () => this.toggle('model', state),
-    });
-    if (this.expanded === 'model') {
-      body.append(this.modelPanel(model, { build }));
-      toggle('Enviar mi pantalla cuando le pida mirar', {
-        on: model.shareScreen,
-        labels: ['NO', 'SÍ'],
-        onChange: (on) => this.saveShare({ shareScreen: on }),
-      });
-      toggle('Enviar lo que recuerda de mí', {
-        on: model.shareMemory,
-        labels: ['NO', 'SÍ'],
-        onChange: (on) => this.saveShare({ shareMemory: on }),
-      });
-      body.append(build('div', 'appmenu__hint', 'Apagados, a la nube solo va lo que le escribes. Con LM Studio nada sale de tu PC.'));
+    // CEREBRO: three cards (free key / on this PC / own key) — fase 5
+    section('CEREBRO', 'model');
+    const model = state.model || {
+      providers: [{ id: 'local', label: 'LM Studio' }], provider: 'local', model: '', local: true,
+      groups: { free: ['nvidia', 'gemini'], local: ['local', 'ollama'], own: ['openai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'] },
+      freeLinks: {},
+      hasKeys: {},
+      baseUrl: 'http://localhost:1235/v1',
+    };
+    if (this.modelNote) {
+      const welcome = build('div', 'appmenu__hint appmenu__brain-welcome', this.modelNote);
+      welcome.dataset.setting = 'model';
+      body.append(welcome);
     }
+    body.append(this.brainPanel(model, { build }));
+    toggle('Enviar mi pantalla cuando le pida mirar', {
+      setting: 'model',
+      on: model.shareScreen,
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.saveShare({ shareScreen: on }),
+    });
+    toggle('Enviar lo que recuerda de mí', {
+      setting: 'model',
+      on: model.shareMemory,
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.saveShare({ shareMemory: on }),
+    });
+    const privacy = build('div', 'appmenu__hint', 'Apagados, a la nube solo va lo que le escribes. En tu PC (LM Studio / Ollama) nada sale.');
+    privacy.dataset.setting = 'model';
+    body.append(privacy);
 
     // MEMORIA
     section('MEMORIA', 'memory');
@@ -738,7 +743,7 @@ export class AppMenu {
     this.filterSettingsBody(body);
     this.el.replaceChildren(plate);
     if (this.open && this.at && !this.settingsMode) this.place();
-    this.useKeyboard(this.expanded === 'fixes' || this.expanded === 'model' || this.capturing);
+    this.useKeyboard(this.expanded === 'fixes' || this.settingsSection === 'model' || this.capturing);
   }
 
   filterSettingsBody(body) {
@@ -1116,79 +1121,180 @@ export class AppMenu {
     return wrap;
   }
 
-  // Model name and key: the key is typed here, saved encrypted, and never shown back (Paso 4K).
-  modelPanel(model, { build }) {
-    const panel = build('div', 'appmenu__fix');
-    const field = build('label', 'appmenu__fix-field');
-    const name = this.textInput(build, model.model, model.local ? 'google/gemma-4-e2b' : 'el nombre exacto del modelo', 120);
-    field.append(build('span', 'appmenu__fix-label', 'Modelo'), name);
-    const save = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'GUARDAR');
-    save.type = 'button';
-    save.dataset.state = 'on';
-    const actions = build('div', 'appmenu__fix-actions');
-    actions.append(save);
-    const note = build('div', 'appmenu__hint', this.modelNote);
-    const saveModel = async () => {
-      const res = await this.host.menuAction({ id: 'model-set', value: name.value.trim() })
-        .catch(() => ({ ok: false, message: 'No se pudo guardar.' }));
-      this.modelNote = res?.ok ? `MODELO: ${res.model}` : res?.message || 'No se pudo guardar.';
-      await this.refresh();
+  // Cerebro: three cards always visible — free key, on this PC, own key.
+  brainPanel(model, { build }) {
+    const wrap = build('div', 'appmenu__brain');
+    wrap.dataset.setting = 'model';
+    const providers = model.providers || [];
+    const labelOf = (id) => providers.find((p) => p.id === id)?.label || id;
+    const groups = model.groups || {};
+    const freeLinks = model.freeLinks || {};
+    const hasKeys = model.hasKeys || {};
+    const active = model.provider || 'local';
+
+    const card = (title, blurb) => {
+      const el = build('div', 'appmenu__brain-card');
+      el.append(build('div', 'appmenu__brain-card-title', title));
+      if (blurb) el.append(build('div', 'appmenu__hint', blurb));
+      return el;
     };
-    save.addEventListener('click', (e) => {
-      e.stopPropagation();
-      saveModel();
-    });
-    name.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      saveModel();
-    });
-    panel.append(field, actions);
 
-    if (model.provider === 'openrouter') {
-      panel.append(build('div', 'appmenu__hint', 'En OpenRouter el nombre va exacto, con el proveedor delante: openai/gpt-4o-mini.'));
-    }
+    const pickRow = (ids, onPick) => {
+      const row = build('div', 'appmenu__brain-picks');
+      for (const id of ids) {
+        const btn = build('button', `appmenu__toggle-btn${active === id ? ' is-active' : ''}`, labelOf(id));
+        btn.type = 'button';
+        if (active === id) btn.dataset.state = 'on';
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onPick(id);
+        });
+        row.append(btn);
+      }
+      return row;
+    };
 
-    if (!model.local) {
-      const keyField = build('label', 'appmenu__fix-field');
-      const key = build('input', 'appmenu__input');
-      key.type = 'password';
-      key.value = '';
-      key.placeholder = model.hasKey ? 'clave guardada: pega otra para cambiarla' : 'pega tu clave de ' + this.providerLabel(model, 'la nube');
-      key.spellcheck = false;
-      key.autocomplete = 'off';
-      key.addEventListener('keydown', (e) => e.stopPropagation());
-      for (const type of ['mousedown', 'click']) key.addEventListener(type, (e) => e.stopPropagation());
-      keyField.append(build('span', 'appmenu__fix-label', 'Clave'), key);
-      const keyActions = build('div', 'appmenu__fix-actions');
-      const saveKey = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'GUARDAR CLAVE');
-      saveKey.type = 'button';
-      saveKey.dataset.state = 'on';
-      saveKey.addEventListener('click', async (e) => {
+    const textField = (label, value, placeholder, type = 'text') => {
+      const field = build('label', 'appmenu__fix-field');
+      const input = build('input', 'appmenu__input');
+      input.type = type;
+      input.value = value || '';
+      input.placeholder = placeholder;
+      input.spellcheck = false;
+      input.autocomplete = 'off';
+      input.addEventListener('keydown', (e) => e.stopPropagation());
+      for (const ev of ['mousedown', 'click']) input.addEventListener(ev, (e) => e.stopPropagation());
+      field.append(build('span', 'appmenu__fix-label', label), input);
+      return { field, input };
+    };
+
+    const probeBtn = (getPayload) => {
+      const btn = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'PROBAR');
+      btn.type = 'button';
+      btn.dataset.state = 'on';
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const res = await this.host.menuAction({ id: 'model-key', value: { provider: model.provider, key: key.value } })
-          .catch(() => ({ ok: false, message: 'No se pudo guardar.' }));
-        this.modelNote = res?.message || '';
+        const payload = getPayload(); // before any re-render wipes the key field
+        btn.disabled = true;
+        btn.textContent = 'PROBANDO…';
+        const res = await this.host.menuAction({ id: 'model-probe', value: payload })
+          .catch(() => ({ ok: false, message: 'No se pudo probar.' }));
+        this.probeNote = res?.message || (res?.ok ? 'Listo.' : 'Falló.');
+        this.probeOk = Boolean(res?.ok);
         await this.refresh();
       });
-      keyActions.append(saveKey);
-      if (model.hasKey) {
-        const drop = build('button', 'appmenu__toggle-btn appmenu__app-delete', 'BORRAR');
-        drop.type = 'button';
-        drop.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const res = await this.host.menuAction({ id: 'model-key', value: { provider: model.provider, key: '' } })
-            .catch(() => ({ ok: false, message: 'No se pudo borrar.' }));
-          this.modelNote = res?.message || '';
-          await this.refresh();
-        });
-        keyActions.append(drop);
-      }
-      panel.append(keyField, keyActions,
-        build('div', 'appmenu__hint', 'La clave se guarda cifrada con tu cuenta de Windows, fuera de config.json.'));
+      return btn;
+    };
+
+    // —— Gratis con key ——
+    const freeIds = groups.free || ['nvidia', 'gemini'];
+    const freeCard = card('Gratis con key', 'Sin cobro por token (límites del sitio). Abre el enlace, copia la key y pruébala.');
+    const freeLinksRow = build('div', 'appmenu__brain-picks');
+    for (const id of freeIds) {
+      const link = freeLinks[id];
+      if (!link?.url) continue;
+      const btn = build('button', 'appmenu__toggle-btn', `Key gratis · ${link.label}`);
+      btn.type = 'button';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.host.menuAction({ id: 'open-url', value: link.url }).catch(() => {});
+      });
+      freeLinksRow.append(btn);
     }
-    panel.append(note);
-    return panel;
+    freeCard.append(freeLinksRow);
+    freeCard.append(pickRow(freeIds, (id) => this.act('model-provider', id)));
+    const freeId = freeIds.includes(active) ? active : freeIds[0];
+    const freeKey = textField(
+      'Key',
+      '',
+      hasKeys[freeId] ? 'key guardada: pega otra para cambiarla' : 'pega la key aquí',
+      'password',
+    );
+    const freeModel = textField('Modelo', freeIds.includes(active) ? model.model : '', 'nombre del modelo');
+    freeCard.append(
+      freeKey.field,
+      freeModel.field,
+      probeBtn(() => ({
+        provider: freeIds.includes(active) ? active : freeId,
+        key: freeKey.input.value,
+        model: freeModel.input.value.trim(),
+      })),
+      build('div', 'appmenu__hint', 'La key se guarda cifrada en tu PC, fuera de git y de los logs.'),
+    );
+    wrap.append(freeCard);
+
+    // —— En mi PC ——
+    const localIds = groups.local || ['local', 'ollama'];
+    const localCard = card('En mi PC', '8 GB de RAM, 3–5 GB de disco, GPU opcional. Ollama o LM Studio en local.');
+    localCard.append(pickRow(localIds, (id) => this.act('model-provider', id)));
+    const localId = localIds.includes(active) ? active : 'local';
+    const urlDefault = localIds.includes(active)
+      ? (model.baseUrl || '')
+      : (localId === 'ollama' ? 'http://localhost:11434/v1' : 'http://localhost:1235/v1');
+    const localUrl = textField('URL', urlDefault, 'http://localhost:…/v1');
+    const localModel = textField('Modelo', localIds.includes(active) ? model.model : '', 'nombre del modelo local');
+    localCard.append(
+      localUrl.field,
+      localModel.field,
+      probeBtn(() => ({
+        provider: localIds.includes(active) ? active : localId,
+        baseUrl: localUrl.input.value.trim(),
+        model: localModel.input.value.trim(),
+      })),
+    );
+    wrap.append(localCard);
+
+    // —— Mi propia key ——
+    const ownIds = groups.own || ['openai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'];
+    const ownCard = card('Mi propia key', 'La que ya pagas: OpenAI, DeepSeek, Gemini, OpenRouter, Groq o Mistral.');
+    ownCard.append(pickRow(ownIds, (id) => this.act('model-provider', id)));
+    const ownId = ownIds.includes(active) && !freeIds.includes(active) ? active : ownIds[0];
+    const ownKey = textField(
+      'Key',
+      '',
+      hasKeys[ownIds.includes(active) ? active : ownId] ? 'key guardada: pega otra para cambiarla' : 'pega tu key',
+      'password',
+    );
+    const ownModel = textField('Modelo', ownIds.includes(active) && !localIds.includes(active) ? model.model : '', 'nombre exacto del modelo');
+    ownCard.append(
+      ownKey.field,
+      ownModel.field,
+      probeBtn(() => ({
+        provider: ownIds.includes(active) ? active : ownId,
+        key: ownKey.input.value,
+        model: ownModel.input.value.trim(),
+      })),
+      build('div', 'appmenu__hint', 'Nada de keys de Claude Code, Codex ni Cursor: van contra sus términos.'),
+    );
+    wrap.append(ownCard);
+
+    if (this.probeNote) {
+      const status = build(
+        'div',
+        `appmenu__hint appmenu__brain-status${this.probeOk ? ' is-ok' : ' is-bad'}`,
+        this.probeNote,
+      );
+      wrap.append(status);
+    }
+
+    // —— Requisitos ——
+    const table = build('div', 'appmenu__brain-table');
+    table.append(build('div', 'appmenu__brain-card-title', 'En mi PC vs con key'));
+    const grid = build('div', 'appmenu__brain-table-grid');
+    const cell = (t, strong = false) => {
+      const c = build('div', strong ? 'appmenu__brain-table-h' : 'appmenu__brain-table-c', t);
+      return c;
+    };
+    grid.append(
+      cell('', true), cell('En mi PC', true), cell('Con key', true),
+      cell('Internet'), cell('No hace falta'), cell('Sí'),
+      cell('RAM / disco'), cell('~8 GB RAM, 3–5 GB'), cell('Casi nada extra'),
+      cell('Privacidad'), cell('Todo se queda aquí'), cell('El chat sale a ese servicio'),
+      cell('Costo'), cell('Gratis (tu luz)'), cell('Gratis con cupo, o lo que cobren'),
+    );
+    table.append(grid);
+    wrap.append(table);
+    return wrap;
   }
 
   providerLabel(model, fallback) {

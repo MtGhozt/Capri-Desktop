@@ -13,7 +13,8 @@ const { TRAY, LANGS } = require('./labels');
 const { createBridge } = require('./bridge');
 const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
-const { PROVIDERS, providerOptions, isCloud } = require('./chat-providers');
+const { PROVIDERS, providerOptions, isCloud, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS } = require('./chat-providers');
+const { probeProvider } = require('./llm-probe');
 const { switchProvider, setProviderModel, modelForProvider } = require('./chat-models');
 const { parseRenderMode, renderSwitches } = require('./render-mode');
 const { createLms } = require('./lms');
@@ -1290,8 +1291,8 @@ function updateConfig(patch) {
   return cfg;
 }
 
-// MODELO (Paso 4K): who answers her. Switching keeps LM Studio's model apart, so coming back to it
-// doesn't cost a re-download; the key never leaves its own encrypted file.
+// CEREBRO (4K + fase 5): who answers her. Switching keeps each local URL/model apart; the key
+// never leaves its own encrypted file.
 function setChatProvider(id) {
   if (!PROVIDERS[id]) return { ok: false, message: 'Ese proveedor no existe.' };
   const cfg = config.load();
@@ -1300,22 +1301,34 @@ function setChatProvider(id) {
   const next = switchProvider(cfg.llm || {}, id, PROVIDERS);
   const patch = { provider: next.provider, model: next.model, models: next.models };
   if (id === 'local') patch.localModel = next.model;
+  if (PROVIDERS[id].local) {
+    const urls = { ...(cfg.llm?.baseUrls || {}) };
+    if (PROVIDERS[from]?.local && cfg.llm?.baseUrl) urls[from] = cfg.llm.baseUrl;
+    patch.baseUrl = urls[id] || defaultBaseUrl(id);
+    patch.baseUrls = { ...urls, [id]: patch.baseUrl };
+  }
   updateConfig({ llm: patch });
   return { ok: true };
 }
 
 function setChatModel(value) {
-  const provider = String(config.load().llm?.provider || 'local');
+  const provider = String(value?.provider || config.load().llm?.provider || 'local');
+  if (value?.provider && PROVIDERS[value.provider]) setChatProvider(value.provider);
   const model = String(value?.model ?? value ?? '').trim().slice(0, 120);
   if (!model) return { ok: false, message: 'Falta el nombre del modelo.' };
   const next = setProviderModel(config.load().llm || {}, provider, model);
-  updateConfig({
-    llm: {
-      model: next.model,
-      models: next.models,
-      ...(provider === 'local' ? { localModel: model } : {}),
-    },
-  });
+  const patch = {
+    model: next.model,
+    models: next.models,
+    ...(provider === 'local' ? { localModel: model } : {}),
+  };
+  if (value?.baseUrl != null && PROVIDERS[provider]?.local) {
+    const baseUrl = String(value.baseUrl).trim().replace(/\/+$/, '') || defaultBaseUrl(provider);
+    const urls = { ...(config.load().llm?.baseUrls || {}), [provider]: baseUrl };
+    patch.baseUrl = baseUrl;
+    patch.baseUrls = urls;
+  }
+  updateConfig({ llm: patch });
   return { ok: true, model };
 }
 
@@ -1324,6 +1337,37 @@ function setChatKey(value) {
   if (!PROVIDERS[provider] || PROVIDERS[provider].local) return { ok: false, message: 'Ese proveedor no usa clave.' };
   const saved = saveLlmKey(provider, value?.key);
   return { ok: true, hasKey: saved, message: saved ? 'Clave guardada.' : 'Clave borrada.' };
+}
+
+const OPEN_URL_ALLOW = new Set([
+  'https://build.nvidia.com/',
+  'https://aistudio.google.com/apikey',
+]);
+
+async function probeChatFromMenu(value = {}) {
+  const id = String(value.provider || config.load().llm?.provider || 'local');
+  if (!PROVIDERS[id]) return { ok: false, message: 'Ese proveedor no existe.' };
+  if (value.key != null && !PROVIDERS[id].local) {
+    const clean = String(value.key).trim();
+    if (clean) saveLlmKey(id, clean);
+  }
+  if (value.provider) setChatProvider(id);
+  if (value.model || value.baseUrl != null) {
+    setChatModel({
+      provider: id,
+      model: value.model || config.load().llm?.model || PROVIDERS[id].model,
+      baseUrl: value.baseUrl,
+    });
+  }
+  const cfg = config.load();
+  const result = await probeProvider({
+    id,
+    model: String(cfg.llm?.model || PROVIDERS[id].model),
+    key: PROVIDERS[id].local ? '' : llmKey(id),
+    baseUrl: cfg.llm?.baseUrl,
+  });
+  // Capri's line only — never echo the key or the raw server body.
+  return { ok: Boolean(result.ok), message: String(result.message || '') };
 }
 
 function applyMenuAction(id, value) {
@@ -1344,6 +1388,13 @@ function applyMenuAction(id, value) {
     case 'model-provider': return setChatProvider(value);
     case 'model-set': return setChatModel(value);
     case 'model-key': return setChatKey(value);
+    case 'model-probe': return probeChatFromMenu(value);
+    case 'open-url': {
+      const url = String(value || '');
+      if (!OPEN_URL_ALLOW.has(url)) return { ok: false, message: 'Esa página no está en la lista.' };
+      shell.openExternal(url);
+      return { ok: true };
+    }
     case 'model-share': updateConfig({ llm: value }); break;
     case 'render':
       if (parseRenderMode(value) !== value) return { ok: false, message: 'Esa opción de pantalla no existe.' };
@@ -1633,12 +1684,21 @@ function menuState(extra = {}) {
     },
     model: (() => {
       const id = String(cfg.llm?.provider || 'local');
+      const safe = PROVIDERS[id] ? id : 'local';
+      const hasKeys = {};
+      for (const pid of Object.keys(PROVIDERS)) {
+        if (!PROVIDERS[pid].local) hasKeys[pid] = Boolean(llmKey(pid));
+      }
       return {
-        provider: PROVIDERS[id] ? id : 'local',
+        provider: safe,
         providers: providerOptions(),
+        groups: BRAIN_GROUPS,
+        freeLinks: FREE_KEY_LINKS,
         model: String(cfg.llm?.model || ''),
-        local: !isCloud(id),
-        hasKey: Boolean(llmKey(id)),
+        baseUrl: String(cfg.llm?.baseUrl || defaultBaseUrl(safe)),
+        local: !isCloud(safe),
+        hasKey: Boolean(llmKey(safe)),
+        hasKeys,
         shareScreen: cfg.llm?.shareScreen === true,
         shareMemory: cfg.llm?.shareMemory === true,
       };
@@ -1858,8 +1918,8 @@ function registerIpc() {
     structuredClone(state);
     return state;
   });
-  ipcMain.handle('menu:action', (_e, payload = {}) => {
-    const result = applyMenuAction(payload.id, payload.value);
+  ipcMain.handle('menu:action', async (_e, payload = {}) => {
+    const result = await applyMenuAction(payload.id, payload.value);
     return result && typeof result === 'object' ? result : { ok: true };
   });
   ipcMain.on('settings:close', () => {

@@ -31,13 +31,13 @@ Overlay sin bordes, siempre encima. Vive en tu escritorio: puedes arrastrarla, a
 
 **Menú:** clic derecho sobre ella, o el icono de la bandeja (en Windows 11 a menudo está detrás de **^**).
 
-La primera vez, si no hay LM Studio local ni clave en la nube, Capri puede abrir **Ajustes → Modelo y clave** para que elijas un cerebro.
+La primera vez, si no hay LM Studio/Ollama local ni clave en la nube, Capri puede abrir **Ajustes → Cerebro** para que elijas cómo habla.
 
 ---
 
 ## 3. Su cerebro
 
-Elige el proveedor en **clic derecho → Ajustes… → Modelo y clave** (o el atajo de proveedor en el menú rápido).
+Elige el proveedor en **clic derecho → Ajustes… → Cerebro** (o el atajo de proveedor en el menú rápido).
 
 | Proveedor | Notas |
 | --- | --- |
@@ -160,7 +160,7 @@ Código en este repo; el instalador se genera con `pnpm dist`.
 
 Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop). **v0.1.2** — download `Capri-Setup-0.1.2.exe` from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases); SmartScreen → *More info* → *Run anyway*.
 
-**Brain:** LM Studio locally, or Gemini (`gemini-flash-lite-latest`), OpenRouter, Groq, OpenAI, Mistral, DeepSeek in **Settings → Modelo y clave**. Keys stay on your PC (`safeStorage`).
+**Brain:** LM Studio / Ollama locally, or free NVIDIA/Gemini keys, or OpenRouter, Groq, OpenAI, Mistral, DeepSeek in **Settings → Cerebro**. Keys stay on your PC (`safeStorage`).
 
 **Voice (optional):** not in the public installer. Without the local `voice/` sidecar she uses **typing blips** (default) or silence. With a sidecar: wake (“Hey Capri” / “Capri”), **Ctrl+Alt+V**, Whisper STT on CPU; cloned Capri reference audio is **not** shipped — without it you get blips / Kokoro, not her clone. Mood refs live under `voice/ref/` when you set that up yourself.
 

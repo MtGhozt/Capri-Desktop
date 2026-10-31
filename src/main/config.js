@@ -33,7 +33,7 @@ const DEFAULTS = {
   },
   guide: {
     welcome: false,          // Claude Code "plug me in" onboarding
-    setupHint: false,        // first-run: opened Modelo y clave because nothing could answer yet
+    setupHint: false,        // first-run: opened Cerebro because nothing could answer yet
   },
   idle: {
     dormantAfterMs: 5 * 60 * 1000, // 0 = never fold into the DORMANT widget
