@@ -5,21 +5,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-
-function py(code) {
-  const voice = path.join(__dirname, '..', 'voice');
-  const venv = path.join(voice, '.venv', 'Scripts', 'python.exe');
-  const bin = fs.existsSync(venv) ? venv : 'py';
-  const args = bin === 'py' ? ['-3.11', '-c', code] : ['-c', code];
-  const result = spawnSync(bin, args, { encoding: 'utf8', cwd: voice, timeout: 120000 });
-  if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || `exit ${result.status}`);
-  }
-  return String(result.stdout || '').trim();
-}
+const { py, skip } = require('./voice-py');
 
 const CHECK = `
 import threading, time
@@ -168,7 +154,7 @@ assert whisper.seen["beam_size"] == 5
 print("IDLE_UNLOAD_OK")
 `;
 
-test('voice sidecar releases engines when silent, folded or muted', { timeout: 120000 }, () => {
+test('voice sidecar releases engines when silent, folded or muted', { timeout: 120000, skip: skip() }, () => {
   const out = py(CHECK);
   assert.equal(out.split('\n').pop(), 'IDLE_UNLOAD_OK', out);
 });

@@ -2,13 +2,9 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
+const { skip, VOICE, PY } = require('./voice-py');
 
-const ROOT = path.join(__dirname, '..');
-const VOICE = path.join(ROOT, 'voice');
-const PY = path.join(VOICE, '.venv', 'Scripts', 'python.exe');
 const PORT = 47891;
 const TOKEN = 'boot-test-token';
 
@@ -46,8 +42,7 @@ function sendConfig(port, token) {
   }
 }
 
-test('sidecar boot log has wake word ready (or openWakeWord off), whisper ready and tts engine', { timeout: 120000 }, async () => {
-  assert.ok(fs.existsSync(PY), 'voice/.venv python is required for the boot test');
+test('sidecar boot log has wake word ready (or openWakeWord off), whisper ready and tts engine', { timeout: 120000, skip: skip() }, async () => {
   const child = spawn(PY, ['-u', 'server.py'], {
     cwd: VOICE,
     windowsHide: true,
