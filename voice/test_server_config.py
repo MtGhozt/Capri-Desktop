@@ -31,10 +31,37 @@ class WakeModelTests(unittest.TestCase):
             name, fell_back = server.resolve_wake_model("hey_jarvis", Path(tmp))
             self.assertEqual((name, fell_back), ("hey_jarvis", False))
 
-    def test_missing_model_falls_back_to_hey_jarvis(self):
+    def test_missing_model_is_missing_not_hey_jarvis(self):
         with tempfile.TemporaryDirectory() as tmp:
-            name, fell_back = server.resolve_wake_model("hey_capri", Path(tmp))
-            self.assertEqual((name, fell_back), ("hey_jarvis", True))
+            name, missing = server.resolve_wake_model("hey_capri", Path(tmp))
+            self.assertEqual((name, missing), (None, True))
+
+
+class MissingWakeModelTests(unittest.TestCase):
+    """No custom model on disk: openWakeWord stays off, Whisper still hears "Capri"."""
+
+    def engine(self):
+        engine = server.Engine.__new__(server.Engine)
+        engine.cfg = {"wakeModel": "hey_absent_test", "wakeMode": "both", "wakeWord": True}
+        engine._wake = None
+        engine._whisper = object()
+        return engine
+
+    def test_openwakeword_is_never_loaded(self):
+        engine = self.engine()
+        lines = []
+        with patch.object(server, "load_openwakeword") as loader, \
+             patch.object(server, "log", lines.append):
+            self.assertIs(engine._load_wake(), False)
+        loader.assert_not_called()
+        self.assertTrue(any("hey_absent_test" in line and "Whisper" in line for line in lines), lines)
+
+    def test_whisper_wake_still_live(self):
+        engine = self.engine()
+        with patch.object(server, "log"):
+            engine._wake = engine._load_wake()
+        self.assertFalse(engine.oww_live())
+        self.assertTrue(engine.whisper_wake_live())
 
 
 class UtteranceTests(unittest.TestCase):

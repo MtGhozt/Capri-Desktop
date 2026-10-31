@@ -46,7 +46,7 @@ function sendConfig(port, token) {
   }
 }
 
-test('sidecar boot log has wake word ready, whisper ready and tts engine', { timeout: 120000 }, async () => {
+test('sidecar boot log has wake word ready (or openWakeWord off), whisper ready and tts engine', { timeout: 120000 }, async () => {
   assert.ok(fs.existsSync(PY), 'voice/.venv python is required for the boot test');
   const child = spawn(PY, ['-u', 'server.py'], {
     cwd: VOICE,
@@ -76,13 +76,13 @@ test('sidecar boot log has wake word ready, whisper ready and tts engine', { tim
     let log = '';
     while (Date.now() < until) {
       log = buf;
-      if (/wake word .+ ready/i.test(log) && /whisper ready/i.test(log) && /tts engine=/.test(log)) {
+      if (/(wake word .+ ready|openWakeWord off)/i.test(log) && /whisper ready/i.test(log) && /tts engine=/.test(log)) {
         break;
       }
       await new Promise((r) => setTimeout(r, 400));
     }
     log = buf;
-    assert.match(log, /wake word .+ ready/i, log.slice(-3000));
+    assert.match(log, /(wake word .+ ready|openWakeWord off)/i, log.slice(-3000));
     assert.match(log, /whisper ready/i, log.slice(-3000));
     assert.match(log, /tts engine=/, log.slice(-3000));
   } finally {

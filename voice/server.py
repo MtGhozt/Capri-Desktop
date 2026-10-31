@@ -129,19 +129,23 @@ def as_pcm16(frame: np.ndarray) -> np.ndarray:
 BUILTIN_WAKE = ("alexa", "hey_mycroft", "hey_jarvis", "hey_rhasspy", "timer", "weather")
 
 # openWakeWord ships a few models; anything else is a custom .onnx we train (docs/wake-word.md).
-def resolve_wake_model(value, models: Path = MODELS) -> tuple[str, bool]:
-    """wakeModel -> (name or path openWakeWord can load, whether we fell back to hey_jarvis)."""
+def resolve_wake_model(value, models: Path = MODELS) -> tuple[str | None, bool]:
+    """wakeModel -> (path/name openWakeWord can load, whether the model is missing).
+
+    Missing means no openWakeWord at all: there is no stand-in model, the wake word is
+    Whisper hearing "Capri" (wakeMode both/whisper).
+    """
     raw = str(value or "hey_capri").strip()
     looks_like_path = raw.lower().endswith(".onnx") or "/" in raw or "\\" in raw
     if looks_like_path:
         path = Path(raw)
         if not path.is_absolute():
             path = models / path
-        return (str(path), False) if path.is_file() else ("hey_jarvis", True)
+        return (str(path), False) if path.is_file() else (None, True)
     if raw.lower() in BUILTIN_WAKE:
         return raw.lower(), False
     custom = models / f"{raw}.onnx"
-    return (str(custom), False) if custom.is_file() else ("hey_jarvis", True)
+    return (str(custom), False) if custom.is_file() else (None, True)
 
 
 def wake_score_max(scores) -> tuple[float, dict]:
@@ -526,9 +530,16 @@ class Engine:
         log(f"stt unloaded reason=mic-idle vram_free={free_vram_mib()}")
 
     def _load_wake(self):
-        model, fell_back = resolve_wake_model(self.cfg.get("wakeModel"))
-        if fell_back:
-            log(f"wake model {self.cfg.get('wakeModel') or 'hey_capri'} not found, using hey_jarvis")
+        model, missing = resolve_wake_model(self.cfg.get("wakeModel"))
+        if missing:
+            name = self.cfg.get("wakeModel") or "hey_capri"
+            how = (
+                'wake word is Whisper "Capri" only'
+                if self.wake_mode() != "oww"
+                else "no wake word until that model exists"
+            )
+            log(f"wake model {name} not found in {MODELS}; openWakeWord off, {how}")
+            return False
         last_err = None
         for attempt in range(1, WAKE_ATTEMPTS + 1):
             try:
