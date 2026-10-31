@@ -562,7 +562,7 @@ export class AppMenu {
     section('CEREBRO', 'model');
     const model = state.model || {
       providers: [{ id: 'local', label: 'LM Studio' }], provider: 'local', model: '', local: true,
-      groups: { free: ['nvidia', 'gemini'], local: ['local', 'ollama'], own: ['openai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'] },
+      groups: { free: ['gemini', 'nvidia'], local: ['local', 'ollama'], own: ['openai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'] },
       freeLinks: {},
       hasKeys: {},
       baseUrl: 'http://localhost:1235/v1',
@@ -1153,10 +1153,11 @@ export class AppMenu {
       return el;
     };
 
-    const pickRow = (ids, onPick) => {
+    const pickRow = (ids, onPick, { recommend } = {}) => {
       const row = build('div', 'appmenu__brain-picks');
       for (const id of ids) {
-        const btn = build('button', `appmenu__toggle-btn${active === id ? ' is-active' : ''}`, labelOf(id));
+        const text = id === recommend ? `${labelOf(id)} · recomendado` : labelOf(id);
+        const btn = build('button', `appmenu__toggle-btn${active === id ? ' is-active' : ''}`, text);
         btn.type = 'button';
         if (active === id) btn.dataset.state = 'on';
         // Avoid focus scrolling the panel to the top on re-render.
@@ -1204,13 +1205,16 @@ export class AppMenu {
     };
 
     // —— Gratis con key ——
-    const freeIds = groups.free || ['nvidia', 'gemini'];
+    const freeIds = groups.free || ['gemini', 'nvidia'];
     const freeCard = card('Gratis con key', 'Sin cobro por token (límites del sitio). Abre el enlace, copia la key y pruébala.');
     const freeLinksRow = build('div', 'appmenu__brain-picks');
     for (const id of freeIds) {
       const link = freeLinks[id];
       if (!link?.url) continue;
-      const btn = build('button', 'appmenu__toggle-btn', `Key gratis · ${link.label}`);
+      const keyLabel = link.recommended
+        ? `Key gratis · ${link.label} · recomendado`
+        : `Key gratis · ${link.label}`;
+      const btn = build('button', 'appmenu__toggle-btn', keyLabel);
       btn.type = 'button';
       btn.addEventListener('mousedown', (e) => e.preventDefault());
       btn.addEventListener('click', (e) => {
@@ -1223,7 +1227,7 @@ export class AppMenu {
         block.append(btn, build(
           'div',
           'appmenu__hint',
-          'Logueate, elegí un modelo y tocá Get API Key (empieza con nvapi-).',
+          'Logueate, elegí un modelo y tocá Get API Key (empieza con nvapi-). NVIDIA pide verificar tu teléfono.',
         ));
         freeLinksRow.append(block);
       } else {
@@ -1231,7 +1235,7 @@ export class AppMenu {
       }
     }
     freeCard.append(freeLinksRow);
-    freeCard.append(pickRow(freeIds, (id) => this.act('model-provider', id)));
+    freeCard.append(pickRow(freeIds, (id) => this.act('model-provider', id), { recommend: 'gemini' }));
     const freeId = freeIds.includes(active) ? active : freeIds[0];
     const freeKey = textField(
       'Key',

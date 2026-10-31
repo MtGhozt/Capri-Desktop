@@ -23,12 +23,15 @@ test('providers: two local, free NVIDIA/Gemini, and own-key clouds', () => {
   assert.equal(defaultBaseUrl('ollama'), OLLAMA);
   assert.equal(defaultBaseUrl('local'), LOCAL);
   assert.equal(provider('nope').local, true);
-  assert.deepEqual(BRAIN_GROUPS.free, ['nvidia', 'gemini']);
+  assert.deepEqual(BRAIN_GROUPS.free, ['gemini', 'nvidia']);
+  assert.equal(BRAIN_GROUPS.free[0], 'gemini'); // recommended free path first
   assert.deepEqual(BRAIN_GROUPS.local, ['local', 'ollama']);
   assert.ok(BRAIN_GROUPS.own.includes('openai'));
   assert.ok(!BRAIN_GROUPS.own.includes('anthropic'));
   assert.equal(FREE_KEY_LINKS.nvidia.url, 'https://build.nvidia.com/');
   assert.equal(FREE_KEY_LINKS.gemini.url, 'https://aistudio.google.com/apikey');
+  assert.equal(FREE_KEY_LINKS.gemini.recommended, true);
+  assert.equal(FREE_KEY_LINKS.nvidia.recommended, undefined);
   assert.deepEqual(providerOptions().map((p) => p.id), Object.keys(PROVIDERS));
 });
 

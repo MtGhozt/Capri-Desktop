@@ -929,6 +929,8 @@ async function maybeOpenSetupHint() {
   const localReachable = await probeLocalLlm(cfg.llm?.baseUrl);
   if (!needsModelSetup({ hasAnyKey: hasAnyLlmKey(), localReachable })) return;
   config.save({ guide: { setupHint: true } });
+  // First-run: pick free Gemini so the Gratis card shows it selected (recomendado).
+  if (String(config.load().llm?.provider || 'local') === 'local') setChatProvider('gemini');
   openSettingsTab('model', SETUP_HINT);
 }
 

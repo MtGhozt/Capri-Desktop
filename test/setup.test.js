@@ -19,5 +19,5 @@ test('setup hint is needed only without keys and without a local LLM', () => {
   assert.equal(needsModelSetup({ hasAnyKey: true, localReachable: false }), false);
   assert.equal(needsModelSetup({ hasAnyKey: false, localReachable: true }), false);
   assert.match(SETUP_HINT, /cerebro/i);
-  assert.match(SETUP_HINT, /NVIDIA|Gemini/i);
+  assert.match(SETUP_HINT, /Gemini \(recomendado\)/);
 });

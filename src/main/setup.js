@@ -2,7 +2,7 @@
 
 // First-run: nothing can answer yet → open Cerebro with a short Capri welcome.
 
-const SETUP_HINT = 'Choom, todavía no tengo cerebro. Elige una tarjeta: key gratis (NVIDIA o Gemini), en tu PC, o tu propia key. Luego dale a Probar.';
+const SETUP_HINT = 'Choom, todavía no tengo cerebro. Empezá por Gemini (recomendado), NVIDIA, en tu PC, o tu propia key. Luego dale a Probar.';
 
 function needsModelSetup({ hasAnyKey = false, localReachable = false } = {}) {
   if (hasAnyKey) return false;

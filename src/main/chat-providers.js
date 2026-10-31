@@ -19,14 +19,14 @@ const PROVIDERS = {
 
 // Cards in Ajustes › Cerebro (same ids as PROVIDERS; Gemini sits in free and own).
 const BRAIN_GROUPS = {
-  free: ['nvidia', 'gemini'],
+  free: ['gemini', 'nvidia'], // Gemini first = recommended free path
   local: ['local', 'ollama'],
   own: ['openai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'],
 };
 
 const FREE_KEY_LINKS = {
+  gemini: { label: 'Google AI Studio', url: 'https://aistudio.google.com/apikey', recommended: true },
   nvidia: { label: 'NVIDIA', url: 'https://build.nvidia.com/' },
-  gemini: { label: 'Google AI Studio', url: 'https://aistudio.google.com/apikey' },
 };
 
 const DEFAULT_PROVIDER = 'local';
