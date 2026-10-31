@@ -127,6 +127,43 @@ class ServerConfigTests(unittest.TestCase):
         self.assertEqual((free, usable, loaded), (2400, 2400, False))
 
 
+class WhisperAutoVramTests(unittest.TestCase):
+    """GTX 1650 4 GB: auto used to pick medium cuda (usable ~2900) and time out loading."""
+
+    def engine(self, stt="auto"):
+        engine = server.Engine.__new__(server.Engine)
+        engine.cfg = {"sttModel": stt, "tts": "kokoro", "localLlm": False, "llmBaseUrl": "http://localhost:1235/v1"}
+        engine._stt_beam = 5
+        engine.boots = []
+        engine._whisper_boot = lambda _cls, name, device, compute, _root: (
+            engine.boots.append((name, device, compute)) or object()
+        )
+        return engine
+
+    def load(self, engine, total):
+        with patch.object(server, "free_vram_mib", return_value=3000), \
+             patch.object(server, "total_vram_mib", return_value=total), \
+             patch.object(server, "usable_vram_mib", side_effect=lambda free, loaded, reserve: free), \
+             patch.object(server, "import_whisper_model", return_value=object()), \
+             patch.object(server, "log"):
+            engine._load_whisper()
+
+    def test_auto_on_4gb_gpu_stays_on_small_cpu(self):
+        engine = self.engine()
+        self.load(engine, total=4096)
+        self.assertEqual(engine.boots, [("small", "cpu", "int8")])
+
+    def test_auto_on_6gb_gpu_still_uses_medium_cuda(self):
+        engine = self.engine()
+        self.load(engine, total=8192)
+        self.assertEqual(engine.boots, [("medium", "cuda", "float16")])
+
+    def test_explicit_medium_tries_cuda_on_a_4gb_gpu(self):
+        engine = self.engine("medium")
+        self.load(engine, total=4096)
+        self.assertEqual(engine.boots[0], ("medium", "cuda", "float16"))
+
+
 class TorchOptionalTests(unittest.TestCase):
     """Light install (setup.ps1 without -OmniVoice): no torch, and the sidecar still boots."""
 

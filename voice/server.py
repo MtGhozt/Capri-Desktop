@@ -40,6 +40,9 @@ MIC_BLOCK = 4096
 MIC_QUEUE = 48
 WAKE_FRAME = 1280
 MEDIUM_VRAM_MIB = 2800
+# auto: a small GPU (GTX 1650 4 GB) has enough *free* VRAM for medium cuda on paper, but the
+# download + load takes ~117 s, past WHISPER_LOAD_S (60 s): every STT then times out.
+MEDIUM_TOTAL_VRAM_MIB = 6144
 LISTEN_TIMEOUT_S = 10.0
 WHISPER_LOAD_S = 60.0
 WAKE_ATTEMPTS = 3
@@ -100,10 +103,10 @@ def load_openwakeword():
         sys.path[:] = saved
 
 
-def free_vram_mib() -> int:
+def nvidia_smi_mib(field: str) -> int:
     try:
         out = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+            ["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader,nounits"],
             text=True,
             timeout=5,
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
@@ -111,6 +114,14 @@ def free_vram_mib() -> int:
         return int(out.strip().splitlines()[0].split()[0])
     except Exception:
         return 0
+
+
+def free_vram_mib() -> int:
+    return nvidia_smi_mib("memory.free")
+
+
+def total_vram_mib() -> int:
+    return nvidia_smi_mib("memory.total")
 
 
 def idle_unload_seconds(value, default: float = DEFAULT_IDLE_UNLOAD_MIN) -> float:
@@ -565,15 +576,18 @@ class Engine:
         wanted = str(self.cfg.get("sttModel") or "auto").lower()
         self._stt_beam = 5
         free, usable, _loaded = self._vram_budget()
+        total = total_vram_mib()
         keep_gpu = self._tts_wants_gpu()
+        # "auto" picks medium only on a 6 GB+ GPU; explicit "medium" still tries cuda.
         try_medium = (
             not keep_gpu
             and wanted in ("auto", "medium")
             and usable >= MEDIUM_VRAM_MIB
+            and (wanted == "medium" or total >= MEDIUM_TOTAL_VRAM_MIB)
         )
         if try_medium:
             try:
-                log(f"loading whisper medium (cuda float16) vram_free={free} vram_usable={usable}")
+                log(f"loading whisper medium (cuda float16) vram_free={free} vram_usable={usable} vram_total={total}")
                 model = self._whisper_boot(WhisperModel, "medium", "cuda", "float16", root)
                 return model
             except Exception as err:
@@ -584,7 +598,7 @@ class Engine:
         reason = "tts keeps gpu for omnivoice" if keep_gpu else "cpu"
         log(
             f"loading whisper {name} (cpu int8) reason={reason} beam={self._stt_beam} "
-            f"vram_free={free} vram_usable={usable}"
+            f"vram_free={free} vram_usable={usable} vram_total={total}"
         )
         try:
             return self._whisper_boot(WhisperModel, name, "cpu", "int8", root)
