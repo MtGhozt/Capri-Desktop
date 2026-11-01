@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const Module = require('node:module');
+const { TRAY } = require('../src/main/labels');
 
 function setup(t, cfg) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-'));
@@ -95,8 +96,8 @@ test('after too many crashes she stops trying and says so', (t) => {
     t.mock.timers.tick(3000);
   }
   assert.equal(children.length, 4, 'three restarts, then no more');
-  const notice = events.find((e) => e.type === 'notice' && /se cayó 4 veces/.test(e.message));
-  assert.ok(notice, 'she says it in Spanish');
+  assert.ok(events.some((e) => e.type === 'voice-failed'), 'she reports the failure');
+  assert.match(TRAY.es.voiceFailed, /Discord/);
   voice.stop();
 });
 

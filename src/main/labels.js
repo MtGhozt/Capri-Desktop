@@ -16,7 +16,8 @@ const TRAY = {
     micOn: 'Microphone : on', micOff: 'Microphone : off', micDevice: 'Entrée micro', micDefault: 'Par défaut',
     hooksOn: 'Hooks Claude Code : installés', hooksOff: 'Installer les hooks Claude Code',
     hooksRemove: 'Retirer les hooks Claude Code', quit: 'Quitter',
-    voiceMissing: 'La voix n’est pas installée ; va dans Réglages → Voix.',
+    voiceMissing: 'Je n’ai pas encore de voix installée ! 🎙️ Pour l’instant, tu peux m’écrire. Si tu veux me parler, la voix s’installe à part (guide dans le README). Un bouton d’installation arrive bientôt.',
+    voiceFailed: 'Ma voix n’a pas démarré. Regarde #bugs sur Discord ; en attendant, tu peux m’écrire.',
   },
   en: {
     name: 'English',
@@ -30,7 +31,8 @@ const TRAY = {
     micOn: 'Microphone: on', micOff: 'Microphone: off', micDevice: 'Input device', micDefault: 'Default',
     hooksOn: 'Claude Code hooks: installed', hooksOff: 'Install Claude Code hooks',
     hooksRemove: 'Remove Claude Code hooks', quit: 'Quit',
-    voiceMissing: 'Voice is not installed; check Settings → Voice.',
+    voiceMissing: 'I don’t have a voice installed yet! 🎙️ You can type to me for now. If you want me to talk, the voice installs separately (guide in the README). A one-click installer is coming soon.',
+    voiceFailed: 'My voice didn’t start. Check #bugs on Discord; you can type to me meanwhile.',
   },
   es: {
     name: 'Español',
@@ -44,7 +46,8 @@ const TRAY = {
     micOn: 'Micrófono: on', micOff: 'Micrófono: off', micDevice: 'Entrada', micDefault: 'Predeterminado',
     hooksOn: 'Hooks de Claude Code: instalados', hooksOff: 'Instalar los hooks de Claude Code',
     hooksRemove: 'Quitar los hooks de Claude Code', quit: 'Salir',
-    voiceMissing: 'La voz no está instalada; mirá Ajustes → Voz.',
+    voiceMissing: '¡Todavía no tengo voz instalada! 🎙️ Por ahora podés escribirme. Si querés hablarme, la voz se instala aparte (guía en el README). Pronto va a haber un botón para instalarla fácil.',
+    voiceFailed: 'Mi voz no arrancó. Revisá #bugs en el Discord; mientras tanto, podés escribirme.',
   },
   pt: {
     name: 'Português (Brasil)',
@@ -58,7 +61,8 @@ const TRAY = {
     micOn: 'Microfone: on', micOff: 'Microfone: off', micDevice: 'Entrada', micDefault: 'Padrão',
     hooksOn: 'Hooks do Claude Code: instalados', hooksOff: 'Instalar os hooks do Claude Code',
     hooksRemove: 'Remover os hooks do Claude Code', quit: 'Sair',
-    voiceMissing: 'A voz não está instalada; veja Ajustes → Voz.',
+    voiceMissing: 'Ainda não tenho voz instalada! 🎙️ Por enquanto, você pode me escrever. Se quiser falar comigo, a voz é instalada à parte (guia no README). Em breve vai ter um botão para instalar fácil.',
+    voiceFailed: 'Minha voz não iniciou. Veja #bugs no Discord; enquanto isso, você pode me escrever.',
   },
   ru: {
     name: 'Русский',
@@ -72,7 +76,8 @@ const TRAY = {
     micOn: 'Микрофон: вкл.', micOff: 'Микрофон: выкл.', micDevice: 'Вход', micDefault: 'По умолчанию',
     hooksOn: 'Хуки Claude Code: установлены', hooksOff: 'Установить хуки Claude Code',
     hooksRemove: 'Удалить хуки Claude Code', quit: 'Выйти',
-    voiceMissing: 'Голос не установлен; откройте Настройки → Голос.',
+    voiceMissing: 'У меня пока нет голоса! 🎙️ Пока можешь писать мне. Если хочешь со мной говорить, голос ставится отдельно (инструкция в README). Скоро появится кнопка для простой установки.',
+    voiceFailed: 'Мой голос не запустился. Загляни в #bugs в Discord; пока можешь писать мне.',
   },
 };
 

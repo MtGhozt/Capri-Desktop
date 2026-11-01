@@ -36,7 +36,7 @@ function resolveVoiceDir(root, cfg) {
   return null;
 }
 
-function createVoice({ root, loadConfig, onEvent }) {
+function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
   let child = null;
   let ws = null;
   let token = null;
@@ -63,16 +63,18 @@ function createVoice({ root, loadConfig, onEvent }) {
   function skip(message) {
     logLines(logFile, `[capri] ${message}`);
     console.log(`[capri] ${message}`);
-    emit({ type: 'notice', message });
+    emit({ type: 'voice-failed' });
   }
 
   // No voice.dir / no .venv: Ctrl+Alt+V and the wake word cannot do anything, so say it once
-  // instead of only writing it to voice.log.
+  // instead of only writing it to voice.log. The technical detail stays in the log.
   function voiceMissing(message) {
     logLines(logFile, `[capri] ${message}`);
     console.log(`[capri] ${message}`);
     if (missing) return;
     missing = true;
+    if (loadConfig()?.voice?.noticeShown) return;
+    markNoticeShown?.();
     emit({ type: 'voice-missing' });
   }
 

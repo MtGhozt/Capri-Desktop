@@ -254,7 +254,11 @@ function createOverlay() {
     logEvent(voiceLogPath(), '[capri] renderer responsive again');
     rendererRecover.reset();
   });
-  overlay.webContents.on('did-finish-load', () => rendererRecover.reset());
+  overlay.webContents.on('did-finish-load', () => {
+    rendererRecover.reset();
+    for (const payload of voiceQueue) overlay.webContents.send('voice:event', payload);
+    voiceQueue = [];
+  });
   // another window came to the front (a click, Alt+Tab, the taskbar): her menu goes away
   // (not when she hands the keyboard back herself: that's her menu changing page)
   overlay.on('blur', () => {
@@ -2217,12 +2221,16 @@ function main() {
     voice = createVoice({
       root: ROOT,
       loadConfig: () => config.load(),
+      markNoticeShown: () => config.save({ voice: { noticeShown: true } }),
       onEvent: (event) => {
+        const t = TRAY[resolveLang(config.load().lang)];
         const payload = event?.type === 'transcript'
           ? hearTranscript(event)
           : event?.type === 'voice-missing'
-            ? { type: 'notice', message: TRAY[resolveLang(config.load().lang)].voiceMissing }
-            : event;
+            ? { type: 'notice', level: 'info', message: t.voiceMissing }
+            : event?.type === 'voice-failed'
+              ? { type: 'notice', level: 'error', message: t.voiceFailed }
+              : event;
         if (payload?.type === 'transcript') {
           if (payload.followUp) comments?.heard();
           followUp.heard({ followUp: Boolean(payload.followUp) });
@@ -2252,7 +2260,7 @@ function main() {
         }
         if (payload?.type === 'devices') rebuildTray();
         goodnight.onVoiceEvent(payload); // her goodnight line over: now she folds
-        if (overlay?.webContents && !overlay.webContents.isDestroyed()) {
+        if (overlay?.webContents && !overlay.webContents.isDestroyed() && !overlay.webContents.isLoading()) {
           overlay.webContents.send('voice:event', payload);
         } else {
           voiceQueue.push(payload);

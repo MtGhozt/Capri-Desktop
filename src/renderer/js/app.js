@@ -689,12 +689,14 @@ async function boot() {
       bumpIdle();
       await unfold();
       const line = evt.message || 'Voice sidecar is offline. Chat still works.';
+      const kind = evt.level === 'info' ? 'info' : 'error';
       bubble.note('sistema', line);
       panel.say({
-        kind: 'error',
+        kind,
         badge: 'VOICE',
         line,
         hold: 10000,
+        ...(kind === 'info' ? { face: 'calm' } : {}),
       });
     }
   });

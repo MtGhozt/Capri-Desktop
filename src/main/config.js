@@ -124,6 +124,7 @@ const DEFAULTS = {
     replyMode: 'blips',      // 'voice' | 'blips' | 'silent' — public default: typing beeps only
     ttsIdleUnloadMin: 10,    // DORMANT this long → release OmniVoice (0 = never)
     sttIdleUnloadMin: 10,    // mic muted this long → release Whisper (0 = never)
+    noticeShown: false,      // "voice not installed" said once, never on every boot
   },
 };
 
