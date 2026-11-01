@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
-const { PROVIDERS, isCloud, requestFor, explain } = require('./chat-providers');
+const { PROVIDERS, isCloud, isAgent, requestFor, explain } = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
 const { stripReplyTags, createMoodStripper } = require('./mood-tag');
@@ -31,7 +31,10 @@ function temporalContext({ now = new Date(), lastTalkAt = null } = {}) {
   return `Hora local: ${get('weekday')}, ${get('month')} ${get('day')} de ${get('year')} a las ${get('hour')}:${get('minute')} (${LOCAL_TZ}). Momento del día: ${period}. Última conversación: ${elapsed}.`;
 }
 
-function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext, onFallback, ensureLocal, now = () => new Date() } = {}) {
+function createLlm({
+  loadConfig, personaPath, memoryPath, apiKey, screenContext, onFallback, ensureLocal,
+  runAgentChat, now = () => new Date(),
+} = {}) {
   let history = [];
   let abort = null;
   let persona = null;
@@ -255,6 +258,25 @@ function createLlm({ loadConfig, personaPath, memoryPath, apiKey, screenContext,
       if (signal.aborted && !timedOut) return; // you stopped her
       onError({ kind: 'offline', text: timedOut ? 'Se tardó demasiado en contestar.' : explain(err, id) });
     };
+
+    if (isAgent(id) && typeof runAgentChat === 'function') {
+      try {
+        const text = await runAgentChat({ provider: id, user, signal });
+        const cleaned = stripReplyTags(String(text || ''));
+        if (!cleaned.text.trim()) throw Object.assign(new Error('empty'), { code: 'empty' });
+        streamed = true;
+        onToken(cleaned.text);
+        done(cleaned.text);
+        return result('ok');
+      } catch (err) {
+        if (signal.aborted && !timedOut) {
+          clearTimeout(timer);
+          return null;
+        }
+        fail(err);
+        return result('failed');
+      }
+    }
 
     let error = null;
     try {
