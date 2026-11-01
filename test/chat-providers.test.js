@@ -13,13 +13,15 @@ const {
 const LOCAL = 'http://localhost:1235/v1';
 const OLLAMA = 'http://localhost:11434/v1';
 
-test('providers: two local, free NVIDIA/Gemini, and own-key clouds', () => {
-  assert.deepEqual(Object.keys(PROVIDERS).sort(), [
-    'deepseek', 'gemini', 'groq', 'local', 'mistral', 'nvidia', 'ollama', 'openai', 'openrouter',
-  ]);
+test('providers: two local, free NVIDIA/Gemini, own-key clouds, and agent CLIs', () => {
+  assert.ok(PROVIDERS.anthropic);
+  assert.ok(PROVIDERS.xai);
+  assert.ok(PROVIDERS['agent-claude']);
+  assert.ok(PROVIDERS['agent-opencode']);
   assert.equal(isCloud('local'), false);
   assert.equal(isCloud('ollama'), false);
   assert.equal(isCloud('nvidia'), true);
+  assert.equal(isCloud('agent-claude'), false);
   assert.equal(defaultBaseUrl('ollama'), OLLAMA);
   assert.equal(defaultBaseUrl('local'), LOCAL);
   assert.equal(provider('nope').local, true);
@@ -27,7 +29,9 @@ test('providers: two local, free NVIDIA/Gemini, and own-key clouds', () => {
   assert.equal(BRAIN_GROUPS.free[0], 'gemini'); // recommended free path first
   assert.deepEqual(BRAIN_GROUPS.local, ['local', 'ollama']);
   assert.ok(BRAIN_GROUPS.own.includes('openai'));
-  assert.ok(!BRAIN_GROUPS.own.includes('anthropic'));
+  assert.ok(BRAIN_GROUPS.own.includes('anthropic'));
+  assert.ok(BRAIN_GROUPS.own.includes('xai'));
+  assert.ok(BRAIN_GROUPS.agent.includes('agent-auto'));
   assert.equal(FREE_KEY_LINKS.nvidia.url, 'https://build.nvidia.com/');
   assert.equal(FREE_KEY_LINKS.gemini.url, 'https://aistudio.google.com/apikey');
   assert.equal(FREE_KEY_LINKS.gemini.recommended, true); // UI: ★ on link, "recomendado" only on Gemini chip
@@ -64,6 +68,8 @@ test('each cloud provider gets its own address, and the key, and nothing else', 
     groq: 'https://api.groq.com/openai/v1/chat/completions',
     gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
     openai: 'https://api.openai.com/v1/chat/completions',
+    anthropic: 'https://api.anthropic.com/v1/chat/completions',
+    xai: 'https://api.x.ai/v1/chat/completions',
     mistral: 'https://api.mistral.ai/v1/chat/completions',
     deepseek: 'https://api.deepseek.com/v1/chat/completions',
     nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
@@ -76,6 +82,7 @@ test('each cloud provider gets its own address, and the key, and nothing else', 
     assert.equal(req.body.reasoning_effort, undefined, id);
     assert.equal(req.body.model, PROVIDERS[id].model, id);
     assert.ok(!JSON.stringify(req.body).includes('sk-secret'), id);
+    if (id === 'anthropic') assert.equal(req.headers['anthropic-version'], '2023-06-01');
   }
 });
 

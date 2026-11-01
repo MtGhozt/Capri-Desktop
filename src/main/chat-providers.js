@@ -3,7 +3,7 @@
 // Who answers her: a local server at home, or a cloud provider with a key. All of them speak the
 // OpenAI-compatible API, so the request is built the same way and only the address changes.
 // Adapted from mochiiwuff/capri-desktop affea9d, df87ec3, 38c4de7 and bde7b42 (MIT).
-// Claude/Anthropic is not here on purpose (not OpenAI-compatible; no new SDK).
+// Agent-* providers shell out to an installed CLI (see agent-brain.js); no Capri-managed tokens.
 
 const PROVIDERS = {
   local: { label: 'LM Studio', local: true, url: 'http://localhost:1235/v1', model: 'google/gemma-4-e2b' },
@@ -13,20 +13,32 @@ const PROVIDERS = {
   openrouter: { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
   groq: { label: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
   openai: { label: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  anthropic: { label: 'Anthropic', url: 'https://api.anthropic.com/v1', model: 'claude-haiku-4-5-20251001' },
+  xai: { label: 'Grok (xAI)', url: 'https://api.x.ai/v1', model: 'grok-4-1-fast-non-reasoning' },
   mistral: { label: 'Mistral', url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest' },
   deepseek: { label: 'DeepSeek', url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  'agent-auto': { label: 'Agente abierto', local: true, agent: 'auto', model: 'agent' },
+  'agent-claude': { label: 'Claude Code (CLI)', local: true, agent: 'claude', model: 'agent' },
+  'agent-opencode': { label: 'OpenCode (CLI)', local: true, agent: 'opencode', model: 'agent' },
 };
 
 // Cards in Ajustes › Cerebro (same ids as PROVIDERS; Gemini sits in free and own).
 const BRAIN_GROUPS = {
   free: ['gemini', 'nvidia'], // Gemini first = recommended free path
   local: ['local', 'ollama'],
-  own: ['openai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'],
+  own: ['openai', 'anthropic', 'xai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'],
+  agent: ['agent-auto', 'agent-claude', 'agent-opencode'],
 };
 
 const FREE_KEY_LINKS = {
   gemini: { label: 'Google AI Studio', url: 'https://aistudio.google.com/apikey', recommended: true },
   nvidia: { label: 'NVIDIA', url: 'https://build.nvidia.com/' },
+};
+
+const OWN_KEY_LINKS = {
+  anthropic: { label: 'console.anthropic.com', url: 'https://console.anthropic.com/' },
+  xai: { label: 'console.x.ai', url: 'https://console.x.ai/' },
+  openai: { label: 'platform.openai.com', url: 'https://platform.openai.com/api-keys' },
 };
 
 const DEFAULT_PROVIDER = 'local';
@@ -53,14 +65,19 @@ function defaultBaseUrl(id) {
 function requestFor(id, { model, messages, key, baseUrl, stream = true } = {}) {
   const p = provider(id);
   const url = String(p.local ? baseUrl || p.url || 'http://localhost:1235/v1' : p.url).replace(/\/+$/, '');
+  const headers = { 'Content-Type': 'application/json' };
+  if (key && !p.local) {
+    headers.Authorization = `Bearer ${key}`;
+    if (id === 'anthropic') headers['anthropic-version'] = '2023-06-01';
+  }
   return {
     url: `${url}/chat/completions`,
-    headers: { 'Content-Type': 'application/json', ...(key && !p.local ? { Authorization: `Bearer ${key}` } : {}) },
+    headers,
     body: {
       model: model || p.model,
       messages,
       stream: Boolean(stream),
-      ...(p.local ? { reasoning_effort: 'none' } : {}),
+      ...(p.local && !p.agent ? { reasoning_effort: 'none' } : {}),
     },
   };
 }
@@ -82,13 +99,19 @@ function explain(err, id) {
   return `${name} contestó algo que no entendí (${status}).`;
 }
 
+function isAgent(id) {
+  return Boolean(provider(id).agent);
+}
+
 module.exports = {
   PROVIDERS,
   BRAIN_GROUPS,
   FREE_KEY_LINKS,
+  OWN_KEY_LINKS,
   DEFAULT_PROVIDER,
   provider,
   isCloud,
+  isAgent,
   providerOptions,
   defaultBaseUrl,
   requestFor,
