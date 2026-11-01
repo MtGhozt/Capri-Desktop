@@ -46,7 +46,8 @@ export const QUICK_MENU_ITEMS = [
 ];
 
 export const SETTINGS_TABS = [
-  { id: 'model', label: 'Cerebro' }, { id: 'memory', label: 'Memoria' },
+  { id: 'model', label: 'Cerebro' }, { id: 'agents', label: 'Agentes' },
+  { id: 'memory', label: 'Memoria' },
   { id: 'hearing', label: 'Oído' }, { id: 'apps', label: 'Mis apps' },
   { id: 'bubble', label: 'Apariencia' }, { id: 'music', label: 'Música / Reproductor' },
   { id: 'shortcuts', label: 'Atajos' }, { id: 'behavior', label: 'Comportamiento' },
@@ -80,6 +81,7 @@ export class AppMenu {
     this.foundNote = '';
     this.scanning = false;
     this.modelNote = '';   // first-run Capri welcome (or last cerebro note)
+    this.agentNote = '';   // last Agentes install / remove result
     this.probeNote = '';   // last Probar result
     this.probeOk = false;
     this.settingsMode = false;
@@ -589,6 +591,43 @@ export class AppMenu {
     privacy.dataset.setting = 'model';
     body.append(privacy);
 
+    // AGENTES: who can tell her what they're doing (Phase 6A)
+    section('AGENTES', 'agents');
+    const agents = state.agents || [];
+    for (const agent of agents) {
+      const stateLabel = !agent.found ? 'NO ENCONTRADO' : agent.installed ? 'INSTALADO' : 'NO INSTALADO';
+      action(agent.name, {
+        setting: 'agents',
+        value: agent.installed ? 'QUITAR' : 'INSTALAR',
+        onClick: async () => {
+          const res = await this.host.menuAction({
+            id: agent.installed ? 'agent-remove' : 'agent-install',
+            value: agent.id,
+          }).catch(() => ({ ok: false, message: 'No se pudo.' }));
+          this.agentNote = res?.ok
+            ? (agent.installed ? `${agent.name}: hooks quitados.` : `${agent.name}: hooks instalados. Reiniciá el agente.`)
+            : res?.message || `No se pudo con ${agent.name}.`;
+          await this.refresh();
+        },
+      });
+      const file = build('div', 'appmenu__hint', `${stateLabel} · ${agent.file}`);
+      file.dataset.setting = 'agents';
+      body.append(file);
+    }
+    if (!agents.length) {
+      const empty = build('div', 'appmenu__hint', 'No encontré agentes compatibles en esta PC.');
+      empty.dataset.setting = 'agents';
+      body.append(empty);
+    }
+    if (this.agentNote) {
+      const note = build('div', 'appmenu__hint', this.agentNote);
+      note.dataset.setting = 'agents';
+      body.append(note);
+    }
+    const agentsHint = build('div', 'appmenu__hint', 'Codex pide confiar en los hooks con /hooks. Los demás los cargan al reiniciar.');
+    agentsHint.dataset.setting = 'agents';
+    body.append(agentsHint);
+
     // MEMORIA
     section('MEMORIA', 'memory');
     action('Olvidar conversación', {
@@ -763,7 +802,7 @@ export class AppMenu {
   filterSettingsBody(body) {
     if (!this.settingsMode) return;
     const groups = {
-      model: ['model'], memory: ['memory'], hearing: ['hearing'], apps: ['apps', 'apps-add', 'apps-found', 'apps-test'],
+      model: ['model'], agents: ['agents'], memory: ['memory'], hearing: ['hearing'], apps: ['apps', 'apps-add', 'apps-found', 'apps-test'],
       bubble: ['bubble'], music: ['music'], shortcuts: ['shortcuts'], behavior: ['behavior'],
     };
     const allowed = new Set(groups[this.settingsSection] || []);

@@ -30,8 +30,8 @@ const EVENTS = [
 
 const MARK = 'capri-hook.js';
 
-function settingsPath() {
-  const base = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+function settingsPath(home = os.homedir()) {
+  const base = process.env.CLAUDE_CONFIG_DIR || path.join(home, '.claude');
   return path.join(base, 'settings.json');
 }
 
@@ -45,14 +45,19 @@ function hasNode() {
 
 // In the installed app (the .exe) the hook sits next to the app archive (asarUnpack), where
 // node can read it. With no node on the machine, Capri's own executable runs it as node.
-function hookCommand() {
-  const script = path.resolve(__dirname, '..', 'hooks', 'capri-hook.js')
+function commandFor(scriptName, args = '') {
+  const script = path.resolve(__dirname, '..', 'hooks', scriptName)
     .replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`)
     .replace(/\\/g, '/');
+  const suffix = args ? ` ${args}` : '';
   if (process.versions.electron && !hasNode()) {
-    return `ELECTRON_RUN_AS_NODE=1 "${process.execPath.replace(/\\/g, '/')}" "${script}"`;
+    return `ELECTRON_RUN_AS_NODE=1 "${process.execPath.replace(/\\/g, '/')}" "${script}"${suffix}`;
   }
-  return `node "${script}"`;
+  return `node "${script}"${suffix}`;
+}
+
+function hookCommand() {
+  return commandFor('capri-hook.js');
 }
 
 function readSettings(file) {
@@ -92,8 +97,8 @@ function write(file, settings) {
   fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
 }
 
-function install() {
-  const file = settingsPath();
+function install({ home } = {}) {
+  const file = settingsPath(home);
   const original = readSettings(file);
   const before = JSON.stringify(original);
   const settings = strip(original);
@@ -109,8 +114,8 @@ function install() {
   return { file, command, events: EVENTS.length };
 }
 
-function uninstall() {
-  const file = settingsPath();
+function uninstall({ home } = {}) {
+  const file = settingsPath(home);
   if (!fs.existsSync(file)) return { file, removed: false };
   const settings = readSettings(file);
   const before = JSON.stringify(settings);
@@ -120,8 +125,8 @@ function uninstall() {
   return { file, removed };
 }
 
-function status() {
-  const file = settingsPath();
+function status({ home } = {}) {
+  const file = settingsPath(home);
   try {
     const settings = readSettings(file);
     const events = Object.entries(settings.hooks || {})
@@ -133,7 +138,7 @@ function status() {
   }
 }
 
-module.exports = { install, uninstall, status, EVENTS };
+module.exports = { install, uninstall, status, EVENTS, commandFor, hookCommand, settingsPath };
 
 if (require.main === module) {
   const arg = process.argv[2];

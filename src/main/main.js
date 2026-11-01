@@ -63,12 +63,14 @@ const {
   browserName, exeFromCommand, processName, linkTarget, linkOk, SEED_VERSION, seededVersion, newCandidates,
 } = require('./apps-config');
 const hooks = require('../../scripts/install-hooks');
+const { createAssistants } = require('./assistants');
 const demoSteps = require('../../scripts/demo-sequence');
 const { createSettingsWindow } = require('./settings-window');
 const { ensureUserFiles } = require('./user-files');
 const { needsModelSetup, probeLocalLlm, SETUP_HINT } = require('./setup');
 
 const ROOT = path.resolve(__dirname, '..', '..');
+const assistants = createAssistants({ root: ROOT });
 const DEV = process.argv.includes('--dev');
 const E2E = process.env.CAPRI_E2E === '1' || process.env.CAPRI_E2E === 'true';
 const PORT = Number(process.env.CAPRI_PORT) || 47823;
@@ -1497,6 +1499,8 @@ function applyMenuAction(id, value) {
       break;
     case 'hooks-install': runHooks('install'); break;
     case 'hooks-remove': runHooks('uninstall'); break;
+    case 'agent-install': return assistants.install(value);
+    case 'agent-remove': return assistants.uninstall(value);
     case 'quit': return askQuit({ chat: false });
     case 'quit-answer': return answerQuit(value);
     default: break;
@@ -1710,6 +1714,7 @@ function menuState(extra = {}) {
       };
     })(),
     apps: appsMenuState(),
+    agents: assistants.statusAll(),
     found: {
       at: scanned().at || null,
       scanning: Boolean(scanRunning),

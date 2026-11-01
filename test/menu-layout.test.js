@@ -15,7 +15,7 @@ test('quick menu contains only compact controls and settings entry', () => {
 
 test('settings tabs cover every non-quick configuration area', () => {
   assert.deepEqual(SETTINGS_TABS.map((tab) => tab.id), [
-    'model', 'memory', 'hearing', 'apps', 'bubble', 'music', 'shortcuts', 'behavior',
+    'model', 'agents', 'memory', 'hearing', 'apps', 'bubble', 'music', 'shortcuts', 'behavior',
   ]);
 });
 
