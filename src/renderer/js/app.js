@@ -41,6 +41,10 @@ async function boot() {
     ...CUTINS.map((name) => loadImage(`../../assets/capri/cutin-${name}.png`)),
     document.fonts.load('600 16px "Chakra Petch"'),
     document.fonts.load('400 11px "JetBrains Mono"'),
+    // menu uses Rajdhani with font-display:block — preload or the plate paints empty until the face loads
+    document.fonts.load('500 14px "Rajdhani"'),
+    document.fonts.load('600 14px "Rajdhani"'),
+    document.fonts.load('700 14px "Rajdhani"'),
   ]);
   document.documentElement.lang = config.lang;
 

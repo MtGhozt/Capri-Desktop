@@ -5,19 +5,21 @@ const assert = require('node:assert/strict');
 const { detectAgents, pickAuto, openAgentIds, runAgent } = require('../src/main/agent-brain');
 
 test('detectAgents marks PATH hits and leaves unwired CLIs as not ready', () => {
-  const list = detectAgents({
-    execFileSync: (cmd, [bin]) => {
-      if (bin === 'claude' || bin === 'opencode') return `C:\\bin\\${bin}.exe\n`;
-      throw new Error('not found');
-    },
-    platform: 'win32',
-  });
+  let calls = 0;
+  const execFileSync = (cmd, [bin]) => {
+    calls += 1;
+    if (bin === 'claude' || bin === 'opencode') return `C:\\bin\\${bin}.exe\n`;
+    throw new Error('not found');
+  };
+  const list = detectAgents({ execFileSync, platform: 'win32' });
   const by = Object.fromEntries(list.map((a) => [a.id, a]));
   assert.equal(by.claude.installed, true);
   assert.equal(by.claude.ready, true);
   assert.equal(by.opencode.ready, true);
   assert.equal(by.codex.installed, false);
   assert.equal(by['cursor-agent'].ready, false); // detected later; not wired in 0.1.3
+  detectAgents({ execFileSync, platform: 'win32' }); // mocks never use the production cache
+  assert.equal(calls, 10); // 5 bins × 2 calls
 });
 
 test('pickAuto prefers an open ready agent, else the preferred, else the first ready', () => {

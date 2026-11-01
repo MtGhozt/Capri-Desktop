@@ -18,7 +18,7 @@ const {
 } = require('./chat-providers');
 const { probeProvider } = require('./llm-probe');
 const { checkForUpdate } = require('./updates');
-const { aboutInfo, LINKS: ABOUT_LINKS } = require('./about');
+const { aboutInfo, isAllowedOpenUrl } = require('./about');
 const { detectAgents, pickAuto, openAgentIds, runAgent } = require('./agent-brain');
 const { switchProvider, setProviderModel, modelForProvider } = require('./chat-models');
 const { parseRenderMode, renderSwitches } = require('./render-mode');
@@ -1411,21 +1411,6 @@ function setChatKey(value) {
   return { ok: true, hasKey: saved, message: saved ? 'Clave guardada.' : 'Clave borrada.' };
 }
 
-const OPEN_URL_ALLOW = new Set([
-  'https://build.nvidia.com/',
-  'https://aistudio.google.com/apikey',
-  'https://console.anthropic.com/',
-  'https://console.x.ai/',
-  'https://platform.openai.com/api-keys',
-  ABOUT_LINKS.github,
-  ABOUT_LINKS.releases,
-  ABOUT_LINKS.issues,
-  ABOUT_LINKS.readme,
-  ABOUT_LINKS.changelog,
-  ABOUT_LINKS.license,
-  ABOUT_LINKS.tiktok,
-].filter(Boolean));
-
 async function probeChatFromMenu(value = {}) {
   const id = String(value.provider || config.load().llm?.provider || 'local');
   if (!PROVIDERS[id]) return { ok: false, message: 'Ese proveedor no existe.' };
@@ -1485,9 +1470,7 @@ function applyMenuAction(id, value) {
     case 'model-probe': return probeChatFromMenu(value);
     case 'open-url': {
       const url = String(value || '');
-      const allowed = OPEN_URL_ALLOW.has(url)
-        || /^https:\/\/github\.com\/MtGhozt\/Capri-Desktop\/releases\b/.test(url);
-      if (!allowed) return { ok: false, message: 'Esa página no está en la lista.' };
+      if (!isAllowedOpenUrl(url)) return { ok: false, message: 'Esa página no está en la lista.' };
       shell.openExternal(url);
       return { ok: true };
     }
@@ -1807,7 +1790,8 @@ function menuState(extra = {}) {
         groups: BRAIN_GROUPS,
         freeLinks: FREE_KEY_LINKS,
         ownLinks: OWN_KEY_LINKS,
-        agentsInstalled: detectAgents(),
+        // light = overlay quick menu: skip PATH scans so the first paint is not empty for seconds
+        agentsInstalled: extra.light ? (extra.agentsInstalled || []) : detectAgents(),
         agentPreferred: String(cfg.llm?.agentPreferred || 'claude'),
         model: String(cfg.llm?.model || ''),
         baseUrl: String(cfg.llm?.baseUrl || defaultBaseUrl(safe)),
@@ -1825,9 +1809,9 @@ function menuState(extra = {}) {
       skippedVersion: String(cfg.updates?.skippedVersion || ''),
       lastCheck: Number(cfg.updates?.lastCheck) || 0,
     },
-    apps: appsMenuState(),
-    agents: assistants.statusAll(),
-    found: {
+    apps: extra.light ? { list: [] } : appsMenuState(),
+    agents: extra.light ? [] : assistants.statusAll(),
+    found: extra.light ? { at: null, scanning: false, counts: null, items: [] } : {
       at: scanned().at || null,
       scanning: Boolean(scanRunning),
       counts: scanned().counts || null,
@@ -2036,7 +2020,8 @@ function registerIpc() {
     return { found: true, dir, file: fs.existsSync(file) };
   });
   ipcMain.handle('menu:get', (_e, extra = {}) => {
-    voice?.listDevices();
+    // listDevices can stall; overlay quick menu (light) does not need a fresh mic list every open
+    if (!extra.light) voice?.listDevices();
     const state = menuState(extra);
     structuredClone(state);
     return state;
@@ -2468,6 +2453,8 @@ function main() {
     setTimeout(scanIfStale, 20000); // after her voice is up: the disk is busy enough before
     setTimeout(() => maybeOpenSetupHint().catch((err) => logEvent(voiceLogPath(), `[capri] setup hint failed: ${err.message}`)), 2500);
     setTimeout(() => runUpdateCheck().catch((err) => appLog(`updates check failed: ${err.message}`)), 8000);
+    // warm CLI PATH cache so Ajustes › Cerebro does not stall the first open
+    setTimeout(() => { try { detectAgents(); } catch { /* PATH oddities */ } }, 2500);
 
     screen.on('display-metrics-changed', fitOverlay);
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });

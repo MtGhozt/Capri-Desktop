@@ -25,8 +25,18 @@ function which(bin, { execFileSync = require('node:child_process').execFileSync,
   }
 }
 
+// `where`/`which` per CLI is slow on cold PATH; cache so menu:get does not stall the first paint.
+let agentsCache = null;
+let agentsCacheAt = 0;
+const AGENTS_CACHE_MS = 60_000;
+
 function detectAgents(opts = {}) {
-  return AGENTS.map((a) => {
+  const now = Date.now();
+  // custom which (tests) always bypasses; production PATH scans are cached
+  if (!opts.force && !opts.execFileSync && agentsCache && now - agentsCacheAt < AGENTS_CACHE_MS) {
+    return agentsCache;
+  }
+  const list = AGENTS.map((a) => {
     const file = which(a.bin, opts);
     return {
       id: a.id,
@@ -38,6 +48,11 @@ function detectAgents(opts = {}) {
       note: a.ready ? '' : 'Próximamente',
     };
   });
+  if (!opts.execFileSync) {
+    agentsCache = list;
+    agentsCacheAt = now;
+  }
+  return list;
 }
 
 function pickAuto({ installed, openIds = [], preferred } = {}) {

@@ -9,7 +9,7 @@ const { QUICK_MENU_ITEMS, SETTINGS_TABS, unionRects } = require('../src/renderer
 
 test('quick menu contains only compact controls and settings entry', () => {
   assert.deepEqual(QUICK_MENU_ITEMS.map((item) => item.id), [
-    'mic', 'mic-device', 'reply-mode', 'model-provider', 'fixes', 'clip-save', 'do-something', 'behavior', 'drone-mode', 'theme', 'settings', 'about', 'quit',
+    'mic', 'mic-device', 'reply-mode', 'model-provider', 'fixes', 'clip-save', 'do-something', 'behavior', 'drone-mode', 'theme', 'settings', 'quit',
   ]);
 });
 
@@ -35,6 +35,13 @@ test('Hacer algo is a direct quick-menu action, not a submenu', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(source, /includes\(id\)\s*\?\s*''\s*:\s*'›'/);
   assert.match(source, /row\('Hacer algo', '', 'do-something', \(\) => this\.act\('do-something'\)\)/);
+});
+
+test('Acerca de lives only in Ajustes, not the overlay quick menu', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.doesNotMatch(source, /row\('Acerca de/);
+  assert.match(source, /\{ id: 'about', label: 'Acerca de' \}/);
+  assert.match(source, /light:\s*true/);
 });
 
 test('settings tabs have isolated sections and behavior uses nested config', () => {

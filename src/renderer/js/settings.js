@@ -52,7 +52,14 @@ window.addEventListener('capri-setup-hint', (event) => {
   menu.settingsSection = 'model';
   if (menu.lastState) menu.render(menu.lastState);
 });
-window.host.getMenu({ folded: false }).then((state) => {
+console.time('settings:load');
+Promise.all([
+  document.fonts.load('500 14px Rajdhani'),
+  document.fonts.load('600 14px Rajdhani'),
+  document.fonts.load('400 11px JetBrains'),
+  window.host.getMenu({ folded: false }),
+]).then(([, , , state]) => {
+  console.timeEnd('settings:load');
   document.documentElement.dataset.theme = state.cfg.theme;
   if (pendingHint) {
     menu.modelNote = pendingHint;

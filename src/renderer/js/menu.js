@@ -42,7 +42,7 @@ const THEME_OPTIONS = [
 
 export const QUICK_MENU_ITEMS = [
   { id: 'mic' }, { id: 'mic-device' }, { id: 'reply-mode' }, { id: 'model-provider' },
-  { id: 'fixes' }, { id: 'clip-save' }, { id: 'do-something' }, { id: 'behavior' }, { id: 'drone-mode' }, { id: 'theme' }, { id: 'settings' }, { id: 'about' }, { id: 'quit' },
+  { id: 'fixes' }, { id: 'clip-save' }, { id: 'do-something' }, { id: 'behavior' }, { id: 'drone-mode' }, { id: 'theme' }, { id: 'settings' }, { id: 'quit' },
 ];
 
 export const SETTINGS_TABS = [
@@ -141,8 +141,8 @@ export class AppMenu {
     this.opening = true;
     this.openedAt = performance.now();
     this.onOpenChange?.(true);
+    console.time('menu:show');
     try {
-      const state = await this.host.getMenu({ folded: this.folded() });
       this.expanded = expand === 'apps' ? null : expand;
       this.view = expand === 'apps' ? 'apps' : 'main';
       this.resetApps();
@@ -151,18 +151,32 @@ export class AppMenu {
       this.modelNote = '';
       this.at = { x, y };
       this.avoid = avoid || { left: x, top: y, right: x, bottom: y };
+      // paint texts immediately from cache so the plate is never empty while IPC runs
+      if (this.lastState) {
+        this.render(this.lastState);
+        this.open = true;
+        this.el.hidden = false;
+        this.place();
+        console.timeLog('menu:show', 'painted-cache');
+      }
+      // light: skip PATH CLI scans / agents / found apps (those belong in Ajustes)
+      const state = await this.host.getMenu({ folded: this.folded(), light: true });
+      console.timeLog('menu:show', 'getMenu-light');
+      if (!this.opening && !this.open) return;
       this.render(state);
       this.open = true;
       this.el.hidden = false;
       this.place();
       this.openedAt = performance.now();
       this.onOpenChange?.(true);
+      console.timeEnd('menu:show');
     } catch (err) {
       console.error('[capri] menu show failed', err);
       this.opening = false;
       this.open = false;
       this.el.hidden = true;
       this.onOpenChange?.(false);
+      console.timeEnd('menu:show');
     } finally {
       this.opening = false;
     }
@@ -351,7 +365,6 @@ export class AppMenu {
     const rule = build('div', 'appmenu__quick-rule');
     body.append(rule);
     row('Ajustes…', '', 'settings', () => { this.hide(); this.host.openSettings(); });
-    row('Acerca de…', '', 'about', () => { this.hide(); this.host.openSettings('about'); });
     row('Salir', '', 'quit', () => this.act('quit'));
     const foot = build('div', 'appmenu__rail appmenu__quick-foot');
     foot.append(build('span', 'appmenu__kbd', 'ESC'), build('span', 'appmenu__rail-text', 'CERRAR'), build('span', 'appmenu__rail-text', 'CAPRICORN'));
@@ -1598,7 +1611,7 @@ export class AppMenu {
 
   async refresh() {
     if (!this.open) return;
-    const state = await this.host.getMenu({ folded: this.folded() });
+    const state = await this.host.getMenu({ folded: this.folded(), light: !this.settingsMode });
     if (!this.open) return; // closed while it was asked: don't take the keyboard for a hidden menu
     this.render(state);
   }
@@ -1629,7 +1642,7 @@ export class AppMenu {
       return;
     }
     if (this.open) {
-      const state = await this.host.getMenu({ folded: this.folded() });
+      const state = await this.host.getMenu({ folded: this.folded(), light: !this.settingsMode });
       this.render(state);
     }
   }

@@ -16,6 +16,28 @@ const LINKS = {
 
 const AUTHOR = 'MtGhozt';
 
+// Hosts Capri may open from Acerca de / Cerebro key links (https only).
+const OPEN_HOSTS = new Set([
+  'discord.gg', 'discord.com', 'www.discord.com',
+  'tiktok.com', 'www.tiktok.com',
+  'github.com',
+  'build.nvidia.com', 'aistudio.google.com',
+  'console.anthropic.com', 'console.x.ai', 'platform.openai.com',
+]);
+
+function isAllowedOpenUrl(url) {
+  try {
+    const u = new URL(String(url || ''));
+    if (u.protocol !== 'https:') return false;
+    const host = u.hostname.toLowerCase();
+    if (!OPEN_HOSTS.has(host) && !host.endsWith('.discord.com')) return false;
+    if (host === 'github.com' && !u.pathname.startsWith('/MtGhozt/Capri-Desktop')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function aboutInfo({ version } = {}) {
   return {
     name: 'Capri',
@@ -42,4 +64,4 @@ function aboutInfo({ version } = {}) {
   };
 }
 
-module.exports = { LINKS, AUTHOR, aboutInfo };
+module.exports = { LINKS, AUTHOR, OPEN_HOSTS, isAllowedOpenUrl, aboutInfo };
