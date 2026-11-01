@@ -15,6 +15,7 @@ function base(evt) {
     cwd: Array.isArray(evt.workspacePaths) ? evt.workspacePaths[0] : undefined,
     transcript_path: evt.transcriptPath,
     model: evt.modelName,
+    origin: 'antigravity',
   };
 }
 

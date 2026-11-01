@@ -13,7 +13,7 @@ const KEEP = [
   'hook_event_name', 'session_id', 'cwd', 'session_title', 'permission_mode',
   'tool_name', 'tool_input', 'tool_use_id', 'duration_ms', 'error', 'is_interrupt',
   'prompt', 'message', 'title', 'notification_type', 'last_assistant_message',
-  'agent_id', 'agent_type', 'source', 'reason', 'trigger',
+  'agent_id', 'agent_type', 'source', 'reason', 'trigger', 'origin',
 ];
 
 function trim(value, depth = 0) {

@@ -5,6 +5,7 @@ import { pick, fmt, duration, basename } from './util.js';
 
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 const HACKING_TOOLS = new Set(['Bash', 'PowerShell', 'WebFetch', 'WebSearch', 'Agent', 'Task']);
+const AGENTS = { claude: 'Claude', codex: 'Codex', antigravity: 'Antigravity', cursor: 'Cursor', opencode: 'OpenCode' };
 const WORKING_EVERY = 20; // say something about progress every N tool calls
 const LONG_JOB_MS = 8 * 60 * 1000; // a job this long (or this busy) earns the whole satellite sequence
 const LONG_JOB_ACTIONS = 50;
@@ -33,10 +34,12 @@ export class Brain {
     const id = evt.session_id || 'default';
     let s = this.sessions.get(id);
     if (!s) {
-      s = { id, project: 'Claude', taskStart: null, count: 0, files: new Set(), log: [], working: false, waiting: false };
+      s = { id, agent: 'Claude', project: 'Claude', taskStart: null, count: 0, files: new Set(), log: [], working: false, waiting: false };
       this.sessions.set(id, s);
     }
+    if (evt.origin) s.agent = AGENTS[evt.origin] || s.agent;
     if (evt.cwd) s.project = basename(evt.cwd);
+    else if (s.project === 'Claude') s.project = s.agent;
     if (evt.session_title) s.title = evt.session_title;
     s.seen = Date.now();
     return s;
@@ -47,6 +50,10 @@ export class Brain {
   }
 
   say(kind, line, s, extra = {}) {
+    // every adapter says who did it: "Cursor needs your permission", not always Claude
+    if (s?.agent && s.agent !== 'Claude') {
+      line = String(line).replace(/\bClaude Code\b/g, s.agent).replace(/\bClaude\b/g, s.agent);
+    }
     this.panel.say({ kind, line, tag: s ? s.title || s.project : '', ...extra });
   }
 
@@ -156,15 +163,16 @@ export class Brain {
       this.capri.setMode('alert');
       this.voice.play('alert');
       // you're on another window: she goes and points at Claude's, where the question is
+      const prompt = s.agent === 'Claude' ? pick(this.t.permission) : fmt(this.t.agentPermission, { agent: s.agent });
       const win = this.away(s) && this.capri.windows.wins.find((w) => w.id === s.window);
       if (win && this.capri.canPoint(win)) {
         const quote = [this.t.guide.permissionThere, evt.message].filter(Boolean).join('\n');
-        this.say('alert', pick(this.t.permission), s, { quote, hold: null });
+        this.say('alert', prompt, s, { quote, hold: null });
         s.pointedAt = await this.capri.pointAt(win, { label: this.t.guide.labels.claude });
         if (!s.waiting && s.pointedAt) this.capri.stopPointing(); // answered while she was on her way
         return;
       }
-      this.say('alert', pick(this.t.permission), s, { quote: evt.message || '', hold: null });
+      this.say('alert', prompt, s, { quote: evt.message || '', hold: null });
       const cursor = await this.host.cursor().catch(() => null);
       if (cursor?.inside) await this.capri.summon(cursor);
       const toward = cursor?.inside ? Math.sign(cursor.x - this.capri.pos.x) || 1 : this.capri.towardCenter();
@@ -189,6 +197,10 @@ export class Brain {
       s.taskStart && duration(Date.now() - s.taskStart, this.lang),
     ].filter(Boolean).join(' · ');
     const quote = cleanMarkdown(evt.last_assistant_message || '');
+    // not Claude: name the agent and keep the short summary on the same line
+    const doneLine = s.agent === 'Claude'
+      ? pick(this.t.done)
+      : fmt(this.t.agentDone, { agent: s.agent, summary: summary ? `: ${summary}` : '' });
 
     if (!this.busySessions.length) {
       this.panel.setTicker(null);
@@ -200,7 +212,7 @@ export class Brain {
     const done = (extra) => {
       if (reply) this.replyFor = s;
       if (reply) this.say('done', pick(this.t.reply), s, { ...extra, reply, hold: null });
-      else this.say('done', pick(this.t.done), s, { ...extra, quote: clip(quote, 150) });
+      else this.say('done', doneLine, s, { ...extra, quote: clip(quote, 150) });
     };
     if (!wasWorking && !s.count) {
       // a Stop with nothing before it: just say it quietly
@@ -242,7 +254,8 @@ export class Brain {
     this.capri.hurt();
     this.voice.play('error');
     const detail = evt.error || evt.message || '';
-    this.say('error', pick(this.t.crashed), s, { face: 'wide', quote: clip(String(detail), 120), hold: 9000 });
+    const line = s.agent === 'Claude' ? pick(this.t.crashed) : fmt(this.t.agentError, { agent: s.agent });
+    this.say('error', line, s, { face: 'wide', quote: clip(String(detail), 120), hold: 9000 });
   }
 
   onSubagent(evt, s, starting) {

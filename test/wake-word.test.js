@@ -48,5 +48,7 @@ test('her persona never greets with the date, and knows he is a man', () => {
   assert.match(persona, /he\/him/i);
   assert.match(persona, /Never open a greeting with the date or time/i);
   assert.match(persona, /Never "juntitas"/i);
+  assert.match(persona, /You cannot create, edit, delete or move files/i);
+  assert.match(persona, /Never claim you did/i);
   assert.equal(/first conversation of this session/i.test(persona), false);
 });

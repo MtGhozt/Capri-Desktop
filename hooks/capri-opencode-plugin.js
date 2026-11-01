@@ -1,13 +1,35 @@
 // Capri plugin for OpenCode. Drop it in ~/.config/opencode/plugins/capri.js (Capri does it
 // from Ajustes › Agentes). It forwards a trimmed copy of OpenCode's events to Capri's local
 // bridge. Every failure is swallowed: Capri must never get in OpenCode's way.
+//
+// OpenCode v2 loads the default export (id + setup). OpenCode v1 loaded CapriPlugin below,
+// kept so the same file still works on older installs.
 
 const PORT = Number(globalThis.process?.env?.CAPRI_PORT) || 47823;
 const KEEP = [
   'hook_event_name', 'session_id', 'cwd', 'tool_name', 'tool_input', 'tool_use_id',
   'error', 'is_interrupt', 'prompt', 'message', 'notification_type',
   'last_assistant_message', 'agent_id', 'agent_type', 'source', 'reason', 'trigger',
+  'origin',
 ];
+
+// OpenCode's tool names are lowercase; Capri knows Claude's names.
+const TOOL_NAMES = {
+  read: 'Read', write: 'Write', edit: 'Edit', patch: 'Edit', multiedit: 'MultiEdit',
+  shell: 'Bash', bash: 'Bash', grep: 'Grep', glob: 'Glob', webfetch: 'WebFetch',
+  websearch: 'WebSearch', todowrite: 'TodoWrite', task: 'Task', skill: 'Skill',
+};
+
+function toolName(name) {
+  const raw = String(name || '');
+  return TOOL_NAMES[raw.toLowerCase()] || raw;
+}
+
+function toolInput(input) {
+  const out = { ...(input || {}) };
+  if (!out.file_path && (out.path || out.filePath)) out.file_path = out.path || out.filePath;
+  return out;
+}
 
 function trim(value, depth = 0) {
   if (typeof value === 'string') return value.length > 280 ? value.slice(0, 280) + '…' : value;
@@ -68,11 +90,136 @@ function errorText(error) {
   return error.message || error.data?.message || error.name || 'OpenCode error';
 }
 
+// OpenCode v2 events: { type, data, location }. State keeps what later events don't repeat
+// (the last answer, tool names, the user's prompt).
+export function mapEvent(event, state, cwd = '') {
+  const type = event?.type;
+  const data = event?.data || {};
+  const sessionID = data.sessionID;
+  const base = {
+    origin: 'opencode',
+    session_id: sessionID || 'opencode',
+    cwd: event?.location?.directory || cwd || '',
+  };
+  const toolKey = `${sessionID}:${data.id}`;
+
+  switch (type) {
+    case 'session.created':
+      return { ...base, hook_event_name: 'SessionStart', source: 'startup' };
+    case 'session.deleted':
+      return { ...base, hook_event_name: 'SessionEnd', reason: 'other' };
+    case 'session.inbox.enqueued':
+      if (data.item?.type === 'user') state.prompts.set(sessionID, data.item.payload?.text || '');
+      return null;
+    case 'session.execution.started':
+      return { ...base, hook_event_name: 'UserPromptSubmit', prompt: state.prompts.get(sessionID) || '' };
+    case 'session.text.ended':
+      if (typeof data.text === 'string') state.latest.set(sessionID, data.text);
+      return null;
+    // v2 ships completion as session.execution.succeeded; idle/status are declared but often never published
+    case 'session.execution.succeeded':
+    case 'session.status':
+      if (type === 'session.status' && data.status?.type !== 'idle') return null;
+      return stopFor(base, sessionID, state);
+    case 'session.idle':
+      return stopFor(base, sessionID, state);
+    case 'session.execution.failed':
+      return { ...base, hook_event_name: 'StopFailure', error: errorText(data.error) };
+    case 'session.execution.interrupted':
+      return { ...base, hook_event_name: 'PostToolUseFailure', tool_name: 'OpenCode', is_interrupt: true };
+    case 'session.compaction.ended':
+      return { ...base, hook_event_name: 'PreCompact' };
+    case 'permission.asked':
+      return {
+        ...base,
+        hook_event_name: 'Notification',
+        notification_type: 'permission_prompt',
+        message: data.message || data.action || 'OpenCode needs permission',
+      };
+    case 'session.tool.input.started':
+      state.tools.set(toolKey, { name: toolName(data.name), input: {} });
+      return null;
+    case 'session.tool.called': {
+      const tool = state.tools.get(toolKey) || { name: '' };
+      tool.input = toolInput(data.input);
+      state.tools.set(toolKey, tool);
+      return {
+        ...base,
+        hook_event_name: 'PreToolUse',
+        tool_name: tool.name,
+        tool_input: tool.input,
+        tool_use_id: data.id,
+      };
+    }
+    case 'session.tool.success': {
+      const tool = state.tools.get(toolKey) || { name: '', input: {} };
+      state.tools.delete(toolKey);
+      return {
+        ...base,
+        hook_event_name: 'PostToolUse',
+        tool_name: tool.name,
+        tool_input: tool.input,
+        tool_use_id: data.id,
+      };
+    }
+    case 'session.tool.failed': {
+      const tool = state.tools.get(toolKey) || { name: '', input: {} };
+      state.tools.delete(toolKey);
+      return {
+        ...base,
+        hook_event_name: 'PostToolUseFailure',
+        tool_name: tool.name || 'OpenCode',
+        tool_input: tool.input,
+        tool_use_id: data.id,
+        error: errorText(data.error),
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+// v2 can report "idle" twice (status + the old idle event): answer once.
+function stopFor(base, sessionID, state) {
+  const now = Date.now();
+  if (now - (state.idleAt.get(sessionID) || 0) < 1500) return null;
+  state.idleAt.set(sessionID, now);
+  return { ...base, hook_event_name: 'Stop', last_assistant_message: state.latest.get(sessionID) || '' };
+}
+
+export default {
+  id: 'capri',
+  setup: async (ctx) => {
+    // OpenCode reloads the plugin when the file changes (Capri's settings reinstall it).
+    // A reload must not leave the old listener posting as well, so keep one per process.
+    const KEY = Symbol.for('capri.opencode.subscription');
+    globalThis[KEY]?.abort();
+    const controller = new AbortController();
+    globalThis[KEY] = controller;
+    const state = { latest: new Map(), prompts: new Map(), tools: new Map(), idleAt: new Map() };
+    void (async () => {
+      try {
+        for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+          const mapped = mapEvent(event, state, ctx.location?.directory);
+          if (mapped) post(mapped);
+        }
+      } catch {
+        // never let a Capri bug reach OpenCode
+      }
+    })();
+    return () => {
+      controller.abort();
+      if (globalThis[KEY] === controller) delete globalThis[KEY];
+    };
+  },
+};
+
+// OpenCode v1 plugin API (older installs): an async function returning event hooks.
 export const CapriPlugin = async ({ directory } = {}) => {
   const latest = new Map(); // session id -> last assistant text
   const assistant = new Set(); // message ids known to be assistant messages
   const cwd = directory || globalThis.process?.cwd?.() || '';
-  const base = (sessionID) => ({ session_id: sessionID || 'opencode', cwd });
+  const base = (sessionID) => ({ origin: 'opencode', session_id: sessionID || 'opencode', cwd });
 
   return {
     event: async ({ event } = {}) => {
@@ -130,8 +277,8 @@ export const CapriPlugin = async ({ directory } = {}) => {
         post({
           ...base(input?.sessionID),
           hook_event_name: 'PreToolUse',
-          tool_name: input?.tool,
-          tool_input: output?.args || {},
+          tool_name: toolName(input?.tool),
+          tool_input: toolInput(output?.args),
           tool_use_id: input?.callID,
         });
       } catch {
@@ -145,8 +292,8 @@ export const CapriPlugin = async ({ directory } = {}) => {
         post({
           ...base(input?.sessionID),
           hook_event_name: error ? 'PostToolUseFailure' : 'PostToolUse',
-          tool_name: input?.tool,
-          tool_input: input?.args || {},
+          tool_name: toolName(input?.tool),
+          tool_input: toolInput(input?.args),
           tool_use_id: input?.callID,
           error: error ? errorText(error) : undefined,
         });
@@ -156,5 +303,3 @@ export const CapriPlugin = async ({ directory } = {}) => {
     },
   };
 };
-
-export default CapriPlugin;

@@ -24,6 +24,7 @@ function base(evt) {
     cwd: evt.cwd || (Array.isArray(evt.workspace_roots) ? evt.workspace_roots[0] : undefined),
     transcript_path: evt.transcript_path,
     model: evt.model,
+    origin: 'cursor',
   };
 }
 

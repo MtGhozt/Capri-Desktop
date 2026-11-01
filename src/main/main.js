@@ -2343,6 +2343,7 @@ function main() {
         if (gameMode?.active()) return;
         overlay?.webContents.send('claude:event', evt);
       },
+      log: appLog,
       onDebug: DEV ? debugHandler : null,
     });
     registerShortcuts();

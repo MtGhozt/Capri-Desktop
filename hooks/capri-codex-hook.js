@@ -28,15 +28,16 @@ function codexMap(evt) {
   if (name === 'PermissionRequest') {
     return {
       ...evt,
+      origin: 'codex',
       hook_event_name: 'Notification',
       notification_type: 'permission_prompt',
       message: evt.tool_input?.description || evt.message || 'Codex needs permission',
     };
   }
   if (name === 'Interrupt') {
-    return { ...evt, hook_event_name: 'PostToolUseFailure', tool_name: 'Codex', is_interrupt: true };
+    return { ...evt, origin: 'codex', hook_event_name: 'PostToolUseFailure', tool_name: 'Codex', is_interrupt: true };
   }
-  return evt;
+  return { ...evt, origin: 'codex' };
 }
 
 if (require.main === module) {

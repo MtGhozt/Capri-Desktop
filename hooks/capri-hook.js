@@ -7,4 +7,4 @@
 
 const { run } = require('./capri-forward');
 
-run(null, () => process.exit(0));
+run((evt) => ({ ...evt, origin: 'claude' }), () => process.exit(0));

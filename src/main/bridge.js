@@ -37,7 +37,7 @@ function readJson(req) {
   });
 }
 
-function createBridge({ port, onEvent, onDebug }) {
+function createBridge({ port, onEvent, onDebug, log }) {
   const server = http.createServer(async (req, res) => {
     // Browsers always send an Origin header on cross-site requests; hooks never do.
     // Refusing those keeps random web pages from puppeting Capri.
@@ -55,6 +55,8 @@ function createBridge({ port, onEvent, onDebug }) {
         if (!evt || typeof evt !== 'object' || typeof evt.hook_event_name !== 'string') {
           return send(res, 400, { ok: false, error: 'missing hook_event_name' });
         }
+        // one line per event, origin + kind only: no prompts, paths or tool content
+        log?.(`event origin=${typeof evt.origin === 'string' ? evt.origin : 'unknown'} type=${evt.hook_event_name}`);
         onEvent(evt);
         return send(res, 200, { ok: true });
       } catch (err) {

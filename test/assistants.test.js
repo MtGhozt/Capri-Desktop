@@ -147,3 +147,12 @@ test('adapters map each agent to the bridge events Capri already knows', () => {
   assert.equal(cursorMap({ hook_event_name: 'stop' }).hook_event_name, 'Stop');
   assert.equal(cursorMap({ hook_event_name: 'sessionEnd' }).hook_event_name, 'SessionEnd');
 });
+
+test('every adapter says who it is', () => {
+  assert.equal(codexMap({ hook_event_name: 'Stop' }).origin, 'codex');
+  assert.equal(antigravityMap({}, 'Stop').origin, 'antigravity');
+  assert.equal(cursorMap({ hook_event_name: 'stop' }).origin, 'cursor');
+  const source = fs.readFileSync(path.join(__dirname, '../hooks/capri-hook.js'), 'utf8');
+  assert.match(source, /origin: 'claude'/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../hooks/capri-forward.js'), 'utf8'), /'origin'/);
+});
