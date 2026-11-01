@@ -9,13 +9,13 @@ const { QUICK_MENU_ITEMS, SETTINGS_TABS, unionRects } = require('../src/renderer
 
 test('quick menu contains only compact controls and settings entry', () => {
   assert.deepEqual(QUICK_MENU_ITEMS.map((item) => item.id), [
-    'mic', 'mic-device', 'reply-mode', 'model-provider', 'fixes', 'clip-save', 'do-something', 'behavior', 'drone-mode', 'theme', 'settings', 'quit',
+    'mic', 'mic-device', 'reply-mode', 'model-provider', 'fixes', 'clip-save', 'do-something', 'behavior', 'drone-mode', 'theme', 'settings', 'about', 'quit',
   ]);
 });
 
 test('settings tabs cover every non-quick configuration area', () => {
   assert.deepEqual(SETTINGS_TABS.map((tab) => tab.id), [
-    'model', 'agents', 'memory', 'hearing', 'apps', 'bubble', 'music', 'shortcuts', 'behavior',
+    'model', 'agents', 'memory', 'hearing', 'apps', 'bubble', 'music', 'shortcuts', 'behavior', 'about',
   ]);
 });
 
@@ -43,6 +43,7 @@ test('settings tabs have isolated sections and behavior uses nested config', () 
   assert.match(source, /\{ id: 'bubble', label: 'Apariencia' \}/);
   assert.match(source, /shortcuts:\s*\['shortcuts'\]/);
   assert.match(source, /behavior:\s*\['behavior'\]/);
+  assert.match(source, /about:\s*\['about'\]/);
   assert.match(source, /cfg\.behavior\?\.greetings/);
   assert.match(source, /cfg\.comments\?\.\[[^\]]+\]/);
   assert.match(source, /toggle\('Saludos'/);

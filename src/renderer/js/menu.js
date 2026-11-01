@@ -42,7 +42,7 @@ const THEME_OPTIONS = [
 
 export const QUICK_MENU_ITEMS = [
   { id: 'mic' }, { id: 'mic-device' }, { id: 'reply-mode' }, { id: 'model-provider' },
-  { id: 'fixes' }, { id: 'clip-save' }, { id: 'do-something' }, { id: 'behavior' }, { id: 'drone-mode' }, { id: 'theme' }, { id: 'settings' }, { id: 'quit' },
+  { id: 'fixes' }, { id: 'clip-save' }, { id: 'do-something' }, { id: 'behavior' }, { id: 'drone-mode' }, { id: 'theme' }, { id: 'settings' }, { id: 'about' }, { id: 'quit' },
 ];
 
 export const SETTINGS_TABS = [
