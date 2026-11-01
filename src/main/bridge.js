@@ -6,6 +6,27 @@
 const http = require('node:http');
 
 const MAX_BODY = 512 * 1024;
+const DEDUPE_MS = 1200;
+const DEDUPE_KINDS = new Set(['PreToolUse', 'PostToolUse']);
+
+// OpenCode (and multi-workspace hosts) can post the same tool call several times.
+function createDedupe(windowMs = DEDUPE_MS) {
+  const seen = new Map();
+  return (evt) => {
+    if (!DEDUPE_KINDS.has(evt.hook_event_name) || !evt.tool_use_id) return false;
+    const key = `${evt.origin || ''}|${evt.session_id || ''}|${evt.tool_use_id}|${evt.hook_event_name}`;
+    const now = Date.now();
+    const prev = seen.get(key);
+    if (prev && now - prev < windowMs) return true;
+    seen.set(key, now);
+    if (seen.size > 200) {
+      for (const [k, t] of seen) {
+        if (now - t > windowMs) seen.delete(k);
+      }
+    }
+    return false;
+  };
+}
 
 function send(res, status, body) {
   const json = JSON.stringify(body);
@@ -38,6 +59,7 @@ function readJson(req) {
 }
 
 function createBridge({ port, onEvent, onDebug, log }) {
+  const isDupe = createDedupe();
   const server = http.createServer(async (req, res) => {
     // Browsers always send an Origin header on cross-site requests; hooks never do.
     // Refusing those keeps random web pages from puppeting Capri.
@@ -54,6 +76,10 @@ function createBridge({ port, onEvent, onDebug, log }) {
         const evt = await readJson(req);
         if (!evt || typeof evt !== 'object' || typeof evt.hook_event_name !== 'string') {
           return send(res, 400, { ok: false, error: 'missing hook_event_name' });
+        }
+        if (isDupe(evt)) {
+          log?.(`event dedupe origin=${typeof evt.origin === 'string' ? evt.origin : 'unknown'} type=${evt.hook_event_name}`);
+          return send(res, 200, { ok: true, deduped: true });
         }
         // one line per event, origin + kind only: no prompts, paths or tool content
         log?.(`event origin=${typeof evt.origin === 'string' ? evt.origin : 'unknown'} type=${evt.hook_event_name}`);
@@ -88,4 +114,4 @@ function createBridge({ port, onEvent, onDebug, log }) {
   return server;
 }
 
-module.exports = { createBridge };
+module.exports = { createBridge, createDedupe };

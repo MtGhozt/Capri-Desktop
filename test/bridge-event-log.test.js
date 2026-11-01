@@ -57,3 +57,19 @@ test('an event without hook_event_name is rejected and not logged', async (t) =>
   assert.equal(await post(port, { origin: 'cursor' }), 400);
   assert.deepEqual(logged, []);
 });
+
+test('duplicate PreToolUse with same origin+session+tool_use_id is ignored once', async (t) => {
+  const logged = [];
+  const seen = [];
+  const port = await bridge(t, { onEvent: (evt) => seen.push(evt), log: (line) => logged.push(line) });
+  const evt = {
+    origin: 'opencode', session_id: 's1', tool_use_id: 't9',
+    hook_event_name: 'PreToolUse', tool_name: 'Write',
+  };
+  assert.equal(await post(port, evt), 200);
+  assert.equal(await post(port, evt), 200);
+  assert.equal(await post(port, evt), 200);
+  assert.equal(seen.length, 1);
+  assert.equal(logged.filter((l) => l.startsWith('event origin=')).length, 1);
+  assert.equal(logged.filter((l) => l.startsWith('event dedupe')).length, 2);
+});
