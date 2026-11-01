@@ -70,10 +70,12 @@ export class Panel {
   // face: her expression (a key of FACES), instead of the one for its kind
   say(msg) {
     const cur = this.current;
-    if (cur && this.visible && cur.kind !== msg.kind && PRIORITY[cur.kind] > PRIORITY[msg.kind] && performance.now() - cur.at < 2600) {
+    const pri = PRIORITY[msg.kind] || 0;
+    // alerts (permissions) always win: never lose them under another bubble
+    if (pri < 4 && cur && this.visible && cur.kind !== msg.kind && PRIORITY[cur.kind] > pri && performance.now() - cur.at < 2600) {
       return false; // don't step on something more important that just appeared
     }
-    if (cur?.reply && this.visible && PRIORITY[msg.kind] < 2) return false; // nor on an answer you may be reading
+    if (pri < 4 && cur?.reply && this.visible && PRIORITY[msg.kind] < 2) return false; // nor on an answer you may be reading
     if (cur && this.visible) this.onDismiss?.(cur);
     this.current = { ...msg, at: performance.now() };
     clearTimeout(this.hideTimer);

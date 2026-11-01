@@ -42,7 +42,8 @@ function harness() {
     pointAt: async () => false,
     summon: async () => {},
   };
-  const host = { cursor: async () => ({ inside: false }) };
+  const spoken = [];
+  const host = { cursor: async () => ({ inside: false }), speak: (t) => spoken.push(t), spoken };
   return { said, panel, capri, host };
 }
 
@@ -77,8 +78,12 @@ test('Cursor asking for permission is named, not Claude', async () => {
 
   const alert = said.find((m) => m.kind === 'alert');
   assert.ok(alert);
-  assert.match(alert.line, /Cursor necesita tu permiso/);
+  assert.match(alert.line, /Cursor te está pidiendo permiso/);
+  assert.match(alert.line, /Entrá y dáselo/);
+  assert.equal(alert.badge, 'PERMISO');
+  assert.equal(alert.hold, null);
   assert.equal(alert.line.includes('Claude'), false);
+  assert.deepEqual(host.spoken, [alert.line]);
 });
 
 test('Codex crashing is named, not Claude', async () => {

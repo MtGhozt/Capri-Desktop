@@ -162,17 +162,18 @@ export class Brain {
       s.waiting = true;
       this.capri.setMode('alert');
       this.voice.play('alert');
-      // you're on another window: she goes and points at Claude's, where the question is
+      // name the agent; sticky alert (priority 4) so another bubble can't bury it
       const prompt = s.agent === 'Claude' ? pick(this.t.permission) : fmt(this.t.agentPermission, { agent: s.agent });
+      this.host.speak?.(prompt); // TTS when her voice reply mode is on
       const win = this.away(s) && this.capri.windows.wins.find((w) => w.id === s.window);
       if (win && this.capri.canPoint(win)) {
         const quote = [this.t.guide.permissionThere, evt.message].filter(Boolean).join('\n');
-        this.say('alert', prompt, s, { quote, hold: null });
+        this.say('alert', prompt, s, { quote, hold: null, badge: 'PERMISO' });
         s.pointedAt = await this.capri.pointAt(win, { label: this.t.guide.labels.claude });
         if (!s.waiting && s.pointedAt) this.capri.stopPointing(); // answered while she was on her way
         return;
       }
-      this.say('alert', prompt, s, { quote: evt.message || '', hold: null });
+      this.say('alert', prompt, s, { quote: evt.message || '', hold: null, badge: 'PERMISO' });
       const cursor = await this.host.cursor().catch(() => null);
       if (cursor?.inside) await this.capri.summon(cursor);
       const toward = cursor?.inside ? Math.sign(cursor.x - this.capri.pos.x) || 1 : this.capri.towardCenter();

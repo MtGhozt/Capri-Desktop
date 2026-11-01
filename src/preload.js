@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('host', {
   onLlmBoot: on('llm:boot'),
   onVoice: on('voice:event'),
   interruptVoice: () => ipcRenderer.send('voice:interrupt'),
+  speak: (text) => ipcRenderer.invoke('capri:speak', String(text || '')),
   llmStatus: () => ipcRenderer.invoke('llm:status'),
   getMenu: (opts) => ipcRenderer.invoke('menu:get', opts || {}),
   setFolded: (on) => ipcRenderer.send('overlay:folded', Boolean(on)),
