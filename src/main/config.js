@@ -22,6 +22,7 @@ const DEFAULTS = {
     model: 'google/gemma-4-e2b', // the model of the provider in use
     localModel: 'google/gemma-4-e2b', // LM Studio's, kept apart so going to the cloud and back doesn't lose it
     models: {},
+    agentPreferred: 'claude', // when provider is agent-auto and nothing is open
     shareScreen: false,      // send what is open on screen (cloud only): off by default
     shareMemory: false,      // send her memory of the conversation (cloud only): off by default
     baseUrl: 'http://localhost:1235/v1',
@@ -30,6 +31,11 @@ const DEFAULTS = {
     contextLength: 8192,
     gpu: 'max',
     bootTimeoutMs: 120000,
+  },
+  updates: {
+    enabled: true,           // check GitHub Releases on boot (at most once / 24 h)
+    lastCheck: 0,
+    skippedVersion: '',
   },
   guide: {
     welcome: false,          // Claude Code "plug me in" onboarding
@@ -173,6 +179,7 @@ function load() {
       ...DEFAULTS,
       ...saved,
       llm: { ...DEFAULTS.llm, ...(saved.llm || {}) },
+      updates: { ...DEFAULTS.updates, ...(saved.updates || {}) },
       guide: { ...DEFAULTS.guide, ...(saved.guide || {}) },
       idle: {
         ...DEFAULTS.idle,
@@ -237,6 +244,7 @@ function save(patch) {
     ...current,
     ...patch,
     llm: { ...DEFAULTS.llm, ...(current.llm || {}), ...(patch.llm || {}) },
+    updates: { ...DEFAULTS.updates, ...(current.updates || {}), ...(patch.updates || {}) },
     guide: { ...DEFAULTS.guide, ...(current.guide || {}), ...(patch.guide || {}) },
     idle: {
       ...DEFAULTS.idle,

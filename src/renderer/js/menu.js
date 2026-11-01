@@ -51,6 +51,7 @@ export const SETTINGS_TABS = [
   { id: 'hearing', label: 'Oído' }, { id: 'apps', label: 'Mis apps' },
   { id: 'bubble', label: 'Apariencia' }, { id: 'music', label: 'Música / Reproductor' },
   { id: 'shortcuts', label: 'Atajos' }, { id: 'behavior', label: 'Comportamiento' },
+  { id: 'about', label: 'Acerca de' },
 ];
 
 export class AppMenu {
@@ -350,6 +351,7 @@ export class AppMenu {
     const rule = build('div', 'appmenu__quick-rule');
     body.append(rule);
     row('Ajustes…', '', 'settings', () => { this.hide(); this.host.openSettings(); });
+    row('Acerca de…', '', 'about', () => { this.hide(); this.host.openSettings('about'); });
     row('Salir', '', 'quit', () => this.act('quit'));
     const foot = build('div', 'appmenu__rail appmenu__quick-foot');
     foot.append(build('span', 'appmenu__kbd', 'ESC'), build('span', 'appmenu__rail-text', 'CERRAR'), build('span', 'appmenu__rail-text', 'CAPRICORN'));
@@ -779,6 +781,10 @@ export class AppMenu {
       });
     }
 
+    // ACERCA DE
+    section('ACERCA DE', 'about');
+    body.append(this.aboutPanel(state, { build }));
+
     // SALIR
     section('SALIR', 'exit');
     action('Salir', { onClick: () => this.act('quit') });
@@ -803,7 +809,7 @@ export class AppMenu {
     if (!this.settingsMode) return;
     const groups = {
       model: ['model'], agents: ['agents'], memory: ['memory'], hearing: ['hearing'], apps: ['apps', 'apps-add', 'apps-found', 'apps-test'],
-      bubble: ['bubble'], music: ['music'], shortcuts: ['shortcuts'], behavior: ['behavior'],
+      bubble: ['bubble'], music: ['music'], shortcuts: ['shortcuts'], behavior: ['behavior'], about: ['about'],
     };
     const allowed = new Set(groups[this.settingsSection] || []);
     let sectionId = '';
@@ -1314,10 +1320,29 @@ export class AppMenu {
     wrap.append(localCard);
 
     // —— Mi propia key ——
-    const ownIds = groups.own || ['openai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'];
-    const ownCard = card('Mi propia key', 'La que ya pagas: OpenAI, DeepSeek, Gemini, OpenRouter, Groq o Mistral.');
+    const ownIds = groups.own || ['openai', 'anthropic', 'xai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'];
+    const ownLinks = model.ownLinks || {};
+    const ownCard = card('Mi propia key', 'La que ya pagas: OpenAI, Anthropic, Grok/xAI, DeepSeek, Gemini, OpenRouter, Groq o Mistral.');
+    const ownLinksRow = build('div', 'appmenu__brain-free-links');
+    for (const id of ['anthropic', 'xai', 'openai']) {
+      const link = ownLinks[id];
+      if (!link?.url) continue;
+      const btn = build('button', 'appmenu__toggle-btn', `Key · ${link.label}`);
+      btn.type = 'button';
+      btn.addEventListener('mousedown', (e) => e.preventDefault());
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.host.menuAction({ id: 'open-url', value: link.url }).catch(() => {});
+      });
+      ownLinksRow.append(btn);
+    }
+    ownCard.append(
+      ownLinksRow,
+      build('div', 'appmenu__hint', 'Anthropic: console.anthropic.com → API keys. Grok: console.x.ai → Create API key. Pegá la key abajo y probá.'),
+    );
     ownCard.append(pickRow(ownIds, (id) => this.act('model-provider', id)));
-    const ownId = ownIds.includes(active) && !freeIds.includes(active) ? active : ownIds[0];
+    const ownId = ownIds.includes(active) && !freeIds.includes(active) && !String(active).startsWith('agent-') ? active : ownIds[0];
     const ownKey = textField(
       'Key',
       '',
@@ -1333,9 +1358,31 @@ export class AppMenu {
         key: ownKey.input.value,
         model: ownModel.input.value.trim(),
       })),
-      build('div', 'appmenu__hint', 'Nada de keys de Claude Code, Codex ni Cursor: van contra sus términos.'),
+      build('div', 'appmenu__hint', 'Nada de keys de Claude Code, Codex ni Cursor: van contra sus términos. Usá la tarjeta de agente instalado.'),
     );
     wrap.append(ownCard);
+
+    // —— Usar mi agente instalado ——
+    const agentIds = groups.agent || ['agent-auto', 'agent-claude', 'agent-opencode'];
+    const installed = model.agentsInstalled || [];
+    const agentCard = card(
+      'Usar mi agente instalado',
+      'Corre el CLI de tu cuenta (claude -p / opencode run). Más lento y puede gastar su plan. Capri no guarda esas keys.',
+    );
+    const status = build('div', 'appmenu__hint');
+    status.textContent = installed
+      .map((a) => `${a.label}: ${a.ready ? 'listo' : a.installed ? 'detectado (próximamente)' : 'no encontrado'}`)
+      .join(' · ') || 'Ningún CLI en el PATH.';
+    agentCard.append(status);
+    agentCard.append(pickRow(agentIds, (id) => this.act('model-provider', id)));
+    agentCard.append(probeBtn(() => ({
+      provider: agentIds.includes(active) ? active : 'agent-auto',
+    })));
+    const todo = installed.filter((a) => a.installed && !a.ready).map((a) => a.label);
+    if (todo.length) {
+      agentCard.append(build('div', 'appmenu__hint', `TODO: cablear ${todo.join(', ')}.`));
+    }
+    wrap.append(agentCard);
 
     if (this.probeNote) {
       const status = build(
@@ -1363,6 +1410,86 @@ export class AppMenu {
     );
     table.append(grid);
     wrap.append(table);
+    return wrap;
+  }
+
+  aboutPanel(state, { build }) {
+    const wrap = build('div', 'appmenu__brain');
+    wrap.dataset.setting = 'about';
+    const about = state.about || { name: 'Capri', version: '?', author: 'MtGhozt', community: [], dev: [], donate: [], other: [] };
+    const updates = state.updates || { enabled: true };
+
+    const head = build('div', 'appmenu__brain-card');
+    const icon = document.createElement('img');
+    icon.src = about.icon || '../../assets/icons/capri.png';
+    icon.alt = 'Capri';
+    icon.width = 64;
+    icon.height = 64;
+    icon.style.imageRendering = 'auto';
+    head.append(icon);
+    head.append(build('div', 'appmenu__brain-card-title', `${about.name} v${about.version}`));
+    head.append(build('div', 'appmenu__hint', `Autor: ${about.author}`));
+    wrap.append(head);
+
+    const linkBtn = (item) => {
+      const btn = build('button', 'appmenu__toggle-btn', item.label);
+      btn.type = 'button';
+      btn.addEventListener('mousedown', (e) => e.preventDefault());
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (item.url) {
+          await this.host.menuAction({ id: 'open-url', value: item.url }).catch(() => {});
+          return;
+        }
+        if (item.action === 'check-updates') {
+          const res = await this.host.menuAction({ id: 'check-updates' }).catch(() => null);
+          if (res?.message) this.probeNote = res.message;
+          await this.refresh();
+          return;
+        }
+        if (item.action === 'share-logs') {
+          const res = await this.host.menuAction({ id: 'share-logs' }).catch(() => null);
+          if (res?.message) this.probeNote = res.message;
+          await this.refresh();
+        }
+      });
+      return btn;
+    };
+
+    const block = (title, items) => {
+      if (!items?.length) return;
+      const card = build('div', 'appmenu__brain-card');
+      card.append(build('div', 'appmenu__brain-card-title', title));
+      const row = build('div', 'appmenu__brain-free-links');
+      for (const item of items) row.append(linkBtn(item));
+      card.append(row);
+      wrap.append(card);
+    };
+
+    block('Comunidad', about.community);
+    block('Desarrollo', about.dev);
+    block('Donar', about.donate);
+    block('Otros', about.other);
+
+    const upd = build('div', 'appmenu__brain-card');
+    upd.append(build('div', 'appmenu__brain-card-title', 'Actualizaciones'));
+    const toggle = build('button', `appmenu__toggle-btn${updates.enabled !== false ? ' is-active' : ''}`,
+      updates.enabled !== false ? 'Buscar al abrir: SÍ' : 'Buscar al abrir: NO');
+    toggle.type = 'button';
+    if (updates.enabled !== false) toggle.dataset.state = 'on';
+    toggle.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await this.host.menuAction({ id: 'updates-enabled', value: updates.enabled === false });
+      await this.refresh();
+    });
+    upd.append(toggle);
+    upd.append(build('div', 'appmenu__hint', 'Como máximo una vez cada 24 h. Si hay release nuevo, te pregunta; Sí abre la página (no instala sola).'));
+    wrap.append(upd);
+
+    if (this.probeNote) {
+      wrap.append(build('div', 'appmenu__hint appmenu__brain-status', this.probeNote));
+    }
     return wrap;
   }
 

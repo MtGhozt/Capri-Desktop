@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog, safeStorage,
+  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog, safeStorage, clipboard,
 } = require('electron');
 
 const config = require('./config');
@@ -13,8 +13,13 @@ const { TRAY, LANGS } = require('./labels');
 const { createBridge } = require('./bridge');
 const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
-const { PROVIDERS, providerOptions, isCloud, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS } = require('./chat-providers');
+const {
+  PROVIDERS, providerOptions, isCloud, isAgent, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS,
+} = require('./chat-providers');
 const { probeProvider } = require('./llm-probe');
+const { checkForUpdate } = require('./updates');
+const { aboutInfo, LINKS: ABOUT_LINKS } = require('./about');
+const { detectAgents, pickAuto, openAgentIds, runAgent } = require('./agent-brain');
 const { switchProvider, setProviderModel, modelForProvider } = require('./chat-models');
 const { parseRenderMode, renderSwitches } = require('./render-mode');
 const { createLms } = require('./lms');
@@ -555,6 +560,65 @@ function speakLine(line) {
   speakQueue.feed(line);
   speakQueue.flush(speakId);
   return speakId;
+}
+
+async function runAgentAsBrain(providerId, user) {
+  const cfg = config.load();
+  const installed = detectAgents();
+  const kind = PROVIDERS[providerId]?.agent || 'auto';
+  const open = openAgentIds([
+    { title: lastWindows?.fgTitle, process: lastWindows?.fgExe },
+    ...(lastWindows?.wins || []).map((w) => ({ title: w.title, process: w.exe || w.process })),
+  ]);
+  const id = kind === 'auto'
+    ? pickAuto({ installed, openIds: open, preferred: cfg.llm?.agentPreferred })
+    : kind;
+  if (!id) throw Object.assign(new Error('No hay un agente CLI listo en el PATH.'), { offline: true });
+  return runAgent({ id, prompt: user, installed });
+}
+
+let pendingUpdate = null;
+
+async function runUpdateCheck({ force = false } = {}) {
+  const cfg = config.load();
+  const now = Date.now();
+  const result = await checkForUpdate({
+    localVersion: app.getVersion(),
+    skippedVersion: cfg.updates?.skippedVersion,
+    enabled: force ? true : cfg.updates?.enabled !== false,
+    lastCheck: force ? 0 : cfg.updates?.lastCheck,
+    now,
+  });
+  if (result.checked) updateConfig({ updates: { lastCheck: now } });
+  if (result.error) {
+    appLog(`updates check failed: ${result.error}`);
+    return force ? { ok: false, message: 'No pude mirar GitHub ahora.' } : { ok: true };
+  }
+  if (!result.update) {
+    return force ? { ok: true, message: 'Ya estás al día.' } : { ok: true };
+  }
+  pendingUpdate = result.update;
+  sendCommand('update-ask', {
+    text: `¡Salió Capri v${result.update.version}! ¿Querés actualizar?`,
+    version: result.update.version,
+    url: result.update.url,
+  });
+  return { ok: true, update: result.update };
+}
+
+function answerUpdatePrompt(value) {
+  const update = pendingUpdate;
+  pendingUpdate = null;
+  const answer = String(value || '');
+  if (answer === 'yes' && update?.url) {
+    shell.openExternal(update.url);
+    return { ok: true };
+  }
+  if (answer === 'skip' && update?.version) {
+    updateConfig({ updates: { skippedVersion: update.version } });
+    return { ok: true };
+  }
+  return { ok: true }; // later
 }
 
 // One of her direct-command lines (lines-es.js), said and shown where the command came from:
@@ -1350,11 +1414,33 @@ function setChatKey(value) {
 const OPEN_URL_ALLOW = new Set([
   'https://build.nvidia.com/',
   'https://aistudio.google.com/apikey',
-]);
+  'https://console.anthropic.com/',
+  'https://console.x.ai/',
+  'https://platform.openai.com/api-keys',
+  ABOUT_LINKS.github,
+  ABOUT_LINKS.releases,
+  ABOUT_LINKS.issues,
+  ABOUT_LINKS.readme,
+  ABOUT_LINKS.changelog,
+  ABOUT_LINKS.license,
+  ABOUT_LINKS.tiktok,
+].filter(Boolean));
 
 async function probeChatFromMenu(value = {}) {
   const id = String(value.provider || config.load().llm?.provider || 'local');
   if (!PROVIDERS[id]) return { ok: false, message: 'Ese proveedor no existe.' };
+  if (isAgent(id)) {
+    const agents = detectAgents();
+    const want = PROVIDERS[id].agent === 'auto'
+      ? pickAuto({ installed: agents, preferred: config.load().llm?.agentPreferred })
+      : PROVIDERS[id].agent;
+    const hit = agents.find((a) => a.id === want);
+    if (!hit?.ready) {
+      return { ok: false, message: hit?.installed ? `${hit.label} aún no está cableado.` : 'No encuentro ese agente en el PATH.' };
+    }
+    setChatProvider(id);
+    return { ok: true, message: `Listo. Usaré ${hit.label} (más lento; gasta su plan).` };
+  }
   if (value.key != null && !PROVIDERS[id].local) {
     const clean = String(value.key).trim();
     if (clean) saveLlmKey(id, clean);
@@ -1399,9 +1485,25 @@ function applyMenuAction(id, value) {
     case 'model-probe': return probeChatFromMenu(value);
     case 'open-url': {
       const url = String(value || '');
-      if (!OPEN_URL_ALLOW.has(url)) return { ok: false, message: 'Esa página no está en la lista.' };
+      const allowed = OPEN_URL_ALLOW.has(url)
+        || /^https:\/\/github\.com\/MtGhozt\/Capri-Desktop\/releases\b/.test(url);
+      if (!allowed) return { ok: false, message: 'Esa página no está en la lista.' };
       shell.openExternal(url);
       return { ok: true };
+    }
+    case 'updates-enabled':
+      updateConfig({ updates: { enabled: Boolean(value) } });
+      return { ok: true };
+    case 'check-updates':
+      return runUpdateCheck({ force: true });
+    case 'update-answer':
+      return answerUpdatePrompt(value);
+    case 'share-logs': {
+      const file = voiceLogPath();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      clipboard.writeText(file);
+      shell.showItemInFolder(file);
+      return { ok: true, message: 'Ruta de voice.log copiada.' };
     }
     case 'model-share': updateConfig({ llm: value }); break;
     case 'render':
@@ -1704,15 +1806,25 @@ function menuState(extra = {}) {
         providers: providerOptions(),
         groups: BRAIN_GROUPS,
         freeLinks: FREE_KEY_LINKS,
+        ownLinks: OWN_KEY_LINKS,
+        agentsInstalled: detectAgents(),
+        agentPreferred: String(cfg.llm?.agentPreferred || 'claude'),
         model: String(cfg.llm?.model || ''),
         baseUrl: String(cfg.llm?.baseUrl || defaultBaseUrl(safe)),
         local: !isCloud(safe),
+        agent: isAgent(safe),
         hasKey: Boolean(llmKey(safe)),
         hasKeys,
         shareScreen: cfg.llm?.shareScreen === true,
         shareMemory: cfg.llm?.shareMemory === true,
       };
     })(),
+    about: aboutInfo({ version: app.getVersion() }),
+    updates: {
+      enabled: cfg.updates?.enabled !== false,
+      skippedVersion: String(cfg.updates?.skippedVersion || ''),
+      lastCheck: Number(cfg.updates?.lastCheck) || 0,
+    },
     apps: appsMenuState(),
     agents: assistants.statusAll(),
     found: {
@@ -1979,6 +2091,10 @@ function registerIpc() {
     if (unlock) sendCommand('line', { badge: 'ONLINE', text });
     return { ...picked, text };
   };
+  ipcMain.handle('capri:speak', (_e, text) => {
+    speakLine(String(text || ''));
+    return { ok: true };
+  });
   ipcMain.handle('greet', async () => {
     if (bootGreetingDone) return null;
     bootGreetingDone = true;
@@ -2209,6 +2325,7 @@ function main() {
       personaPath: userFiles.persona.path,
       memoryPath: userFiles.memory.path,
       apiKey: (id) => llmKey(id),
+      runAgentChat: ({ provider, user }) => runAgentAsBrain(provider, user),
       // what she may tell a cloud provider about your screen, only with the switch on
       screenContext: () => {
         const title = String(lastWindows?.fgTitle || '').trim();
@@ -2350,6 +2467,7 @@ function main() {
     setTimeout(() => seedAppTable().catch((err) => appLog(`apps seed failed: ${err.message}`)), 5000);
     setTimeout(scanIfStale, 20000); // after her voice is up: the disk is busy enough before
     setTimeout(() => maybeOpenSetupHint().catch((err) => logEvent(voiceLogPath(), `[capri] setup hint failed: ${err.message}`)), 2500);
+    setTimeout(() => runUpdateCheck().catch((err) => appLog(`updates check failed: ${err.message}`)), 8000);
 
     screen.on('display-metrics-changed', fitOverlay);
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.3
+
+- Whisper: umbral ~4 GB RAM; sin `hey_jarvis` por defecto
+- Cerebro: cards gratis / en mi PC / mi propia key; Anthropic y Grok/xAI; “Usar mi agente instalado” (Claude Code + OpenCode; resto TODO)
+- Aviso de voz amigable si falta el sidecar (una sola vez)
+- Hooks para 5 agentes (Claude Code, Codex, Antigravity, Cursor, OpenCode) con `origin` y frases que los nombran
+- Permisos de agentes: alerta sticky + voz (“¡Cursor te está pidiendo permiso!…”)
+- OpenCode: `session.execution.succeeded` → Stop; dedupe de PreToolUse ×N
+- Buscar actualizaciones al abrir (máx. 1×/24 h, GitHub Releases; Sí abre la página)
+- Ajustes › Acerca de (+ menú): versión, autor, comunidad, desarrollo, logs, updates
+
 ## 0.1.2
 
 - Wake: "Hey Capri" / mangled forms already stripped before the LLM; wake-only opens a follow-up listen window

@@ -1026,6 +1026,31 @@ async function boot() {
       case 'line': // a short notice from a menu action (memory, clip)
         panel.say({ kind: 'info', badge: cmd.badge, line: cmd.text, hold: 4600 });
         break;
+      case 'update-ask': { // GitHub release newer than package.json
+        const prevAction = panel.onAction;
+        panel.say({
+          kind: 'info',
+          badge: 'UPDATE',
+          line: cmd.text,
+          hold: null,
+          actions: [
+            { id: 'update-yes', label: 'Sí', primary: true },
+            { id: 'update-later', label: 'Más tarde' },
+            { id: 'update-skip', label: 'Saltar esta versión' },
+          ],
+        });
+        panel.onAction = (id) => {
+          if (id === 'update-yes' || id === 'update-later' || id === 'update-skip') {
+            const map = { 'update-yes': 'yes', 'update-later': 'later', 'update-skip': 'skip' };
+            host.menuAction({ id: 'update-answer', value: map[id] }).catch(() => {});
+            panel.onAction = prevAction;
+            panel.hide();
+            return;
+          }
+          prevAction?.(id);
+        };
+        break;
+      }
       case 'quit-ask': { // Salir / "ciérrate": Sí / No before she actually quits
         // Solid window: no click-through / hover passthrough until confirm closes (+~300 ms).
         holdQuitConfirm(true);
