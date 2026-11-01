@@ -9,8 +9,8 @@ const LINKS = {
   readme: 'https://github.com/MtGhozt/Capri-Desktop#readme',
   changelog: 'https://github.com/MtGhozt/Capri-Desktop/blob/main/CHANGELOG.md',
   license: 'https://github.com/MtGhozt/Capri-Desktop/blob/main/LICENSE',
-  tiktok: 'https://www.tiktok.com/@mtghozt', // TODO: confirm handle
-  discord: '', // TODO: paste invite when ready
+  tiktok: 'https://www.tiktok.com/@mtghozt',
+  discord: 'https://discord.gg/wmVfYdjpdA',
   kofi: '', // TODO: paste Ko-fi when ready
 };
 
