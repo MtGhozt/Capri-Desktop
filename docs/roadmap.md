@@ -1,4 +1,4 @@
-# Capri — Roadmap (actualizado 2026-10-28)
+# Capri — Roadmap (actualizado 2026-10-31)
 
 Upstream de referencia: mochiiwuff/capri-desktop v0.4.0 (`bde7b42`). Nunca push a upstream. Traer cosas por partes (port manual o cherry-pick), no merge completo.
 
@@ -43,15 +43,53 @@ Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
 - [x] **4K Traído de upstream:** proveedores de chat en la nube (LM Studio, OpenRouter, Groq, Gemini, OpenAI, Mistral, DeepSeek) con clave cifrada y vuelta automática a Gemma, clic recuperado con el puntero encima, y opción "Pantalla" para PCs donde su ventana sale negra. Ver `docs/THIRD_PARTY.md`.
 - Quitar "módulo no conectado" de `persona.md` a medida que cada cosa funcione.
 
-## Fase 5 - Cerebro fácil para cualquiera + README
+## Fase 5 - Cerebro fácil para cualquiera + README ✅
+Hecho (`d6c33ea..06dca0b`): tarjetas de Cerebro, defaults de modelo, espaciado y enlaces de keys.
+
 - [x] Primera ejecución (si no hay proveedor usable) y en Ajustes: sección "Cerebro" con 3 tarjetas a la vista (no dropdown): Gratis con key (NVIDIA + Gemini), En mi PC (Ollama / LM Studio), Mi propia key (OpenAI, DeepSeek, Gemini, OpenRouter, Groq, Mistral). Tabla de requisitos. "Probar" con pedido mínimo. Keys solo locales.
 - Claude/Anthropic: **no por ahora** (API no OpenAI-compatible; no queremos SDK nuevo). Anotar si algún día hay proxy compatible.
 - Reescribir README: inicio rápido sin código, cerebro, voz, cómo usarla, atajos, seguridad, qué datos salen, FAQ, créditos. Estructura inspirada en lachydotmcg y upstream (solo estructura, texto propio).
 - Sin claves de suscripción de Claude Code/Codex/Cursor como cerebro (va contra sus términos).
 
-## Fase 6 - Vigilar agentes de código
-- Base: upstream hooks (capri-hook.js, capri-codex-hook.js, capri-agy-hook.js, assistants.js).
-- Agregar OpenCode (y Cursor). Avisar cuando un agente termina o pide permiso.
+## Fase 6 - Cerebro conectado a lo que ya usás (agentes, pantalla y juegos)
+
+### 6A Hooks de agentes
+- Un bridge local (`src/main/bridge.js`, `127.0.0.1:47823`) + un adaptador por agente. Avisar cuando termina o pide permiso.
+- Claude Code, Codex y Antigravity: hooks de upstream (`capri-hook.js`, `capri-codex-hook.js`, `capri-agy-hook.js`, `assistants.js`); portar lo que falte.
+- Nuevos: Cursor (hooks propios) y OpenCode (plugin).
+- Ajustes › Agentes: instalar / desinstalar / estado por agente. Nunca bloquear al agente (timeout corto, siempre salir 0, asíncrono) ni mandar contenido de archivos (solo evento, proyecto, herramienta y título).
+
+### 6B Proveedores
+- Anthropic con API key propia en "Mi propia key" (console.anthropic.com). Mantener "usar mi Claude Code CLI" (6E). Nunca manejar tokens de suscripción.
+- Opcional: Grok (xAI) con key.
+
+### 6C Pantalla
+- A demanda primero: "mirá mi pantalla" captura, manda y descarta.
+- Auto-look opcional y opt-in, solo con el usuario activo; intervalo largo y nunca en modo juego.
+- Aviso de consentimiento al activarlo: qué imagen se manda y adónde (proveedor y modelo, nube o local).
+- JPEG reducido solo en memoria; nunca se guarda en disco.
+- Si el modelo no tiene visión, avisarlo claro antes de capturar.
+- Verificar que funcione con Gemini (hoy `gemini-flash-lite-latest`); si no ve, cambiar de modelo o avisar.
+- Corregir el interruptor actual: solo manda exe y título de la ventana, no la imagen.
+
+### 6D Juegos
+- Detección por carpeta del launcher (Steam, Epic, GOG, Xbox, EA, Riot, Ubisoft, itch) + lista permitir/ignorar editable; reusar `game-detect.js` y `gaming.apps`.
+- Modo juego: comenta y se calla/esconde; silencia la wake word en pantalla completa.
+- Mandos: detectar y mapear (Xbox/PlayStation) para hablar sin teclado.
+- Leer el estado del juego (vida, mapa) queda para después.
+
+### 6E Nueva tarjeta en Cerebro: "Usar mi agente instalado"
+- Capri detecta y corre la CLI que el usuario ya tiene, con su propia cuenta, sin manejar tokens.
+- Claude Code (`claude -p`), Cursor (`cursor-agent -p`), OpenCode (`opencode run`), Codex (`codex exec`), Gemini CLI (`gemini -p`).
+- Mostrar cuáles están instaladas; si no hay ninguna, link a cómo instalarla.
+- Nota visible: es más lento que una API y puede gastar el plan del usuario.
+
+### 6F Proveedores con key
+- Anthropic (console.anthropic.com) y Grok/xAI (console.x.ai) en "Mi propia key".
+
+### 6G Guía corta por opción
+- Botón "¿Cómo lo saco?" dentro de Cerebro: despliega 3–4 pasos para Gemini, NVIDIA (pide teléfono), Ollama/LM Studio (requisitos y qué modelo bajar), cada key paga y cada CLI instalada (cómo instalar y loguearse).
+- Mismos textos reutilizables para la guía de Discord.
 
 ## Fase 7 - Voz gratis para todos
 - Voz local gratis (p. ej. Kokoro) para quien no tiene voz clonada; voz por key opcional.
