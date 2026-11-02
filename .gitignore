@@ -43,3 +43,5 @@ config.json
 .vscode/
 .idea/
 *.swp
+
+!voice/models/hey_capri.onnx
