@@ -5,7 +5,9 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { MODES, parseRenderMode, renderSwitches } = require('../src/main/render-mode');
+const {
+  MODES, HINTS, SOFTWARE_CONFIRM, parseRenderMode, renderHint, nextRenderAction, renderSwitches,
+} = require('../src/main/render-mode');
 
 test('only the three modes her menu offers', () => {
   assert.deepEqual(MODES, ['auto', 'gl', 'software']);
@@ -16,6 +18,26 @@ test('anything else falls back to Normal, never to a broken start', () => {
   for (const odd of ['', null, undefined, 'OpenGL', 'gpu', 'swiftshader', 42, {}]) {
     assert.equal(parseRenderMode(odd), 'auto', String(odd));
   }
+});
+
+test('hint text per mode', () => {
+  assert.equal(renderHint('auto'), 'Recomendado');
+  assert.equal(renderHint('gl'), 'Solo si Capri se ve negra');
+  assert.equal(renderHint('software'), 'Solo si se ve negra y OpenGL no ayudó. Va más lento.');
+  assert.equal(HINTS.auto, renderHint('auto'));
+});
+
+test('software mode asks before relaunch', () => {
+  assert.equal(SOFTWARE_CONFIRM, 'Capri va a ir más lenta. ¿Seguro?');
+  assert.deepEqual(nextRenderAction('software', 'auto'), {
+    action: 'ask', mode: 'software', message: SOFTWARE_CONFIRM,
+  });
+  assert.deepEqual(nextRenderAction('software', 'auto', { confirmed: true }), {
+    action: 'apply', mode: 'software',
+  });
+  assert.deepEqual(nextRenderAction('software', 'software'), { action: 'noop', mode: 'software' });
+  assert.deepEqual(nextRenderAction('gl', 'auto'), { action: 'apply', mode: 'gl' });
+  assert.deepEqual(nextRenderAction('auto', 'gl'), { action: 'apply', mode: 'auto' });
 });
 
 test('Normal asks Chromium for nothing in particular', () => {
