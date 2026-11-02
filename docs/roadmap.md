@@ -64,13 +64,10 @@ Hecho (`d6c33ea..06dca0b`): tarjetas de Cerebro, defaults de modelo, espaciado y
 - Opcional: Grok (xAI) con key.
 
 ### 6C Pantalla
-- A demanda primero: "mirá mi pantalla" captura, manda y descarta.
-- Auto-look opcional y opt-in, solo con el usuario activo; intervalo largo y nunca en modo juego.
-- Aviso de consentimiento al activarlo: qué imagen se manda y adónde (proveedor y modelo, nube o local).
-- JPEG reducido solo en memoria; nunca se guarda en disco.
-- Si el modelo no tiene visión, avisarlo claro antes de capturar.
-- Verificar que funcione con Gemini (hoy `gemini-flash-lite-latest`); si no ve, cambiar de modelo o avisar.
-- Corregir el interruptor actual: solo manda exe y título de la ventana, no la imagen.
+- [x] A demanda: "mirá mi pantalla" / "qué ves" → JPEG en memoria al cerebro con `vision` (Gemini flash-lite sí).
+- [x] Auto-look opt-in (≥10 min, usuario activo, nunca en modo juego / fullscreen).
+- [x] Consentimiento al activar el interruptor; sin visión → una línea en español, sin capturar.
+- [x] JPEG max ~1280 / q70; overlay se oculta al capturar si se puede; nada a disco.
 
 ### 6D Juegos
 - Detección por carpeta del launcher (Steam, Epic, GOG, Xbox, EA, Riot, Ubisoft, itch) + lista permitir/ignorar editable; reusar `game-detect.js` y `gaming.apps`.
@@ -78,11 +75,12 @@ Hecho (`d6c33ea..06dca0b`): tarjetas de Cerebro, defaults de modelo, espaciado y
 - Mandos: detectar y mapear (Xbox/PlayStation) para hablar sin teclado.
 - Leer el estado del juego (vida, mapa) queda para después.
 
-### 6E Nueva tarjeta en Cerebro: "Usar mi agente instalado"
+### 6E Nueva tarjeta en Cerebro: "Usar mi agente instalado" ✅
 - Capri detecta y corre la CLI que el usuario ya tiene, con su propia cuenta, sin manejar tokens.
 - Claude Code (`claude -p`), Cursor (`cursor-agent -p`), OpenCode (`opencode run`), Codex (`codex exec`), Gemini CLI (`gemini -p`).
 - Mostrar cuáles están instaladas; si no hay ninguna, link a cómo instalarla.
 - Nota visible: es más lento que una API y puede gastar el plan del usuario.
+- Automático: agente abierto → preferred → primero instalado; fallback a key en la nube y LM Studio.
 
 ### 6F Proveedores con key
 - Anthropic (console.anthropic.com) y Grok/xAI (console.x.ai) en "Mi propia key".

@@ -1,17 +1,53 @@
 'use strict';
 
 // Use an installed coding-agent CLI as Capri's brain (no Capri-managed tokens).
-// v0.1.3 ships Claude Code + OpenCode; cursor-agent / codex / gemini are detected but not wired yet.
+// Read-only / no-edit flags where the CLI exposes them; OpenCode has no such flag.
 
 const { spawn } = require('node:child_process');
-const path = require('node:path');
+
+const AGENT_TIMEOUT_MS = 45_000;
 
 const AGENTS = [
-  { id: 'claude', label: 'Claude Code', bin: 'claude', args: (prompt) => ['-p', prompt], ready: true },
-  { id: 'opencode', label: 'OpenCode', bin: 'opencode', args: (prompt) => ['run', prompt], ready: true },
-  { id: 'cursor-agent', label: 'Cursor Agent', bin: 'cursor-agent', args: (prompt) => ['-p', prompt], ready: false },
-  { id: 'codex', label: 'Codex', bin: 'codex', args: (prompt) => ['exec', prompt], ready: false },
-  { id: 'gemini', label: 'Gemini CLI', bin: 'gemini', args: (prompt) => ['-p', prompt], ready: false },
+  {
+    id: 'claude',
+    label: 'Claude Code',
+    bin: 'claude',
+    args: (prompt) => ['-p', '--permission-mode', 'plan', prompt],
+    installHow: 'irm https://claude.ai/install.ps1 | iex',
+    ready: true,
+  },
+  {
+    id: 'cursor-agent',
+    label: 'Cursor Agent',
+    bin: 'cursor-agent',
+    args: (prompt) => ['-p', '--mode=ask', '--output-format', 'text', prompt],
+    installHow: 'curl https://cursor.com/install -fsS | bash',
+    ready: true,
+  },
+  {
+    id: 'opencode',
+    label: 'OpenCode',
+    bin: 'opencode',
+    args: (prompt) => ['run', prompt],
+    installHow: 'npm install -g @opencode/cli',
+    ready: true,
+  },
+  {
+    id: 'codex',
+    label: 'Codex',
+    bin: 'codex',
+    args: (prompt) => ['exec', '--sandbox', 'read-only', '--ask-for-approval', 'never', prompt],
+    installHow: 'npm install -g @openai/codex',
+    ready: true,
+  },
+  {
+    id: 'gemini',
+    label: 'Gemini CLI',
+    bin: 'gemini',
+    args: (prompt) => ['-p', '--approval-mode=plan', prompt],
+    installHow: 'npm install -g @google/gemini-cli',
+    ready: true,
+  },
 ];
 
 function which(bin, { execFileSync = require('node:child_process').execFileSync, platform = process.platform } = {}) {
@@ -45,6 +81,7 @@ function detectAgents(opts = {}) {
       installed: Boolean(file),
       path: file,
       ready: a.ready && Boolean(file),
+      installHow: a.installHow || '',
       note: a.ready ? '' : 'Próximamente',
     };
   });
@@ -79,12 +116,21 @@ function openAgentIds(windows = []) {
   return [...ids];
 }
 
-function runAgent({ id, prompt, installed, timeoutMs = 120_000, spawnImpl = spawn } = {}) {
+function wrapPrompt(prompt, persona) {
+  const user = String(prompt || '');
+  const who = String(persona || '').trim();
+  if (!who) return user;
+  return `${who}\n\n---\nUser: ${user}`;
+}
+
+function runAgent({
+  id, prompt, persona, installed, timeoutMs = AGENT_TIMEOUT_MS, spawnImpl = spawn,
+} = {}) {
   const list = installed || detectAgents();
   const agent = list.find((a) => a.id === id && a.ready);
   if (!agent) return Promise.reject(new Error('Ese agente no está instalado o aún no está cableado.'));
   const def = AGENTS.find((a) => a.id === id);
-  const args = def.args(String(prompt || ''));
+  const args = def.args(wrapPrompt(prompt, persona));
   return new Promise((resolve, reject) => {
     const child = spawnImpl(agent.path || agent.bin, args, {
       windowsHide: true,
@@ -113,5 +159,5 @@ function runAgent({ id, prompt, installed, timeoutMs = 120_000, spawnImpl = spaw
 }
 
 module.exports = {
-  AGENTS, which, detectAgents, pickAuto, openAgentIds, runAgent,
+  AGENTS, AGENT_TIMEOUT_MS, which, detectAgents, pickAuto, openAgentIds, wrapPrompt, runAgent,
 };

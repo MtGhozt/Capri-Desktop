@@ -7,7 +7,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   PROVIDERS, BRAIN_GROUPS, FREE_KEY_LINKS, providerOptions, provider, isCloud, usesLms,
-  defaultBaseUrl, requestFor, explain, providerAfterKeyRemoved,
+  defaultBaseUrl, requestFor, explain, providerAfterKeyRemoved, supportsVision,
 } = require('../src/main/chat-providers');
 
 const LOCAL = 'http://localhost:1235/v1';
@@ -18,6 +18,10 @@ test('providers: two local, free NVIDIA/Gemini, own-key clouds, and agent CLIs',
   assert.ok(PROVIDERS.xai);
   assert.ok(PROVIDERS['agent-claude']);
   assert.ok(PROVIDERS['agent-opencode']);
+  assert.ok(PROVIDERS['agent-cursor']);
+  assert.ok(PROVIDERS['agent-codex']);
+  assert.ok(PROVIDERS['agent-gemini']);
+  assert.equal(PROVIDERS['agent-auto'].label, 'Automático');
   assert.equal(isCloud('local'), false);
   assert.equal(isCloud('ollama'), false);
   assert.equal(isCloud('nvidia'), true);
@@ -31,12 +35,23 @@ test('providers: two local, free NVIDIA/Gemini, own-key clouds, and agent CLIs',
   assert.ok(BRAIN_GROUPS.own.includes('openai'));
   assert.ok(BRAIN_GROUPS.own.includes('anthropic'));
   assert.ok(BRAIN_GROUPS.own.includes('xai'));
-  assert.ok(BRAIN_GROUPS.agent.includes('agent-auto'));
+  assert.deepEqual(BRAIN_GROUPS.agent, [
+    'agent-auto', 'agent-claude', 'agent-cursor', 'agent-opencode', 'agent-codex', 'agent-gemini',
+  ]);
   assert.equal(FREE_KEY_LINKS.nvidia.url, 'https://build.nvidia.com/');
   assert.equal(FREE_KEY_LINKS.gemini.url, 'https://aistudio.google.com/apikey');
   assert.equal(FREE_KEY_LINKS.gemini.recommended, true); // UI: ★ on link, "recomendado" only on Gemini chip
   assert.equal(FREE_KEY_LINKS.nvidia.recommended, undefined);
   assert.deepEqual(providerOptions().map((p) => p.id), Object.keys(PROVIDERS));
+});
+
+test('vision flag: Gemini/OpenAI yes; agents and plain local Gemma no', () => {
+  assert.equal(supportsVision('gemini', 'gemini-flash-lite-latest'), true);
+  assert.equal(supportsVision('openai', 'gpt-4o-mini'), true);
+  assert.equal(supportsVision('agent-claude', 'agent'), false);
+  assert.equal(supportsVision('local', 'google/gemma-4-e2b'), false);
+  assert.equal(supportsVision('local', 'llava-1.6'), true);
+  assert.equal(PROVIDERS.gemini.vision, true);
 });
 
 test('LM Studio is only booted and waited for when it is the one who answers', () => {

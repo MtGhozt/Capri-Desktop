@@ -6,28 +6,34 @@
 // Agent-* providers shell out to an installed CLI (see agent-brain.js); no Capri-managed tokens.
 
 const PROVIDERS = {
-  local: { label: 'LM Studio', local: true, url: 'http://localhost:1235/v1', model: 'google/gemma-4-e2b' },
-  ollama: { label: 'Ollama', local: true, url: 'http://localhost:11434/v1', model: 'llama3.2' },
-  nvidia: { label: 'NVIDIA', url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.1-8b-instruct' },
-  gemini: { label: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-lite-latest' },
-  openrouter: { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
-  groq: { label: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
-  openai: { label: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  anthropic: { label: 'Anthropic', url: 'https://api.anthropic.com/v1', model: 'claude-haiku-4-5-20251001' },
-  xai: { label: 'Grok (xAI)', url: 'https://api.x.ai/v1', model: 'grok-4-1-fast-non-reasoning' },
-  mistral: { label: 'Mistral', url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest' },
-  deepseek: { label: 'DeepSeek', url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-  'agent-auto': { label: 'Agente abierto', local: true, agent: 'auto', model: 'agent' },
-  'agent-claude': { label: 'Claude Code (CLI)', local: true, agent: 'claude', model: 'agent' },
-  'agent-opencode': { label: 'OpenCode (CLI)', local: true, agent: 'opencode', model: 'agent' },
+  local: { label: 'LM Studio', local: true, url: 'http://localhost:1235/v1', model: 'google/gemma-4-e2b', vision: 'model' },
+  ollama: { label: 'Ollama', local: true, url: 'http://localhost:11434/v1', model: 'llama3.2', vision: 'model' },
+  nvidia: { label: 'NVIDIA', url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.1-8b-instruct', vision: false },
+  gemini: { label: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-lite-latest', vision: true },
+  openrouter: { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini', vision: true },
+  groq: { label: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', vision: false },
+  openai: { label: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini', vision: true },
+  anthropic: { label: 'Anthropic', url: 'https://api.anthropic.com/v1', model: 'claude-haiku-4-5-20251001', vision: true },
+  xai: { label: 'Grok (xAI)', url: 'https://api.x.ai/v1', model: 'grok-4-1-fast-non-reasoning', vision: true },
+  mistral: { label: 'Mistral', url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest', vision: false },
+  deepseek: { label: 'DeepSeek', url: 'https://api.deepseek.com/v1', model: 'deepseek-chat', vision: false },
+  'agent-auto': { label: 'Automático', local: true, agent: 'auto', model: 'agent', vision: false },
+  'agent-claude': { label: 'Claude Code (CLI)', local: true, agent: 'claude', model: 'agent', vision: false },
+  'agent-cursor': { label: 'Cursor (CLI)', local: true, agent: 'cursor-agent', model: 'agent', vision: false },
+  'agent-opencode': { label: 'OpenCode (CLI)', local: true, agent: 'opencode', model: 'agent', vision: false },
+  'agent-codex': { label: 'Codex (CLI)', local: true, agent: 'codex', model: 'agent', vision: false },
+  'agent-gemini': { label: 'Gemini CLI', local: true, agent: 'gemini', model: 'agent', vision: false },
 };
+
+// Local LM Studio / Ollama: only if the model name looks multimodal.
+const LOCAL_VISION_RE = /llava|bakllava|vision|moondream|minicpm-v|qwen2?\.?5?-?vl|qwen-vl|pixtral|gemma-3|gpt-4o|claude-3|claude-4/i;
 
 // Cards in Ajustes › Cerebro (same ids as PROVIDERS; Gemini sits in free and own).
 const BRAIN_GROUPS = {
   free: ['gemini', 'nvidia'], // Gemini first = recommended free path
   local: ['local', 'ollama'],
   own: ['openai', 'anthropic', 'xai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'],
-  agent: ['agent-auto', 'agent-claude', 'agent-opencode'],
+  agent: ['agent-auto', 'agent-claude', 'agent-cursor', 'agent-opencode', 'agent-codex', 'agent-gemini'],
 };
 
 const FREE_KEY_LINKS = {
@@ -116,17 +122,28 @@ function isAgent(id) {
   return Boolean(provider(id).agent);
 }
 
+// Phase 6C: can this provider/model take a screenshot as an image part?
+function supportsVision(id, model) {
+  const p = provider(id);
+  if (p.agent || p.vision === false) return false;
+  if (p.vision === true) return true;
+  const name = String(model || p.model || '');
+  return LOCAL_VISION_RE.test(name);
+}
+
 module.exports = {
   PROVIDERS,
   BRAIN_GROUPS,
   FREE_KEY_LINKS,
   OWN_KEY_LINKS,
   DEFAULT_PROVIDER,
+  LOCAL_VISION_RE,
   provider,
   providerAfterKeyRemoved,
   isCloud,
   usesLms,
   isAgent,
+  supportsVision,
   providerOptions,
   defaultBaseUrl,
   requestFor,
