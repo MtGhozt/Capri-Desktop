@@ -17,24 +17,20 @@ export const HELP_STEPS = {
     title: 'Escuchar (voz de entrada)',
     section: 'hearing',
     steps: [
-      'Instalá Python 3.11 y marcá "Add to PATH".',
-      'Abrí la carpeta de voz.',
-      'Escribí powershell en la barra de direcciones del Explorador y dale Enter.',
-      { text: 'Corré el instalador:', command: 'powershell -ExecutionPolicy Bypass -File .\\setup.ps1' },
-      'Elegí esa carpeta con "Elegir carpeta…".',
+      'Tocá «Instalar voz» en Ajustes → AUDIO (pide Python 3.11 si falta).',
+      'La carpeta queda en %LOCALAPPDATA%\\capri-desktop\\voice y sobrevive al actualizar Capri.',
+      'Fallback manual: Python 3.11 con "Add to PATH", abrí la carpeta de voz y corré setup.ps1.',
     ],
   },
   voice: {
     title: 'Respuesta con voz',
     section: 'hearing',
-    note: 'Pronto esto se instalará con un botón; por ahora es manual:',
+    note: 'Sin tu archivo, Capri usa la voz por defecto (OmniVoice voice-design). No se descarga audio clonado.',
     steps: [
-      {
-        text: 'Instalá OmniVoice (se recomienda una GPU NVIDIA):',
-        command: 'powershell -ExecutionPolicy Bypass -File .\\setup.ps1 -OmniVoice',
-      },
+      'Tocá «Instalar voz» (OmniVoice con GPU NVIDIA; casilla si no hay NVIDIA).',
       'Elegí VOZ en Respuesta.',
-      'Para una voz propia, poné un .wav corto y limpio y un .txt con su transcripción exacta en voice\\ref.',
+      'Opcional: «Usar mi propia voz…» — un .wav de 5–15 s y su transcripción exacta.',
+      'Fallback manual: setup.ps1 -OmniVoice y, si querés clone, ref\\mi.wav + ref\\mi.txt.',
     ],
   },
   brain: {

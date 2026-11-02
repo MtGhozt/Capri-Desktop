@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('host', {
   onChatError: on('chat:error'),
   onLlmBoot: on('llm:boot'),
   onVoice: on('voice:event'),
+  onVoiceInstall: on('voice:install'),
   interruptVoice: () => ipcRenderer.send('voice:interrupt'),
   speak: (text) => ipcRenderer.invoke('capri:speak', String(text || '')),
   llmStatus: () => ipcRenderer.invoke('llm:status'),

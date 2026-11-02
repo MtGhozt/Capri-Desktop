@@ -24,6 +24,7 @@ const OPEN_HOSTS = new Set([
   'discord.gg', 'discord.com', 'www.discord.com',
   'tiktok.com', 'www.tiktok.com',
   'github.com',
+  'python.org', 'www.python.org',
   'build.nvidia.com', 'aistudio.google.com',
   'console.anthropic.com', 'console.x.ai', 'platform.openai.com',
   'ko-fi.com', 'www.ko-fi.com',

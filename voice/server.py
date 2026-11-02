@@ -352,6 +352,7 @@ class Engine:
             "debugSave": False,
             "tts": "auto",
             "ttsRef": None,
+            "ttsDesign": "voz femenina joven, juguetona, español latino, clara",
             "ttsMoods": {
                 "burla": "ref/capri_mood_burla.wav",
                 "emocion": "ref/capri_mood_emocion.wav",
@@ -1282,14 +1283,15 @@ class Engine:
     def _load_omni_bg(self) -> None:
         free, usable, _loaded = self._vram_budget()
         wav, txt = resolve_ref(ROOT, self.cfg.get("ttsRef"))
-        verify_ref_transcript(txt, log, "ttsRef")
+        if wav is not None and txt is not None:
+            verify_ref_transcript(txt, log, "ttsRef")
         mood_refs = {}
         for name, raw in dict(self.cfg.get("ttsMoods") or {}).items():
             key = str(name or "").strip().lower()
             if not key or not raw:
                 continue
             m_wav, m_txt = resolve_ref(ROOT, raw)
-            if not m_wav.is_file():
+            if m_wav is None or m_txt is None or not m_wav.is_file():
                 log(f"tts mood wav missing label={key} path={m_wav}")
                 continue
             if not verify_ref_transcript(m_txt, log, f"mood:{key}"):
@@ -1303,6 +1305,7 @@ class Engine:
             self.cfg.get("ttsSpeed"),
             tts_steps(self.cfg.get("ttsSteps")),
             mood_refs=mood_refs,
+            instruct=self.cfg.get("ttsDesign"),
         )
         try:
             omni.load(allow_cpu=str(self.cfg.get("tts") or "").lower() == "omnivoice", free_vram=usable)

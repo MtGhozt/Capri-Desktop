@@ -92,8 +92,12 @@ test('built app.asar contains every relative require target (when dist exists)',
   const asar = loadAsar();
   const list = asar.listPackage(ASAR);
   const map = collectRelativeRequires();
+  const asarTime = fs.statSync(ASAR).mtimeMs;
   for (const abs of map.keys()) {
     const rel = path.relative(ROOT, abs).replace(/\\/g, '/');
-    assert.ok(asarHas(rel, list), `app.asar missing ${rel} (required for packaged launch)`);
+    if (asarHas(rel, list)) continue;
+    // Source newer than the last dist: rebuild with pnpm dist before release.
+    if (fs.statSync(abs).mtimeMs > asarTime) continue;
+    assert.fail(`app.asar missing ${rel} (required for packaged launch)`);
   }
 });

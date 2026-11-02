@@ -27,6 +27,8 @@ OMNI_MIN_GPU_MIB = 2000
 OMNI_CPU_MAX_MS = 3000
 DEFAULT_TTS_STEPS = 16
 DEFAULT_REF = Path("ref") / "capri_ref_short.wav"
+# Public installs ship no clone wav: OmniVoice voice-design (instruct) instead.
+DEFAULT_TTS_DESIGN = "voz femenina joven, juguetona, español latino, clara"
 
 
 class SlowCpuTTS(RuntimeError):
@@ -67,13 +69,50 @@ def ref_cache_key(wav: Path, txt: Path) -> str:
     return digest.hexdigest()[:16]
 
 
-def resolve_ref(voice_dir: Path, tts_ref) -> tuple[Path, Path]:
+def resolve_ref(voice_dir: Path, tts_ref) -> tuple[Path | None, Path | None]:
+    """Wav + transcript paths, or (None, None) when Capri should use voice-design."""
     root = Path(voice_dir)
     raw = str(tts_ref).strip() if tts_ref else ""
-    wav = Path(raw) if raw else root / DEFAULT_REF
-    if not wav.is_absolute():
-        wav = root / wav
-    return wav, wav.with_suffix(".txt")
+    if raw:
+        wav = Path(raw)
+        if not wav.is_absolute():
+            wav = root / wav
+        return wav, wav.with_suffix(".txt")
+    # Local Capri clone left on disk without setting ttsRef: keep using it.
+    legacy = root / DEFAULT_REF
+    if legacy.is_file() and legacy.with_suffix(".txt").is_file():
+        return legacy, legacy.with_suffix(".txt")
+    return None, None
+
+
+def design_instruct(raw) -> str:
+    """Map ttsDesign prose to OmniVoice instruct attrs (female/age/pitch)."""
+    text = str(raw or "").strip() or DEFAULT_TTS_DESIGN
+    low = text.lower()
+    if any(tok in low for tok in ("female", "male", "young adult", "teenager", "middle-aged", "elderly")):
+        return text
+    if "女" in text or "男" in text:
+        return text
+    parts: list[str] = []
+    if any(w in low for w in ("femenina", "mujer", "female")):
+        parts.append("female")
+    elif any(w in low for w in ("masculina", "hombre", "male")):
+        parts.append("male")
+    else:
+        parts.append("female")
+    if any(w in low for w in ("niña", "niño", "child", "infantil")):
+        parts.append("child")
+    elif any(w in low for w in ("adolescente", "teenager")):
+        parts.append("teenager")
+    elif any(w in low for w in ("joven", "young")):
+        parts.append("young adult")
+    if any(w in low for w in ("juguetona", "juguetón", "alta", "aguda")):
+        parts.append("high pitch")
+    elif any(w in low for w in ("grave", "baja")):
+        parts.append("low pitch")
+    elif "clara" in low:
+        parts.append("moderate pitch")
+    return ", ".join(parts)
 
 
 def verify_ref_transcript(txt: Path, log, label: str) -> str:
@@ -208,16 +247,18 @@ class OmniVoiceTTS(TTSEngine):
         self,
         models_dir: Path,
         log,
-        wav: Path,
-        txt: Path,
+        wav: Path | None,
+        txt: Path | None,
         speed: float = 1.0,
         steps: int = DEFAULT_TTS_STEPS,
         mood_refs: dict | None = None,
+        instruct: str | None = None,
     ):
         self.models_dir = models_dir
         self.log = log
-        self.wav = wav
-        self.txt = txt
+        self.wav = Path(wav) if wav else None
+        self.txt = Path(txt) if txt else None
+        self.instruct = design_instruct(instruct)
         # { mood_name: (wav_path, txt_path) } — missing files already filtered by the caller
         self.mood_refs = dict(mood_refs or {})
         self.speed = _speed(speed)
@@ -228,6 +269,7 @@ class OmniVoiceTTS(TTSEngine):
         self._vcp = None
         self._mood_prompts: dict = {}
         self._first = True
+        self._design = False
 
     def close(self) -> None:
         self._model = None
@@ -242,24 +284,31 @@ class OmniVoiceTTS(TTSEngine):
         os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
         torch, OmniVoice, VoiceClonePrompt = import_omnivoice(self.log)
 
-        if not self.wav.is_file():
-            raise FileNotFoundError(f"tts ref missing: {self.wav}")
-        transcript = verify_ref_transcript(self.txt, self.log, "ttsRef")
-        if not transcript:
-            raise RuntimeError(f"tts ref transcript missing: {self.txt} (refusing OmniVoice ASR)")
-        for name, (mwav, mtxt) in list(self.mood_refs.items()):
-            if not mwav.is_file():
-                self.log(f"tts mood wav missing label={name} path={mwav}")
-                self.mood_refs.pop(name, None)
-                continue
-            if not verify_ref_transcript(mtxt, self.log, f"mood:{name}"):
-                self.mood_refs.pop(name, None)
+        transcript = ""
+        use_clone = bool(self.wav and self.wav.is_file())
+        if use_clone:
+            transcript = verify_ref_transcript(self.txt, self.log, "ttsRef") if self.txt else ""
+            if not transcript:
+                self.log(f"tts ref transcript missing path={self.txt}; falling back to voice-design")
+                use_clone = False
+        if use_clone:
+            for name, (mwav, mtxt) in list(self.mood_refs.items()):
+                if not mwav.is_file():
+                    self.log(f"tts mood wav missing label={name} path={mwav}")
+                    self.mood_refs.pop(name, None)
+                    continue
+                if not verify_ref_transcript(mtxt, self.log, f"mood:{name}"):
+                    self.mood_refs.pop(name, None)
+        else:
+            self.mood_refs = {}
+            self.instruct = design_instruct(self.instruct)
+            self.log(f"omnivoice voice-design instruct={self.instruct!r}")
 
         cuda_ok = bool(torch.cuda.is_available()) and int(free_vram or 0) >= OMNI_MIN_GPU_MIB
         self.log(f"omnivoice vram free ~{free_vram} MiB cuda={torch.cuda.is_available()} min={OMNI_MIN_GPU_MIB}")
         if cuda_ok:
             try:
-                self._boot(OmniVoice, VoiceClonePrompt, torch, "cuda:0", torch.float16, transcript)
+                self._boot(OmniVoice, VoiceClonePrompt, torch, "cuda:0", torch.float16, transcript, use_clone)
                 return
             except Exception as err:
                 self.close()
@@ -274,15 +323,16 @@ class OmniVoiceTTS(TTSEngine):
 
         if not allow_cpu:
             raise RuntimeError("omnivoice GPU unavailable")
-        self._boot(OmniVoice, VoiceClonePrompt, torch, "cpu", torch.float32, transcript)
+        self._boot(OmniVoice, VoiceClonePrompt, torch, "cpu", torch.float32, transcript, use_clone)
         ms = self.warmup()
         if ms > OMNI_CPU_MAX_MS:
             self.close()
             raise SlowCpuTTS(f"omnivoice CPU first phrase {ms:.0f}ms > {OMNI_CPU_MAX_MS}ms")
 
-    def _boot(self, OmniVoice, VoiceClonePrompt, torch, device: str, dtype, transcript: str) -> None:
+    def _boot(self, OmniVoice, VoiceClonePrompt, torch, device: str, dtype, transcript: str, use_clone: bool) -> None:
         self.device = device
         self._vcp = VoiceClonePrompt
+        self._design = not use_clone
         t0 = time.perf_counter()
         kwargs = {"device_map": device, "dtype": dtype, "load_asr": False}
         try:
@@ -294,12 +344,15 @@ class OmniVoiceTTS(TTSEngine):
         allocated = 0
         if device.startswith("cuda") and torch.cuda.is_available():
             allocated = int(torch.cuda.memory_allocated() / (1024 * 1024))
-        self.log(f"omnivoice loaded device={device} {load_ms:.0f}ms allocated={allocated}MiB")
-        self._prompt = self._cache_prompt(VoiceClonePrompt, self.wav, self.txt, transcript)
-        if self.mood_refs:
-            # one model for every mood: each prompt is built the first time that mood speaks
-            names = ",".join(sorted(self.mood_refs))
-            self.log(f"omnivoice moods lazy count={len(self.mood_refs)} names={names} vram_free={_free_vram_mib()}")
+        self.log(f"omnivoice loaded device={device} {load_ms:.0f}ms allocated={allocated}MiB design={self._design}")
+        if use_clone:
+            self._prompt = self._cache_prompt(VoiceClonePrompt, self.wav, self.txt, transcript)
+            if self.mood_refs:
+                # one model for every mood: each prompt is built the first time that mood speaks
+                names = ",".join(sorted(self.mood_refs))
+                self.log(f"omnivoice moods lazy count={len(self.mood_refs)} names={names} vram_free={_free_vram_mib()}")
+        else:
+            self._prompt = None
         if device.startswith("cuda"):
             self.warmup()
 
@@ -360,25 +413,30 @@ class OmniVoiceTTS(TTSEngine):
 
     def speak(self, text: str, *, mood: str | None = None, calm: bool = False) -> tuple[np.ndarray, int]:
         cleaned = clean_for_tts(text)
+        if not cleaned or self._model is None:
+            return np.zeros(0, dtype=np.float32), 24000
         # calm=True kept as alias for seria (old Electron packets)
         want = str(mood or ("seria" if calm else "") or "").strip().lower() or None
-        prompt = self._prompt_for(want) if want else None
-        key = want if prompt is not None else "playful"
-        if prompt is None:
+        prompt = self._prompt_for(want) if want and not self._design else None
+        key = want if prompt is not None else ("design" if self._design else "playful")
+        if prompt is None and not self._design:
             prompt = self._prompt
-        if not cleaned or self._model is None or prompt is None:
+        if not self._design and prompt is None:
             return np.zeros(0, dtype=np.float32), 24000
         t0 = time.perf_counter()
         # Safer / more deterministic: greedy class sampling, no position jitter.
         kwargs = {
             "text": cleaned,
-            "voice_clone_prompt": prompt,
             "speed": self.speed,
             "num_step": self.steps,
             "guidance_scale": 2.0,
             "class_temperature": 0.0,
             "position_temperature": 0.0,
         }
+        if self._design:
+            kwargs["instruct"] = self.instruct
+        else:
+            kwargs["voice_clone_prompt"] = prompt
         try:
             from omnivoice.models.omnivoice import OmniVoiceGenerationConfig
             kwargs["generation_config"] = OmniVoiceGenerationConfig(
@@ -421,6 +479,7 @@ def load_engine(
     *,
     voice_dir: Path | None = None,
     tts_ref=None,
+    tts_design=None,
     tts_speed=1.0,
     tts_steps_n=DEFAULT_TTS_STEPS,
     free_vram: int = 0,
@@ -444,10 +503,15 @@ def load_engine(
     allow_cpu = name == "omnivoice"
     if want_omni:
         wav, txt = resolve_ref(Path(voice_dir or models_dir.parent), tts_ref)
-        omni = OmniVoiceTTS(models_dir, log, wav, txt, speed, tts_steps(tts_steps_n))
+        # tts_ref null / missing files → voice-design (not TTS off)
+        omni = OmniVoiceTTS(
+            models_dir, log, wav, txt, speed, tts_steps(tts_steps_n),
+            instruct=tts_design or DEFAULT_TTS_DESIGN,
+        )
         try:
             omni.load(allow_cpu=allow_cpu, free_vram=usable)
-            return decided("omnivoice", f"gpu device={omni.device}", omni)
+            reason = f"design device={omni.device}" if omni._design else f"gpu device={omni.device}"
+            return decided("omnivoice", reason, omni)
         except SlowCpuTTS as err:
             omni.close()
             msg = f"{err}; falling back to Kokoro"

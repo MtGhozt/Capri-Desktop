@@ -880,7 +880,7 @@ body {
 .appmenu__section {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   margin: 12px 0 3px;
   padding-bottom: 3px;
@@ -1597,13 +1597,17 @@ button.appmenu__row {
   color: var(--title);
 }
 
-/* Small "?" beside a setting or a section: same plate, circular. */
+/* Small "?" beside a setting or a section: fixed circle, glyph centered (Rajdhani). */
 .appmenu__help {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
-  width: 17px;
-  height: 17px;
-  padding: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  padding: 1px 0 0;
   border: 1px solid color-mix(in srgb, var(--accent-on) 55%, transparent);
   border-radius: 50%;
   background: color-mix(in srgb, var(--title) 4%, transparent);
@@ -1611,7 +1615,7 @@ button.appmenu__row {
   font-family: var(--font-menu);
   font-size: 11px;
   font-weight: 700;
-  line-height: 15px;
+  line-height: 1;
   text-align: center;
   cursor: pointer;
   user-select: none;
@@ -1633,6 +1637,66 @@ button.appmenu__row {
   align-items: center;
   gap: 8px;
   overflow: visible;
+}
+
+.appmenu__voice-install {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 6px 4px;
+}
+
+.appmenu__voice-install-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.appmenu__voice-omni {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: color-mix(in srgb, var(--title) 78%, transparent);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.appmenu__voice-progress {
+  color: var(--accent-on);
+  font-family: var(--font-mono, var(--font-menu));
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.appmenu__voice-log {
+  margin: 0;
+  max-height: 96px;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-on) 28%, transparent);
+  background: color-mix(in srgb, var(--title) 4%, transparent);
+  color: color-mix(in srgb, var(--title) 72%, transparent);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.appmenu__voice-source {
+  color: var(--accent-on);
+  letter-spacing: 0.04em;
+}
+
+.appmenu__voice-ref {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
 }
 
 .appmenu__submenu--help {

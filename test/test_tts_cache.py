@@ -46,6 +46,24 @@ test('ref cache key changes when the wav or transcript changes', () => {
   assert.notEqual(b, c);
 });
 
+test('ttsRef null resolves to design mode, not a missing default wav', () => {
+  const out = py(
+    'from pathlib import Path; from tts import resolve_ref, design_instruct, DEFAULT_TTS_DESIGN; '
+    + 'import tempfile; '
+    + 'd=Path(tempfile.mkdtemp()); '
+    + 'print(resolve_ref(d, None)); '
+    + 'print(resolve_ref(d, "")); '
+    + 'print(design_instruct(None)); '
+    + 'print(design_instruct(DEFAULT_TTS_DESIGN))',
+  );
+  const lines = out.split(/\r?\n/);
+  assert.equal(lines[0], '(None, None)');
+  assert.equal(lines[1], '(None, None)');
+  assert.match(lines[2], /female/);
+  assert.match(lines[3], /female/);
+  assert.match(lines[3], /young adult/);
+});
+
 test('clamps OmniVoice diffusion steps', () => {
   const out = py(
     'from tts import tts_steps; print(tts_steps(None)); print(tts_steps(12)); print(tts_steps(3)); print(tts_steps(99))',

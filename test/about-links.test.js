@@ -32,6 +32,7 @@ test('open-url allowlist: discord, tiktok, Capri github; rejects random hosts', 
   assert.equal(isAllowedOpenUrl(LINKS.license), true);
   assert.equal(isAllowedOpenUrl('https://console.anthropic.com/'), true);
   assert.equal(isAllowedOpenUrl('https://ko-fi.com/someone'), true);
+  assert.equal(isAllowedOpenUrl('https://www.python.org/downloads/release/python-3119/'), true);
   assert.equal(isAllowedOpenUrl('https://evil.example/phishing'), false);
   assert.equal(isAllowedOpenUrl('https://github.com/other/repo'), false);
   assert.equal(isAllowedOpenUrl('http://discord.gg/wmVfYdjpdA'), false);
