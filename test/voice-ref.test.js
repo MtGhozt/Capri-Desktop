@@ -83,3 +83,13 @@ test('custom ref picker copies wav+txt and returns ttsRef', () => {
     'Hola choom, soy Capri.',
   );
 });
+
+test('custom ref picker loads a matching transcript file beside the wav', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-ref-'));
+  const wav = path.join(dir, 'sample.wav');
+  fs.writeFileSync(wav, 'RIFF');
+  fs.writeFileSync(path.join(dir, 'sample.txt'), 'Hola desde archivo.\n');
+  const ok = saveCustomRef({ voiceDir: dir, wavPath: wav });
+  assert.equal(ok.ok, true);
+  assert.equal(fs.readFileSync(path.join(dir, 'ref', 'my_ref.txt'), 'utf8').trim(), 'Hola desde archivo.');
+});

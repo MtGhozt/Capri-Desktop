@@ -182,6 +182,8 @@ def is_hallucination(text: str, prompt: str = STT_PROMPT) -> bool:
     words = fold_words(text)
     if not words:
         return True
+    if any(word in WAKE_NAMES for word in words):
+        return False
     if len(words) >= 3 and len(set(words)) == 1:
         return True
     allowed = set(fold_words(prompt)) | {"matias"}
@@ -579,7 +581,12 @@ class Engine:
                 if not model.lower().endswith(".onnx"):
                     download_models(model_names=[model], target_directory=str(MODELS))
                     download_models(model_names=[model])
-                wake = Model(wakeword_models=[model], inference_framework="onnx")
+                wake = Model(
+                    wakeword_models=[model],
+                    inference_framework="onnx",
+                    melspec_model_path=str(MODELS / "melspectrogram.onnx"),
+                    embedding_model_path=str(MODELS / "embedding_model.onnx"),
+                )
                 log(f"wake word {model} ready threshold={self.wake_threshold()}")
                 return wake
             except Exception as err:

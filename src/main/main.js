@@ -589,7 +589,15 @@ async function runAgentAsBrain(providerId, user, persona) {
     ? pickAuto({ installed, openIds: open, preferred: cfg.llm?.agentPreferred })
     : kind;
   if (!id) throw Object.assign(new Error('No hay un agente CLI listo en el PATH.'), { offline: true });
-  return runAgent({ id, prompt: user, persona, installed });
+  const windows = (lastWindows?.wins || [])
+    .map((w) => [w.exe || w.process, w.title].filter(Boolean).join(' — '))
+    .filter(Boolean)
+    .slice(0, 12);
+  const context = [
+    lastWindows?.fgTitle && `Ventana activa: ${lastWindows.fgTitle}`,
+    windows.length && `Apps/ventanas abiertas: ${windows.join(' | ')}`,
+  ].filter(Boolean).join('\n');
+  return runAgent({ id, prompt: context ? `${user}\n\n${context}` : user, persona, installed });
 }
 
 let pendingUpdate = null;
@@ -1400,7 +1408,9 @@ async function maybeAutoLook() {
   })) return;
   const id = String(cfg.llm?.provider || 'local');
   const model = String(cfg.llm?.model || provider(id).model || '');
-  if (!supportsVision(id, model)) return;
+  const agentCanSee = id === 'agent-gemini'
+    || (id === 'agent-auto' && detectAgents().some((a) => a.id === 'gemini' && a.ready));
+  if (!supportsVision(id, model) && !agentCanSee) return;
   if (llmBusy || overlayFolded || chatOpen || voiceTalking) return;
   const image = await snapScreenForLook();
   if (!image) return;
@@ -1440,12 +1450,17 @@ async function maybeAutoLook() {
 async function pickVoiceRefWav() {
   const parent = (settingsWindow && !settingsWindow.isDestroyed()) ? settingsWindow : overlay;
   const res = await dialog.showOpenDialog(parent, {
-    title: 'Tu voz (archivo .wav)',
+    title: 'Tu voz (.wav o transcripción .txt)',
     properties: ['openFile'],
-    filters: [{ name: 'WAV', extensions: ['wav'] }],
+    filters: [{ name: 'Audio o transcripción', extensions: ['wav', 'txt'] }],
   });
   const file = !res.canceled && res.filePaths?.[0];
   if (!file) return { ok: false, message: '' };
+  if (/\.txt$/i.test(file)) {
+    const wav = file.replace(/\.txt$/i, '.wav');
+    if (!fs.existsSync(wav)) return { ok: false, message: 'No encontré el .wav con el mismo nombre.' };
+    return { ok: true, path: wav, transcriptPath: file };
+  }
   return { ok: true, path: file };
 }
 
@@ -1456,6 +1471,7 @@ function saveVoiceRef(value = {}) {
     voiceDir: dir,
     wavPath: value?.path || value?.wav,
     transcript: value?.transcript ?? value?.text,
+    transcriptPath: value?.transcriptPath,
   });
   if (!saved.ok) return saved;
   voice?.stop();
@@ -1776,7 +1792,7 @@ function applyMenuAction(id, value) {
     case 'render': {
       if (parseRenderMode(value) !== value) return { ok: false, message: 'Esa opción de pantalla no existe.' };
       if (parseRenderMode(config.load().render) === value) return { ok: true }; // already on it
-      config.save({ render: value });
+      config.save({ render: value, visible: true });
       app.relaunch(); // read once, when Chromium starts
       app.exit(0);
       break;
@@ -2452,7 +2468,9 @@ function registerIpc() {
         }
         const pid = String(cfgLook.llm?.provider || 'local');
         const model = String(cfgLook.llm?.model || provider(pid).model || '');
-        if (!supportsVision(pid, model)) {
+        const agentCanSee = pid === 'agent-gemini'
+          || (pid === 'agent-auto' && detectAgents().some((a) => a.id === 'gemini' && a.ready));
+        if (!supportsVision(pid, model) && !agentCanSee) {
           sayWithoutLlm(NO_VISION);
           return { ok: true };
         }

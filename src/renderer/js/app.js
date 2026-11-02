@@ -140,6 +140,7 @@ async function boot() {
   let folding = false;
   let foldingAt = 0; // when the fold/unfold started: one that never ends can't hold the screen
   let droneActive = false;
+  let capriBusyAt = 0;
   let quitConfirm = false; // ¿Salir? Sí/No: whole window solid until it closes (+300 ms)
   let quitConfirmClearAt = 0;
   let lastLive = performance.now();
@@ -757,6 +758,12 @@ async function boot() {
   // Her menu and her click-through, told to main every 2 s (menu-guard.js): main keeps the window in
   // line with it, and takes the clicks back for the other windows if she stops answering.
   function beat() {
+    if (capri.busy) {
+      if (!capriBusyAt) capriBusyAt = performance.now();
+      else if (performance.now() - capriBusyAt > 12000) inputReset();
+    } else {
+      capriBusyAt = 0;
+    }
     if (!appMenu.visible && !appMenu.el.hidden) {
       console.error('[capri] menu drawn while closed: hiding it');
       appMenu.hide({ force: true });

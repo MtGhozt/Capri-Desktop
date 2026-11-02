@@ -20,6 +20,8 @@ const GAME_DIRS = [
   '\\itch\\apps\\',
 ];
 
+const NEVER_GAME_EXES = new Set(['capri.exe', 'electron.exe', 'recordly.exe']);
+
 function normalizePath(value) {
   return String(value ?? '').trim().replace(/\//g, '\\').toLowerCase();
 }
@@ -67,6 +69,7 @@ function isAllowlistedExe(exePath, apps = []) {
 function isGameExe(exePath, apps = []) {
   const exe = normalizePath(exePath);
   if (!exe) return false;
+  if (NEVER_GAME_EXES.has(exe.split('\\').pop())) return false;
   if (isIgnoredExe(exe, apps)) return false;
   if (GAME_DIRS.some((dir) => exe.includes(dir))) return true;
   return isAllowlistedExe(exe, apps);

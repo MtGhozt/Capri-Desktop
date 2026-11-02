@@ -60,6 +60,7 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
   let forced = false; // started by game mode's end even with the mic off
   let crashes = [];
   let restartTimer = null;
+  let stopping = null;
   let missing = false; // one bubble line per session, not one per Ctrl+Alt+V
   const logFile = voiceLogPath();
 
@@ -187,6 +188,14 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
 
   function start({ force = false } = {}) {
     stopped = false;
+    if (stopping) {
+      stopping.then(() => {
+        stopping = null;
+        if (!stopped) start({ force });
+      });
+      return;
+    }
+    if (child) return;
     forced = force;
     const cfg = loadConfig();
     if (!force && cfg.voice && cfg.voice.enabled === false) {
@@ -264,7 +273,15 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
     restartTimer = null;
     pendingGreet = null;
     disconnect();
+    const proc = child;
+    if (!proc) return Promise.resolve();
+    stopping = new Promise((resolve) => {
+      const done = () => resolve();
+      proc.once?.('exit', done);
+      setTimeout(done, 2000);
+    });
     killChild();
+    return stopping;
   }
 
   function setSleeping(on) {

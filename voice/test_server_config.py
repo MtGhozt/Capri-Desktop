@@ -95,6 +95,9 @@ class WakeMutedGameTests(unittest.TestCase):
 
 
 class UtteranceTests(unittest.TestCase):
+    def test_repeated_capri_is_not_dropped_as_hallucination(self):
+        self.assertFalse(server.is_hallucination("Capri Capri Capri"))
+
     def test_one_utterance_is_one_transcript(self):
         engine = server.Engine.__new__(server.Engine)
         engine._lock = __import__("threading").Lock()
@@ -292,8 +295,6 @@ class TranscriptFilterTests(unittest.TestCase):
     def test_whisper_echoes_on_silence_are_dropped(self):
         for heard in (
             "Matías, Matías, Matías.",
-            "Capri",
-            "Capri, choom",
             "Sí, sí, sí, sí",
             "   ",
         ):
@@ -302,6 +303,7 @@ class TranscriptFilterTests(unittest.TestCase):
     def test_real_speech_is_kept(self):
         for heard in (
             "Hola Capri, ¿cómo estás?",
+            "Capri, choom",
             "Pon música",
             "Sí, cuéntame",
         ):

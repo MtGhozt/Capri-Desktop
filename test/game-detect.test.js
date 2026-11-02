@@ -44,6 +44,12 @@ test('a normal program is not a game', () => {
   assert.equal(isGameExe(undefined), false);
 });
 
+test('Capri, Electron and recorders are never games', () => {
+  for (const exe of ['Capri.exe', 'electron.exe', 'Recordly.exe']) {
+    assert.equal(isGameExe(`C:\\Games\\${exe}`, [`${exe}`]), false, exe);
+  }
+});
+
 test('gaming.apps matches by exe name or path fragment', () => {
   const apps = ['Dolphin.exe', 'D:\\Roms\\Emus'];
   assert.equal(isGameExe('C:\\emu\\Dolphin.exe', apps), true);

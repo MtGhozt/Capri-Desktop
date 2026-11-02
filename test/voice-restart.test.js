@@ -25,7 +25,7 @@ function setup(t, cfg) {
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
     child.pid = 1000 + children.length;
-    child.kill = () => child.emit('exit', null);
+    child.kill = () => {};
     children.push(child);
     return child;
   };
@@ -85,6 +85,18 @@ test('stopping on purpose is not a crash', (t) => {
   t.mock.timers.tick(5000);
   assert.equal(children.length, 1);
   assert.ok(!events.some((e) => e.crashed));
+});
+
+test('a restart requested immediately after stop waits for the old sidecar', async (t) => {
+  const { voice, children } = setup(t);
+  voice.start();
+  voice.stop();
+  voice.start();
+  assert.equal(children.length, 1);
+  children[0].emit('exit', 0);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(children.length, 2);
+  voice.stop();
 });
 
 test('after too many crashes she stops trying and says so', (t) => {

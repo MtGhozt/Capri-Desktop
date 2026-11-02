@@ -21,18 +21,22 @@ function saveCustomRef({
   voiceDir,
   wavPath,
   transcript,
+  transcriptPath,
   copyFileSync = fs.copyFileSync,
   writeFileSync = fs.writeFileSync,
   mkdirSync = fs.mkdirSync,
   existsSync = fs.existsSync,
 } = {}) {
-  const text = String(transcript || '').trim();
+  const wav = String(wavPath || '').trim();
+  const sidecar = wav.replace(/\.wav$/i, '.txt');
+  const textFile = transcriptPath || (existsSync(sidecar) ? sidecar : '');
+  const text = String(transcript || (textFile && fs.readFileSync(textFile, 'utf8')) || '').trim();
   if (!text) return { ok: false, message: 'Escribí la transcripción exacta del audio.' };
   const dir = path.resolve(String(voiceDir || '').trim());
   if (!dir || !existsSync(dir)) {
     return { ok: false, message: 'Instalá o elegí la carpeta de voz primero.' };
   }
-  const src = path.resolve(String(wavPath || '').trim());
+  const src = path.resolve(wav);
   if (!src || !existsSync(src) || !/\.wav$/i.test(src)) {
     return { ok: false, message: 'Elegí un archivo .wav corto (unos 5–15 s).' };
   }
