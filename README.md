@@ -12,6 +12,21 @@ Compañera de escritorio con el personaje **Capri** (*Cyberpunk: Edgerunners 2*)
 
 ---
 
+## Próximamente
+
+Lo que viene; detalle y estado en [`docs/roadmap.md`](docs/roadmap.md):
+
+- Botón **“Instalar voz”** en Ajustes: sidecar, Whisper y TTS sin tocar la consola.
+- Capri responde **con su propia voz** desde el primer arranque (hoy el instalador público trae BLIPS).
+- Elegir la **carpeta de voz** desde Ajustes (hoy se configura a mano).
+- **Wake word** menos sensible al audio de fondo (música, videos, audífonos Bluetooth).
+- **Ver la pantalla** y **juegos** (Fase 6): mirar cuando se le pide, hablar en modo juego, detectar mandos.
+- Cerebro con **“Usar mi agente instalado” (Automático)**: aprovecha el Claude Code / OpenCode que ya tienes.
+
+Nada de esto es de pago: las donaciones, si aparecen, no desbloquean nada.
+
+---
+
 ## 1. Qué es
 
 Overlay sin bordes, siempre encima. Vive en tu escritorio: puedes arrastrarla, acariciarle la cabeza, plegarla al widget `CAPRI // DORMANT`, o dejarla en forma de máscara / biochip / dron ligero.

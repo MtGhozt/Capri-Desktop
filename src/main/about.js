@@ -2,6 +2,9 @@
 
 // Links and copy for Ajustes › Acerca de. Missing community/donate URLs stay hidden (TODO).
 
+// TODO(donate): paste the real Ko-fi URL here. While empty, the "Donar" button stays hidden.
+const KOFI_URL = '';
+
 const LINKS = {
   github: 'https://github.com/MtGhozt/Capri-Desktop',
   releases: 'https://github.com/MtGhozt/Capri-Desktop/releases',
@@ -11,7 +14,7 @@ const LINKS = {
   license: 'https://github.com/MtGhozt/Capri-Desktop/blob/main/LICENSE',
   tiktok: 'https://www.tiktok.com/@mtghozt',
   discord: 'https://discord.gg/wmVfYdjpdA',
-  kofi: '', // TODO: paste Ko-fi when ready
+  kofi: KOFI_URL,
 };
 
 const AUTHOR = 'MtGhozt';
@@ -23,6 +26,7 @@ const OPEN_HOSTS = new Set([
   'github.com',
   'build.nvidia.com', 'aistudio.google.com',
   'console.anthropic.com', 'console.x.ai', 'platform.openai.com',
+  'ko-fi.com', 'www.ko-fi.com',
 ]);
 
 function isAllowedOpenUrl(url) {
@@ -54,7 +58,7 @@ function aboutInfo({ version } = {}) {
       { id: 'issues', label: 'Reportar un bug', url: LINKS.issues },
       { id: 'changelog', label: 'Registro de cambios', url: LINKS.changelog },
     ],
-    donate: LINKS.kofi ? [{ id: 'kofi', label: 'Ko-fi', url: LINKS.kofi }] : [],
+    donate: KOFI_URL ? [{ id: 'kofi', label: 'Ko-fi', url: KOFI_URL }] : [],
     other: [
       { id: 'license', label: 'Licencia', url: LINKS.license },
       { id: 'check-updates', label: 'Buscar actualizaciones', action: 'check-updates' },
@@ -64,4 +68,4 @@ function aboutInfo({ version } = {}) {
   };
 }
 
-module.exports = { LINKS, AUTHOR, OPEN_HOSTS, isAllowedOpenUrl, aboutInfo };
+module.exports = { LINKS, KOFI_URL, AUTHOR, OPEN_HOSTS, isAllowedOpenUrl, aboutInfo };

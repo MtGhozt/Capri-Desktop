@@ -6,6 +6,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   thresholdFromPct, pctFromThreshold, normalizeAccelerator, acceleratorFromKey, sameCombo, SENS_MIN, SENS_MAX,
+  wakeSensitivity,
 } = require('../src/main/hearing');
 
 test('sensitivity % is the wake word threshold, kept inside the slider range', () => {
@@ -20,6 +21,20 @@ test('sensitivity % is the wake word threshold, kept inside the slider range', (
   assert.equal(pctFromThreshold(1.5), 20);
   assert.equal(pctFromThreshold(0.95), SENS_MAX);
   for (let p = SENS_MIN; p <= SENS_MAX; p += 5) assert.equal(pctFromThreshold(thresholdFromPct(p)), p);
+});
+
+test('Baja / Normal / Alta are three wake knobs at once, and Normal is the old behaviour', () => {
+  assert.deepEqual(wakeSensitivity('normal'), { wakeThreshold: 0.2, wakeMinSpeechMs: 200, wakeEnergy: 0.015 });
+  assert.deepEqual(wakeSensitivity(undefined), wakeSensitivity('normal')); // old configs: as before
+  assert.deepEqual(wakeSensitivity('nonsense'), wakeSensitivity('normal'));
+  // trickier to wake from Klaxon: surer of the phrase, more speech, louder energy floor
+  assert.ok(wakeSensitivity('low').wakeThreshold > wakeSensitivity('normal').wakeThreshold);
+  assert.ok(wakeSensitivity('low').wakeMinSpeechMs > wakeSensitivity('normal').wakeMinSpeechMs);
+  assert.ok(wakeSensitivity('low').wakeEnergy > wakeSensitivity('normal').wakeEnergy);
+  // easier for him, stricter with video noise
+  assert.ok(wakeSensitivity('high').wakeThreshold < wakeSensitivity('normal').wakeThreshold);
+  assert.ok(wakeSensitivity('high').wakeMinSpeechMs < wakeSensitivity('normal').wakeMinSpeechMs);
+  assert.ok(wakeSensitivity('high').wakeEnergy < wakeSensitivity('normal').wakeEnergy);
 });
 
 test('combos are written the way Electron wants them', () => {

@@ -7,6 +7,7 @@ const { menuEscapeStep } = require('../src/renderer/js/menu.js');
 
 test('Esc peels one menu layer at a time', () => {
   assert.equal(menuEscapeStep({ expanded: 'fixes' }), 'collapse-expanded');
+  assert.equal(menuEscapeStep({ helpOpen: 'brain' }), 'close-help');
   assert.equal(menuEscapeStep({ quickOpen: 'reply-mode' }), 'close-quick-submenu');
   assert.equal(menuEscapeStep({ view: 'apps' }), 'apps-to-main');
   assert.equal(menuEscapeStep({ capturing: true }), 'cancel-capture');

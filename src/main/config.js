@@ -112,6 +112,7 @@ const DEFAULTS = {
     wakeWord: true,
     wakeMode: 'both',        // 'both' | 'oww' | 'whisper': openWakeWord, spoken "capri", or both
     wakeThreshold: 0.2,
+    wakeSensitivity: 'normal', // 'low' | 'normal' | 'high': the preset that set the three wake knobs
     wakeModel: 'hey_capri',  // voice/models/hey_capri.onnx if it exists; otherwise hey_jarvis (see docs/wake-word.md)
     sttModel: 'auto',
     language: 'es',
@@ -157,8 +158,47 @@ function migratePublicReply(voice) {
   return { voice: v, changed: true };
 }
 
+// A working voice folder (or picking VOZ) turns her real voice back on after that migration.
+// A tts someone turned off by hand looks exactly the same, and the folder wins.
+function reviveMigratedTts(voice) {
+  const v = voice || {};
+  const tts = String(v.tts ?? 'off').toLowerCase();
+  if (tts !== 'off' || !v.publicReplyMigrated) return {};
+  return { tts: 'auto' };
+}
+
 function file() {
   return path.join(app.getPath('userData'), 'config.json');
+}
+
+// What config.json says right now (null if missing or unreadable). Text editors on Windows like to
+// add a BOM, and a BOM used to make the whole file "invalid" and reset every setting.
+function readSaved() {
+  try {
+    return JSON.parse(fs.readFileSync(file(), 'utf8').replace(/^\uFEFF/, ''));
+  } catch (err) {
+    if (err?.code !== 'ENOENT') {
+      // Unreadable file: keep a copy before our defaults take its place on the next save.
+      try { fs.copyFileSync(file(), `${file()}.bak`); } catch { /* nothing to keep */ }
+      console.error('[capri] config.json could not be read; kept a copy as config.json.bak');
+    }
+    return null;
+  }
+}
+
+// Disk beats the copy we keep in memory for every field a save does not touch: an edit made outside
+// Capri (voice.dir by hand, a newer install) must never be wiped by our stale copy. Arrays are values.
+function mergeSaved(current, saved) {
+  if (!saved || typeof saved !== 'object') return current;
+  const out = { ...current };
+  for (const [key, value] of Object.entries(saved)) {
+    const base = current[key];
+    out[key] = value && typeof value === 'object' && !Array.isArray(value)
+      && base && typeof base === 'object' && !Array.isArray(base)
+      ? mergeSaved(base, value)
+      : value;
+  }
+  return out;
 }
 
 function persist() {
@@ -173,48 +213,44 @@ function persist() {
 
 function load() {
   if (cache) return cache;
-  try {
-    const saved = JSON.parse(fs.readFileSync(file(), 'utf8'));
-    cache = {
-      ...DEFAULTS,
-      ...saved,
-      llm: { ...DEFAULTS.llm, ...(saved.llm || {}) },
-      updates: { ...DEFAULTS.updates, ...(saved.updates || {}) },
-      guide: { ...DEFAULTS.guide, ...(saved.guide || {}) },
-      idle: {
-        ...DEFAULTS.idle,
-        ...(saved.idle || {}),
-        widget: { ...DEFAULTS.idle.widget, ...((saved.idle && saved.idle.widget) || {}) },
-      },
-      fx: { ...DEFAULTS.fx, ...(saved.fx || {}) },
-      ui: { ...DEFAULTS.ui, ...(saved.ui || {}) },
-      gaming: { ...DEFAULTS.gaming, ...(saved.gaming || {}) },
-      greeting: { ...DEFAULTS.greeting, ...(saved.greeting || {}) },
-      comments: { ...DEFAULTS.comments, ...(saved.comments || {}) },
-      behavior: (() => {
-        const behavior = { ...DEFAULTS.behavior, ...(saved.behavior || {}) };
-        delete behavior.compact; // removed feature: ignore legacy config.json
-        return behavior;
-      })(),
-      hearing: { ...DEFAULTS.hearing, ...(saved.hearing || {}) },
-      music: {
-        ...DEFAULTS.music,
-        ...(saved.music || {}),
-        spotify: { ...DEFAULTS.music.spotify, ...((saved.music && saved.music.spotify) || {}) },
-      },
-      apps: { ...DEFAULTS.apps, ...(saved.apps || {}) },
-      voice: {
-        ...DEFAULTS.voice,
-        ...(saved.voice || {}),
-        ttsMoods: { ...DEFAULTS.voice.ttsMoods, ...((saved.voice && saved.voice.ttsMoods) || {}) },
-      },
-      position: { ...DEFAULTS.position, ...(saved.position || {}) },
-      shortcuts: { ...DEFAULTS.shortcuts, ...(saved.shortcuts || {}) },
-      clips: { ...DEFAULTS.clips, ...(saved.clips || {}) },
-    };
-  } catch {
-    cache = { ...DEFAULTS };
-  }
+  const saved = readSaved() || {};
+  cache = {
+    ...DEFAULTS,
+    ...saved,
+    llm: { ...DEFAULTS.llm, ...(saved.llm || {}) },
+    updates: { ...DEFAULTS.updates, ...(saved.updates || {}) },
+    guide: { ...DEFAULTS.guide, ...(saved.guide || {}) },
+    idle: {
+      ...DEFAULTS.idle,
+      ...(saved.idle || {}),
+      widget: { ...DEFAULTS.idle.widget, ...((saved.idle && saved.idle.widget) || {}) },
+    },
+    fx: { ...DEFAULTS.fx, ...(saved.fx || {}) },
+    ui: { ...DEFAULTS.ui, ...(saved.ui || {}) },
+    gaming: { ...DEFAULTS.gaming, ...(saved.gaming || {}) },
+    greeting: { ...DEFAULTS.greeting, ...(saved.greeting || {}) },
+    comments: { ...DEFAULTS.comments, ...(saved.comments || {}) },
+    behavior: (() => {
+      const behavior = { ...DEFAULTS.behavior, ...(saved.behavior || {}) };
+      delete behavior.compact; // removed feature: ignore legacy config.json
+      return behavior;
+    })(),
+    hearing: { ...DEFAULTS.hearing, ...(saved.hearing || {}) },
+    music: {
+      ...DEFAULTS.music,
+      ...(saved.music || {}),
+      spotify: { ...DEFAULTS.music.spotify, ...((saved.music && saved.music.spotify) || {}) },
+    },
+    apps: { ...DEFAULTS.apps, ...(saved.apps || {}) },
+    voice: {
+      ...DEFAULTS.voice,
+      ...(saved.voice || {}),
+      ttsMoods: { ...DEFAULTS.voice.ttsMoods, ...((saved.voice && saved.voice.ttsMoods) || {}) },
+    },
+    position: { ...DEFAULTS.position, ...(saved.position || {}) },
+    shortcuts: { ...DEFAULTS.shortcuts, ...(saved.shortcuts || {}) },
+    clips: { ...DEFAULTS.clips, ...(saved.clips || {}) },
+  };
   let dirty = false;
   // Older installs defaulted to English; Capri now speaks Spanish.
   if (cache.lang === 'en') {
@@ -239,7 +275,7 @@ function load() {
 }
 
 function save(patch) {
-  const current = load();
+  const current = mergeSaved(load(), readSaved());
   cache = {
     ...current,
     ...patch,
@@ -296,4 +332,4 @@ function save(patch) {
   return cache;
 }
 
-module.exports = { load, save, filePath: file, DEFAULTS, migratePublicReply };
+module.exports = { load, save, filePath: file, DEFAULTS, migratePublicReply, reviveMigratedTts };

@@ -43,6 +43,14 @@ const OWN_KEY_LINKS = {
 
 const DEFAULT_PROVIDER = 'local';
 
+// Who answers after a key is removed from the provider that was answering: the first other one
+// that still has a key, else LM Studio. Removing someone else's key changes nothing.
+function providerAfterKeyRemoved(active, removed, hasKey) {
+  if (active !== removed) return active;
+  const order = [...(BRAIN_GROUPS.free || []), ...(BRAIN_GROUPS.own || [])];
+  return order.find((id) => id !== removed && hasKey(id)) || DEFAULT_PROVIDER;
+}
+
 function provider(id) {
   return PROVIDERS[id] || PROVIDERS[DEFAULT_PROVIDER];
 }
@@ -50,6 +58,11 @@ function provider(id) {
 // Her replies leave this PC only on a cloud provider.
 function isCloud(id) {
   return !provider(id).local;
+}
+
+// Only LM Studio is booted and waited for: Ollama has its own server and the agent CLIs run themselves.
+function usesLms(id) {
+  return (PROVIDERS[id] ? id : DEFAULT_PROVIDER) === 'local';
 }
 
 function providerOptions() {
@@ -110,7 +123,9 @@ module.exports = {
   OWN_KEY_LINKS,
   DEFAULT_PROVIDER,
   provider,
+  providerAfterKeyRemoved,
   isCloud,
+  usesLms,
   isAgent,
   providerOptions,
   defaultBaseUrl,

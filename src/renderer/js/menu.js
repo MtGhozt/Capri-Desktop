@@ -2,6 +2,7 @@
 // toggles as OFF|ON blocks, selectors as ◀ value ▶, and microtext on the rails.
 
 import { clamp } from './util.js';
+import { HELP_STEPS, toggleHelp } from './help-steps.js';
 
 const REPLY_OPTIONS = [
   { id: 'voice', label: 'VOZ' },
@@ -20,8 +21,9 @@ export function unionRects(a, b) {
 }
 
 // One Esc press peels one layer; never leave a blank plate in settings.
-export function menuEscapeStep({ capturing, quickOpen, expanded, view, settingsMode } = {}) {
+export function menuEscapeStep({ capturing, helpOpen, quickOpen, expanded, view, settingsMode } = {}) {
   if (capturing) return 'cancel-capture';
+  if (helpOpen) return 'close-help';
   if (quickOpen) return 'close-quick-submenu';
   if (expanded) return 'collapse-expanded';
   if (view === 'apps') return 'apps-to-main';
@@ -89,6 +91,8 @@ export class AppMenu {
     this.settingsSection = 'model';
     this.quickOpen = null;
     this.quickAnchor = null;
+    this.helpOpen = null;
+    this.helpAnchor = null;
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -130,6 +134,13 @@ export class AppMenu {
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
         this.hide();
       }
+    }, true);
+    // A help panel closes on a click anywhere outside it and its "?".
+    window.addEventListener('mousedown', (e) => {
+      if (!this.helpOpen) return;
+      if (e.target?.closest?.('.appmenu__help, .appmenu__submenu--help')) return;
+      this.helpOpen = null;
+      this.rerender();
     }, true);
   }
 
@@ -186,6 +197,7 @@ export class AppMenu {
   onEscape() {
     const step = menuEscapeStep({
       capturing: this.capturing,
+      helpOpen: this.helpOpen,
       quickOpen: this.quickOpen,
       expanded: this.expanded,
       view: this.view,
@@ -200,6 +212,11 @@ export class AppMenu {
     if (step === 'close-quick-submenu') {
       this.quickOpen = null;
       if (this.lastState) this.renderQuick(this.lastState);
+      return step;
+    }
+    if (step === 'close-help') {
+      this.helpOpen = null;
+      if (this.lastState) this.render(this.lastState);
       return step;
     }
     if (step === 'collapse-expanded') {
@@ -230,6 +247,7 @@ export class AppMenu {
     this.opening = false;
     this.expanded = null;
     this.quickOpen = null;
+    this.helpOpen = null;
     this.confirmForget = false;
     this.el.hidden = true;
     this.capturing = false;
@@ -250,6 +268,7 @@ export class AppMenu {
   }
 
   resetApps() {
+    this.helpOpen = null;
     this.appOpen = null;
     this.appNote = '';
     this.appDelete = null;
@@ -392,17 +411,54 @@ export class AppMenu {
   placeSubmenu() {
     const menu = this.el.querySelector('.appmenu__submenu');
     if (!menu) return;
-    const main = this.el.querySelector('.appmenu__quick-plate').getBoundingClientRect();
+    const main = (this.el.querySelector('.appmenu__quick-plate') || this.el.querySelector('.appmenu__plate'))?.getBoundingClientRect();
+    if (!main) return;
     const w = menu.offsetWidth;
     const h = menu.offsetHeight;
-    const right = main.right + 8;
-    const left = main.left - w - 8;
+    // A help panel pops out right beside its "?"; a selector beside the plate, as it always did.
+    const anchor = this.helpAnchor || this.quickAnchor;
+    const right = (this.helpAnchor ? anchor.right : main.right) + 8;
+    const left = (this.helpAnchor ? anchor.left : main.left) - w - 8;
     const x = right + w <= innerWidth - 8 ? right : Math.max(8, left);
-    const anchorTop = this.quickAnchor?.top ?? main.top;
-    const anchorBottom = this.quickAnchor?.bottom ?? main.bottom;
+    const anchorTop = anchor?.top ?? main.top;
     const y = Math.min(Math.max(8, anchorTop), innerHeight - h - 8);
     menu.style.left = `${Math.round(x - main.left)}px`;
     menu.style.top = `${Math.round(y - main.top)}px`;
+  }
+
+  // The numbered steps for one "?", beside the button that opened it.
+  helpPanel(helpId, build) {
+    const help = HELP_STEPS[helpId];
+    if (!help) return null;
+    const menu = build('div', 'appmenu__submenu appmenu__submenu--help');
+    menu.dataset.help = helpId;
+    menu.append(build('div', 'appmenu__submenu-title', help.title.toUpperCase()));
+    if (help.note) menu.append(build('div', 'appmenu__hint', help.note));
+    const list = build('ol', 'appmenu__help-list');
+    for (const step of help.steps) {
+      const item = build('li', 'appmenu__help-step');
+      if (typeof step === 'string') {
+        item.textContent = step;
+      } else {
+        item.append(build('div', '', step.text));
+        const cmd = build('div', 'appmenu__help-cmd');
+        cmd.append(build('code', 'appmenu__help-code', step.command));
+        const copy = build('button', 'appmenu__toggle-btn', 'COPIAR');
+        copy.type = 'button';
+        copy.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            await navigator.clipboard.writeText(step.command);
+            copy.textContent = 'COPIADO';
+          } catch { /* no clipboard: the command is still on screen */ }
+        });
+        cmd.append(copy);
+        item.append(cmd);
+      }
+      list.append(item);
+    }
+    menu.append(list);
+    return menu;
   }
 
   renderFull(state) {
@@ -435,19 +491,56 @@ export class AppMenu {
     escape.append(kbd('ESC'), build('span', 'appmenu__key-label', 'Cerrar'));
     keys.append(escape, build('span', 'appmenu__keys-meta', 'CAPRICORN'));
 
-    const section = (title, id = title) => {
-      const heading = build('div', 'appmenu__section', title);
+    const section = (title, id = title, help = '') => {
+      const heading = build('div', 'appmenu__section');
       heading.dataset.section = id;
+      heading.append(build('span', 'appmenu__section-title', title));
+      if (help) heading.append(helpButton(help));
       body.append(heading);
     };
 
-    const action = (label, { value = '', hotkey = '', danger = false, sub = false, chevron = '', setting = '', onClick } = {}) => {
+    const helpButton = (helpId) => {
+      // A span, not a button: some rows are buttons and a nested one is invalid HTML.
+      const btn = build('span', 'appmenu__help', '?');
+      btn.setAttribute('role', 'button');
+      btn.tabIndex = 0;
+      btn.dataset.help = helpId;
+      btn.title = 'Cómo se hace';
+      btn.setAttribute('aria-expanded', String(this.helpOpen === helpId));
+      const openHelp = () => {
+        this.helpAnchor = this.helpOpen === helpId ? null : btn.getBoundingClientRect();
+        this.helpOpen = toggleHelp(this.helpOpen, helpId);
+        if (this.lastState) this.render(this.lastState);
+        requestAnimationFrame(() => this.placeSubmenu());
+      };
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openHelp();
+      });
+      btn.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        openHelp();
+      });
+      return btn;
+    };
+
+    // The "?" sits right next to its label, never taking the row's action.
+    const labelNode = (text, help = '') => {
+      if (!help) return build('span', 'appmenu__label', text);
+      const wrap = build('span', 'appmenu__label appmenu__label--help');
+      wrap.append(build('span', '', text), helpButton(help));
+      return wrap;
+    };
+
+    const action = (label, { value = '', hotkey = '', danger = false, sub = false, chevron = '', setting = '', onClick, help = '' } = {}) => {
       const row = build(onClick ? 'button' : 'div', 'appmenu__row appmenu__row--action');
       if (onClick) row.type = 'button';
       if (danger) row.classList.add('is-danger');
       if (sub) row.classList.add('appmenu__row--sub');
       if (setting) row.dataset.setting = setting;
-      row.append(build('span', 'appmenu__label', label));
+      row.append(labelNode(label, help));
       if (hotkey) row.append(kbd(hotkey));
       else if (value) row.append(build('span', 'appmenu__meta', value));
       if (chevron) {
@@ -487,11 +580,11 @@ export class AppMenu {
       body.append(row);
     };
 
-    const selector = (label, { options, current, onChange, setting = '' }, into = body) => {
+    const selector = (label, { options, current, onChange, setting = '', help = '' }, into = body) => {
       const index = Math.max(0, options.findIndex((o) => String(o.id) === String(current)));
       const row = build('div', 'appmenu__row');
       if (setting) row.dataset.setting = setting;
-      row.append(build('span', 'appmenu__label', label));
+      row.append(labelNode(label, help));
       const box = build('div', 'appmenu__select');
       const step = (delta) => onChange(options[(index + delta + options.length) % options.length].id);
       const back = build('button', 'appmenu__arrow', '◀');
@@ -539,13 +632,39 @@ export class AppMenu {
       current: cfg.micDevice,
       onChange: (id) => this.act('mic-device', id),
     });
+    selector('Sensibilidad de la palabra', {
+      options: [
+        { id: 'low', label: 'BAJA' },
+        { id: 'normal', label: 'NORMAL' },
+        { id: 'high', label: 'ALTA' },
+      ],
+      current: String(cfg.wakeSensitivity || 'normal'),
+      onChange: (id) => this.act('wake-level', id),
+    });
     selector('Respuesta', {
       options: REPLY_OPTIONS,
       current: String(cfg.replyMode || 'blips'),
       onChange: (id) => this.act('reply-mode', id),
+      help: 'voice',
     });
+    const voice = cfg.voice || { dir: '', status: '' };
+    action('Carpeta de voz', {
+      help: 'hearing',
+      value: String(voice.dir || '').split(/[\\/]/).filter(Boolean).pop() || 'SIN CARPETA',
+      onClick: async () => {
+        const res = await this.host.menuAction({ id: 'voice-dir' }).catch(() => ({ ok: false, message: 'No se pudo.' }));
+        this.voiceNote = res?.message || '';
+        await this.refresh();
+      },
+    });
+    body.append(build(
+      'div',
+      'appmenu__hint',
+      this.voiceNote || voice.dir || 'La carpeta con server.py y setup.ps1: sin ella no te escucha ni te habla.',
+    ));
+    if (voice.status) body.append(build('div', 'appmenu__hint', voice.status));
 
-    section('MÚSICA', 'music');
+    section('MÚSICA', 'music', 'spotify');
     selector('Reproductor', {
       options: [
         { id: 'namida', label: 'NAMIDA' },
@@ -576,7 +695,7 @@ export class AppMenu {
     body.append(spotify);
 
     // CEREBRO: three cards (free key / on this PC / own key) — fase 5
-    section('CEREBRO', 'model');
+    section('CEREBRO', 'model', 'brain');
     const model = state.model || {
       providers: [{ id: 'local', label: 'LM Studio' }], provider: 'local', model: '', local: true,
       groups: { free: ['gemini', 'nvidia'], local: ['local', 'ollama'], own: ['openai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'] },
@@ -806,6 +925,16 @@ export class AppMenu {
     this.filterSettingsBody(body);
     this.el.replaceChildren(plate);
     this.restoreSettingsScroll(prevScroll);
+    if (this.helpOpen) {
+      const visible = !this.settingsMode || HELP_STEPS[this.helpOpen]?.section === this.settingsSection;
+      const panel = visible ? this.helpPanel(this.helpOpen, build) : null;
+      if (panel) {
+        this.el.append(panel);
+        requestAnimationFrame(() => this.placeSubmenu());
+      } else {
+        this.helpOpen = null;
+      }
+    }
     if (this.open && this.at && !this.settingsMode) this.place();
     this.useKeyboard(this.expanded === 'fixes' || this.settingsSection === 'model' || this.capturing);
   }
@@ -1262,6 +1391,27 @@ export class AppMenu {
       return btn;
     };
 
+    // Only providers with a saved key get one, so nothing here ever shows what the key is.
+    const removeRow = (ids) => {
+      const row = build('div', 'appmenu__brain-free-links');
+      for (const id of ids.filter((pid) => hasKeys[pid])) {
+        const btn = build('button', 'appmenu__toggle-btn', `Quitar key · ${labelOf(id)}`);
+        btn.type = 'button';
+        btn.addEventListener('mousedown', (e) => e.preventDefault());
+        btn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const res = await this.host.menuAction({ id: 'model-key', value: { provider: id, key: '' } })
+            .catch(() => ({ ok: false, message: 'No se pudo quitar.' }));
+          this.probeNote = res?.message || 'Clave borrada.';
+          this.probeOk = Boolean(res?.ok);
+          await this.refresh();
+        });
+        row.append(btn);
+      }
+      return row;
+    };
+
     // —— Gratis con key ——
     const freeIds = groups.free || ['gemini', 'nvidia'];
     const freeCard = card('Gratis con key', 'Sin cobro por token (límites del sitio). Abre el enlace, copia la key y pruébala.');
@@ -1302,6 +1452,7 @@ export class AppMenu {
     freeCard.append(
       freeKey.field,
       freeModel.field,
+      removeRow(freeIds),
       probeBtn(() => ({
         provider: freeIds.includes(active) ? active : freeId,
         key: freeKey.input.value,
@@ -1366,6 +1517,7 @@ export class AppMenu {
     ownCard.append(
       ownKey.field,
       ownModel.field,
+      removeRow(ownIds.filter((id) => !freeIds.includes(id))),
       probeBtn(() => ({
         provider: ownIds.includes(active) ? active : ownId,
         key: ownKey.input.value,

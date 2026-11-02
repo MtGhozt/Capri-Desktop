@@ -878,6 +878,10 @@ body {
 }
 
 .appmenu__section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 12px 0 3px;
   padding-bottom: 3px;
   border-bottom: 1px solid color-mix(in srgb, var(--title) 22%, transparent);
@@ -1591,6 +1595,85 @@ button.appmenu__row {
 .appmenu__submenu-row.is-selected {
   background: color-mix(in srgb, var(--accent-on) 10%, transparent);
   color: var(--title);
+}
+
+/* Small "?" beside a setting or a section: same plate, circular. */
+.appmenu__help {
+  display: inline-block;
+  flex: none;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--accent-on) 55%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--title) 4%, transparent);
+  color: var(--accent-on);
+  font-family: var(--font-menu);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.appmenu__help:focus-visible {
+  outline: 1px solid var(--accent-on);
+  outline-offset: 2px;
+}
+
+.appmenu__help:hover,
+.appmenu__help[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--accent-on) 14%, transparent);
+  color: var(--title);
+}
+
+.appmenu__label--help {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  overflow: visible;
+}
+
+.appmenu__submenu--help {
+  width: 300px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
+
+.appmenu__help-list {
+  margin: 0;
+  padding: 8px 8px 4px 20px;
+  color: color-mix(in srgb, var(--title) 78%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.appmenu__help-step + .appmenu__help-step {
+  margin-top: 6px;
+}
+
+.appmenu__help-cmd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.appmenu__help-code {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  background: color-mix(in srgb, var(--title) 6%, transparent);
+  color: var(--accent-on);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  word-break: break-all;
+}
+
+.appmenu__submenu--help .appmenu__toggle-btn {
+  flex: none;
+  min-width: 0;
 }
 
 .appmenu__app-edit .appmenu__hint {

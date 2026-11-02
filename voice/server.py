@@ -58,6 +58,8 @@ DEFAULT_IDLE_UNLOAD_MIN = 10.0
 SPEECH_THRESHOLD = 0.5
 PTT_HOLD_DELAY = 0.12
 FOLLOW_MAX_S = 30.0
+WAKE_ENERGY = 0.015
+SILENT_WARN_S = 10.0
 STT_PROMPT = "Capri, choom"
 WAKE_NAMES = {"capri", "kapri", "cabri", "capry", "kapry"}
 WAKE_PREFIX = {"hey", "hola", "oye", "ey", "oi", "che", "e"}
@@ -275,12 +277,15 @@ def download(url: str, dest: Path) -> None:
 
 
 class EnergyVAD:
+    def __init__(self, threshold: float = WAKE_ENERGY):
+        self.threshold = threshold
+
     def reset(self) -> None:
         pass
 
     def prob(self, frame: np.ndarray) -> float:
         rms = float(np.sqrt(np.mean(np.square(frame), dtype=np.float32)))
-        return 1.0 if rms > 0.015 else 0.0
+        return 1.0 if rms > self.threshold else 0.0
 
 
 class SileroVAD:
@@ -337,6 +342,9 @@ class Engine:
             "wakeWord": True,
             "wakeMode": "both",
             "wakeThreshold": WAKE_THRESHOLD,
+            "wakeSensitivity": "normal",
+            "wakeMinSpeechMs": WAKE_MIN_SPEECH_MS,
+            "wakeEnergy": WAKE_ENERGY,
             "wakeModel": "hey_capri",
             "sttModel": "auto",
             "language": "es",
@@ -390,6 +398,8 @@ class Engine:
         self._models_lock = threading.Lock()
         self._cfg_ready = False
         self._level_t = 0.0
+        self._quiet_since = 0.0
+        self._quiet_logged = False
         self._wake_log_t = 0.0
         self._wake_logged_shape = False
         self._stt_beam = 5
@@ -436,6 +446,14 @@ class Engine:
         for key in self.cfg:
             if key in patch:
                 self.cfg[key] = patch[key]
+        if any(k in patch for k in ("wakeSensitivity", "wakeThreshold", "wakeMinSpeechMs", "wakeEnergy")):
+            log(
+                f"wake config sensitivity={self.cfg.get('wakeSensitivity')} "
+                f"threshold={self.wake_threshold():.2f} min_speech_ms={self.wake_min_speech_ms():.0f} "
+                f"energy={self.wake_energy():.3f}"
+            )
+        if "wakeEnergy" in patch and isinstance(self._vad, EnergyVAD):
+            self._vad.threshold = self.wake_energy()
         now = time.monotonic()
         if bool(self.cfg.get("sleeping")):
             if not was_sleeping:
@@ -516,7 +534,7 @@ class Engine:
                     log("silero vad ready")
                 except Exception as err:
                     log(f"silero vad fallback to energy: {err}")
-                    self._vad = EnergyVAD()
+                    self._vad = EnergyVAD(self.wake_energy())
             if self._wake is None and self.cfg.get("wakeWord") and self.wake_mode() != "whisper":
                 self._wake = self._load_wake()
             if self._whisper is None:
@@ -643,6 +661,21 @@ class Engine:
             return max(value, WAKE_WHILE_TALKING)
         return value
 
+    def wake_min_speech_ms(self) -> float:
+        """Wake sensitivity (Baja/Normal/Alta) also moves how much speech counts as an utterance."""
+        try:
+            value = float(self.cfg.get("wakeMinSpeechMs"))
+        except (TypeError, ValueError):
+            value = WAKE_MIN_SPEECH_MS
+        return value if 50.0 <= value <= 2000.0 else WAKE_MIN_SPEECH_MS
+
+    def wake_energy(self) -> float:
+        try:
+            value = float(self.cfg.get("wakeEnergy"))
+        except (TypeError, ValueError):
+            value = WAKE_ENERGY
+        return value if 0.0005 <= value <= 0.2 else WAKE_ENERGY
+
     def _set_speaking(self, on: bool) -> None:
         on = bool(on)
         if on == bool(self._speaking):
@@ -740,6 +773,12 @@ class Engine:
                 device = int(raw)
             except (TypeError, ValueError):
                 device = None
+        if device is None:
+            try:
+                if not [d for d in sd.query_devices() if int(d.get("max_input_channels") or 0) > 0]:
+                    log("mic: no input device found")
+            except Exception:
+                pass
         # shared mode: exclusive WASAPI would lock the mic away from push-to-talk apps
         extra = wasapi_extra_settings(device)
         try:
@@ -886,6 +925,15 @@ class Engine:
                 break
             now = time.monotonic()
             rms = float(np.sqrt(np.mean(np.square(chunk), dtype=np.float32)))
+            if rms < 0.001 and self.stream_needed():
+                if not self._quiet_since:
+                    self._quiet_since = now
+                elif not self._quiet_logged and now - self._quiet_since >= SILENT_WARN_S:
+                    self._quiet_logged = True
+                    log("mic silent: 10 s of near-silence (muted device, wrong input, or nothing reaching Capri)")
+            else:
+                self._quiet_since = 0.0
+                self._quiet_logged = False
             if now - self._level_t > 0.1 and self.capturing:
                 self._level_t = now
                 self.broadcast({"type": "level", "rms": min(1.0, rms * 8)})
@@ -1513,7 +1561,7 @@ class Engine:
             else:
                 self.wake_silence_ms += dt
         ended = (
-            self.wake_speech_ms >= WAKE_MIN_SPEECH_MS
+            self.wake_speech_ms >= self.wake_min_speech_ms()
             and self.wake_silence_ms >= WAKE_SILENCE_MS
         )
         duration = self.wake_audio.size / SAMPLE_RATE
@@ -1543,7 +1591,7 @@ class Engine:
             return
         command = wake_command_text(text)
         if command is None:
-            log(f"wake whisper miss {text!r}")
+            log(f"wake miss: heard {text!r} (no Capri at the start)")
             return
         if self.capturing:
             # openWakeWord beat us to it: one transcript, not two

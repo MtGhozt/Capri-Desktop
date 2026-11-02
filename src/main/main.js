@@ -9,12 +9,14 @@ const {
 } = require('electron');
 
 const config = require('./config');
+const { reviveMigratedTts } = require('./config');
 const { TRAY, LANGS } = require('./labels');
 const { createBridge } = require('./bridge');
 const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
 const {
-  PROVIDERS, providerOptions, isCloud, isAgent, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS,
+  PROVIDERS, providerOptions, isCloud, usesLms, isAgent, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS,
+  providerAfterKeyRemoved,
 } = require('./chat-providers');
 const { probeProvider } = require('./llm-probe');
 const { checkForUpdate } = require('./updates');
@@ -23,7 +25,7 @@ const { detectAgents, pickAuto, openAgentIds, runAgent } = require('./agent-brai
 const { switchProvider, setProviderModel, modelForProvider } = require('./chat-models');
 const { parseRenderMode, renderSwitches } = require('./render-mode');
 const { createLms } = require('./lms');
-const { createVoice } = require('./voice');
+const { createVoice, checkVoiceDir } = require('./voice');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
 const { isQuitCommand } = require('./quit-command');
@@ -41,7 +43,7 @@ const { createSpotify, createTokenStore, authorizeSpotify, spotifyFailureLine } 
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
 const { parseFixCommand, readTranscript } = require('./fix-command');
-const { stripWakeWord } = require('./command-text');
+const { stripWakeWord, wakeTranscriptOk } = require('./command-text');
 const { GREETINGS, pickGreeting } = require('./greetings');
 const { windowContext } = require('./context');
 const { createComments } = require('./comments');
@@ -49,10 +51,10 @@ const { createGameMode } = require('./game-mode');
 const { vramText } = require('./vram');
 const { logEvent, voiceLogPath } = require('./log');
 const { saveClip, openClipsFolder, clipFolderLabel } = require('./clips');
-const { micActive } = require('./voice-config');
+const { micActive, voiceStatus: ttsStatus } = require('./voice-config');
 const { createFollowUp } = require('./follow-up');
 const {
-  SENS_MIN, SENS_MAX, SENS_STEP, thresholdFromPct, pctFromThreshold,
+  SENS_MIN, SENS_MAX, SENS_STEP, thresholdFromPct, pctFromThreshold, wakeSensitivity,
   normalizeAccelerator, acceleratorFromKey, sameCombo,
 } = require('./hearing');
 const { createAppFlow } = require('./app-flow');
@@ -104,6 +106,7 @@ let voice = null;
 let speakQueue = null;
 let comments = null;
 let ttsLoading = false;
+let lastTts = null; // last tts_state from the sidecar: engine ('off' | 'kokoro' | 'omnivoice') + state
 let voiceTalking = false;
 let voiceListening = false;
 let voiceMic = { open: true, needed: true, message: '' };
@@ -892,6 +895,11 @@ const hearingFixes = () => cleanFixes(config.load().hearing?.fixes);
 // as said: "cuando digo jarbis quiero decir Jarvis" must still say jarbis.
 function hearTranscript(payload) {
   const said = String(payload?.text || '');
+  // A whisper wake must open with "Capri": video speech that mentions her midway is not an order.
+  if (payload?.wake === 'whisper' && !wakeTranscriptOk(said)) {
+    logEvent(voiceLogPath(), `[capri] wake miss: heard ${JSON.stringify(said.slice(0, 200))} (no Capri at the start)`);
+    return { ...payload, missed: true };
+  }
   const read = readTranscript(said, hearingFixes());
   if (!read.order && said.trim()) lastHeard = said.trim();
   // what Whisper wrote, so a command that went to the model can be traced (and fixed)
@@ -972,19 +980,23 @@ const spotify = createSpotify({ token: () => spotifyAccessToken });
 
 // Cloud chat keys, kept encrypted with your Windows account in their own file: never in config.json,
 // never in a log (Paso 4K). Same store as Spotify's tokens.
-const llmKeys = () => createTokenStore({
-  file: path.join(app.getPath('userData'), 'llm-keys'),
-  safeStorage,
-});
+const llmKeysFile = () => path.join(app.getPath('userData'), 'llm-keys');
+const llmKeys = () => createTokenStore({ file: llmKeysFile(), safeStorage });
 function llmKey(id) {
   return String(llmKeys().read()?.[id] || '');
 }
 function saveLlmKey(id, key) {
-  const all = llmKeys().read() || {};
+  const all = llmKeys().read();
+  // A file we cannot decrypt keeps every key in it: writing just this one would wipe the rest.
+  if (!all && fs.existsSync(llmKeysFile())) {
+    console.error('[capri] llm-keys could not be decrypted; left it untouched');
+    return null;
+  }
+  const next = all || {};
   const clean = String(key || '').trim();
-  if (clean) all[id] = clean;
-  else delete all[id];
-  llmKeys().write(all);
+  if (clean) next[id] = clean;
+  else delete next[id];
+  llmKeys().write(next);
   return Boolean(clean);
 }
 
@@ -1241,6 +1253,23 @@ async function pickProgram() {
   });
 }
 
+// Ajustes › AUDIO: her voice folder chosen with a dialog instead of hand-editing config.json.
+// A folder that cannot run (no server.py / no .venv) is refused and the config is left alone.
+async function pickVoiceDir() {
+  const res = await dialog.showOpenDialog(overlay, {
+    title: 'Carpeta de voz',
+    properties: ['openDirectory'],
+  });
+  const chosen = !res.canceled && res.filePaths?.[0];
+  if (!chosen) return { ok: false, message: '' };
+  const check = checkVoiceDir(chosen);
+  if (!check.ok) return check;
+  voice?.stop(); // applyConfig below brings it back up on the new folder
+  updateConfig({ voice: { dir: check.dir, ...reviveMigratedTts(config.load().voice) } });
+  const says = String(config.load().voice?.replyMode || 'blips') === 'voice' ? '' : ' Elegí VOZ en Respuesta para que te hable.';
+  return { ok: true, message: `Voz en ${path.basename(check.dir)}.${says}` };
+}
+
 function addLink(value = {}) {
   const name = String(value.name || '').trim();
   if (!name) return { ok: false, message: 'Ponle un nombre.' };
@@ -1346,6 +1375,11 @@ function voiceReplyOn() {
   return kind !== 'off' && kind !== 'none' && kind !== 'false';
 }
 
+// Ajustes › AUDIO: the shared helper (voice-config.js) with what only main knows.
+function voiceStatus(cfg) {
+  return ttsStatus(cfg, { running: voice?.running?.(), tts: lastTts });
+}
+
 function commentRange(value, fallbackMinutes) {
   const minutes = Number(value);
   const safe = Number.isFinite(minutes) && minutes > 0 ? minutes : fallbackMinutes;
@@ -1408,6 +1442,13 @@ function setChatKey(value) {
   const provider = String(value?.provider || config.load().llm?.provider || 'local');
   if (!PROVIDERS[provider] || PROVIDERS[provider].local) return { ok: false, message: 'Ese proveedor no usa clave.' };
   const saved = saveLlmKey(provider, value?.key);
+  if (saved === null) return { ok: false, message: 'No pude leer las claves guardadas; no toqué nada.' };
+  if (!saved) {
+    // A removed key that was answering hands her to someone who still has one.
+    const active = String(config.load().llm?.provider || 'local');
+    const next = providerAfterKeyRemoved(active, provider, (pid) => Boolean(llmKey(pid)));
+    if (next !== active) setChatProvider(next);
+  }
   return { ok: true, hasKey: saved, message: saved ? 'Clave guardada.' : 'Clave borrada.' };
 }
 
@@ -1460,7 +1501,15 @@ function applyMenuAction(id, value) {
     case 'wake': goWakeReply({ chat: false }); break;
     case 'scale': updateConfig({ scale: Number(value) }); break;
     case 'muted': updateConfig({ muted: Boolean(value) }); break;
-    case 'reply-mode': updateConfig({ voice: { replyMode: String(value || 'blips') } }); break;
+    case 'reply-mode':
+      // Picking VOZ starts OmniVoice loading now, not a stale "off" from the blips it was using.
+      if (value === 'voice') lastTts = { engine: 'omnivoice', state: 'loading' };
+      updateConfig({ voice: {
+        replyMode: String(value || 'blips'),
+        ...(value === 'voice' ? reviveMigratedTts(config.load().voice) : {}),
+      } });
+      break;
+    case 'voice-dir': return pickVoiceDir().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
     case 'music-player':
       updateConfig({ music: { player: ['namida', 'spotify', 'none'].includes(value) ? value : 'namida' } });
       break;
@@ -1555,6 +1604,10 @@ function applyMenuAction(id, value) {
     case 'menu-keyboard': menuKeyboardOn(Boolean(value)); break;
     case 'wake-sensitivity':
       updateConfig({ voice: { wakeThreshold: thresholdFromPct(value) } }); // live: the sidecar gets the new config
+      break;
+    case 'wake-level':
+      // The preset sets every wake knob at once; the % slider above stays the fine knob.
+      updateConfig({ voice: { wakeSensitivity: String(value || 'normal'), ...wakeSensitivity(value) } });
       break;
     case 'talk-hotkey': return setTalkHotkey(value);
     case 'apps-pick-program': return pickProgram().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
@@ -1736,6 +1789,11 @@ function menuState(extra = {}) {
       mic: micActive(cfg),
       micDevice: cfg.voice?.inputDevice ?? null,
       replyMode: String(cfg.voice?.replyMode || 'blips'),
+      wakeSensitivity: String(cfg.voice?.wakeSensitivity || 'normal'),
+      voice: {
+        dir: String(cfg.voice?.dir || ''),
+        status: voiceStatus(cfg),
+      },
       locked: Boolean(cfg.position?.locked),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
       gaming: {
@@ -2118,8 +2176,9 @@ function registerIpc() {
     if (overlayFolded || isWakeCommand(line)) return goWakeReply();
     const appOrder = await apps().command(line); // "abre Discord", "cierra Spotify"
     if (appOrder) return appReply(appOrder);
-    // the local stack is only waited for when it is the one who answers
-    if (!isCloud(config.load().llm?.provider)) {
+    // the local stack is only waited for when LM Studio is the one who answers: an agent CLI or
+    // Ollama run on their own, and LM Studio may not even be installed
+    if (usesLms(config.load().llm?.provider)) {
       const boot = await lms.whenReady();
       if (boot === 'failed') {
         overlay.webContents.send('chat:error', { kind: 'offline', text: 'No pude despertar LM Studio. Revisa que esté instalado y vuelve a intentarlo.' });
@@ -2319,6 +2378,7 @@ function main() {
       },
       onFallback: (line) => sendCommand('box-log', { kind: 'sistema', text: line }),
       ensureLocal: () => lms?.whenReady(),
+      localInstalled: () => (lms ? lms.installed() : undefined),
     });
     lms = createLms({
       loadConfig: () => config.load(),
@@ -2338,6 +2398,7 @@ function main() {
             : event?.type === 'voice-failed'
               ? { type: 'notice', level: 'error', message: t.voiceFailed }
               : event;
+        if (payload?.missed) return; // background audio said "Capri", she was not called
         if (payload?.type === 'transcript') {
           if (payload.followUp) comments?.heard();
           followUp.heard({ followUp: Boolean(payload.followUp) });
@@ -2347,7 +2408,14 @@ function main() {
           logEvent(voiceLogPath(), '[capri] follow-up closed: nobody answered');
           comments?.missed();
         }
-        if (payload?.type === 'tts_state') ttsLoading = payload.state === 'loading';
+        if (payload?.type === 'tts_state') {
+          ttsLoading = payload.state === 'loading';
+          lastTts = { engine: String(payload.engine || ''), state: String(payload.state || '') };
+          // replyMode=voice with nothing to speak with: the technical reason is already in the log
+          // (sidecar side); say which state was reached and why she stays quiet.
+          const quiet = voiceStatus(config.load());
+          if (quiet) logEvent(voiceLogPath(), `[capri] replyMode=voice, tts engine=${lastTts.engine || '?'} state=${lastTts.state || '?'}: ${quiet}`);
+        }
         if (payload?.type === 'talking') voiceTalking = true;
         if (payload?.type === 'talking_done' || payload?.type === 'stopped') {
           voiceTalking = false;

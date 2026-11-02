@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { DEFAULTS, migratePublicReply } = require('../src/main/config');
+const { DEFAULTS, migratePublicReply, reviveMigratedTts } = require('../src/main/config');
 
 test('fresh defaults are blips with TTS off', () => {
   assert.equal(DEFAULTS.voice.replyMode, 'blips');
@@ -41,4 +41,14 @@ test('already-migrated or intentional blips/silent are not rewritten', () => {
   const blips = migratePublicReply({ replyMode: 'blips', tts: 'off' });
   assert.equal(blips.voice.replyMode, 'blips');
   assert.equal(blips.changed, true); // flag stamped once
+});
+
+test('a real voice folder turns the migrated tts back on', () => {
+  const migrated = { replyMode: 'blips', tts: 'off', publicReplyMigrated: true };
+  assert.deepEqual(reviveMigratedTts(migrated), { tts: 'auto' });
+});
+
+test('a tts already on, or never migrated, is left alone', () => {
+  assert.deepEqual(reviveMigratedTts({ tts: 'auto', publicReplyMigrated: true }), {});
+  assert.deepEqual(reviveMigratedTts({ tts: 'off' }), {}); // no migration flag: nothing to revive
 });

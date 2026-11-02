@@ -36,6 +36,15 @@ function resolveVoiceDir(root, cfg) {
   return null;
 }
 
+// A folder can only run her voice with server.py and its own .venv (setup.ps1 makes both).
+function checkVoiceDir(raw) {
+  const dir = path.resolve(String(raw || '').trim());
+  if (!fs.existsSync(path.join(dir, 'server.py')) || !resolvePython(dir)) {
+    return { ok: false, message: 'Falta instalar la voz: corré setup.ps1 en esa carpeta.' };
+  }
+  return { ok: true, dir };
+}
+
 function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
   let child = null;
   let ws = null;
@@ -324,4 +333,4 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
   };
 }
 
-module.exports = { createVoice, resolveVoiceDir };
+module.exports = { createVoice, resolveVoiceDir, checkVoiceDir };

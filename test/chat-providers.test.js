@@ -6,8 +6,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  PROVIDERS, BRAIN_GROUPS, FREE_KEY_LINKS, providerOptions, provider, isCloud,
-  defaultBaseUrl, requestFor, explain,
+  PROVIDERS, BRAIN_GROUPS, FREE_KEY_LINKS, providerOptions, provider, isCloud, usesLms,
+  defaultBaseUrl, requestFor, explain, providerAfterKeyRemoved,
 } = require('../src/main/chat-providers');
 
 const LOCAL = 'http://localhost:1235/v1';
@@ -37,6 +37,18 @@ test('providers: two local, free NVIDIA/Gemini, own-key clouds, and agent CLIs',
   assert.equal(FREE_KEY_LINKS.gemini.recommended, true); // UI: ★ on link, "recomendado" only on Gemini chip
   assert.equal(FREE_KEY_LINKS.nvidia.recommended, undefined);
   assert.deepEqual(providerOptions().map((p) => p.id), Object.keys(PROVIDERS));
+});
+
+test('LM Studio is only booted and waited for when it is the one who answers', () => {
+  assert.equal(usesLms('local'), true);
+  assert.equal(usesLms(undefined), true); // no provider set = default, LM Studio
+  assert.equal(usesLms('ollama'), false); // its own server
+  assert.equal(usesLms('agent-claude'), false);
+  assert.equal(usesLms('agent-auto'), false);
+  assert.equal(usesLms('agent-opencode'), false);
+  assert.equal(usesLms('gemini'), false);
+  // unchanged: an agent answers on this PC even though LM Studio is not needed
+  assert.equal(isCloud('agent-claude'), false);
 });
 
 test("LM Studio request: home port, no key, Gemma must not think out loud", () => {
@@ -117,4 +129,14 @@ test('no sentence ever repeats what the server said or the key', () => {
   const said = explain(err, 'openai');
   assert.ok(!said.includes('sk-secret'));
   assert.ok(!said.includes('{'));
+});
+
+test('removing the active provider key moves to the first one that still has a key', () => {
+  const saved = { gemini: true, anthropic: true };
+  // anthropic was answering, its key is gone: Gemini (free, first) answers
+  assert.equal(providerAfterKeyRemoved('anthropic', 'anthropic', (id) => saved[id] && id !== 'anthropic'), 'gemini');
+  // nobody else has one: back to LM Studio
+  assert.equal(providerAfterKeyRemoved('anthropic', 'anthropic', () => false), 'local');
+  // a key that was not the one answering changes nothing
+  assert.equal(providerAfterKeyRemoved('gemini', 'anthropic', () => false), 'gemini');
 });

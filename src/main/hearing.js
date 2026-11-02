@@ -25,6 +25,18 @@ function pctFromThreshold(threshold) {
   return clampPct(t * 100);
 }
 
+// Baja / Normal / Alta in Ajustes › AUDIO: the three knobs the sidecar reads, set together.
+// Normal is the old behaviour (openWakeWord 0.2, 200 ms of speech, energy VAD at 0.015).
+const WAKE_LEVELS = {
+  low: { wakeThreshold: 0.35, wakeMinSpeechMs: 300, wakeEnergy: 0.02 },
+  normal: { wakeThreshold: DEFAULT_THRESHOLD, wakeMinSpeechMs: 200, wakeEnergy: 0.015 },
+  high: { wakeThreshold: 0.12, wakeMinSpeechMs: 150, wakeEnergy: 0.01 },
+};
+
+function wakeSensitivity(level) {
+  return WAKE_LEVELS[String(level || '').toLowerCase()] || WAKE_LEVELS.normal;
+}
+
 // Electron accelerators: modifiers, then one key.
 const MODS = [
   ['Ctrl', /^(?:ctrl|control|cmdorctrl|commandorcontrol)$/i],
@@ -103,5 +115,6 @@ const sameCombo = (a, b) => {
 
 module.exports = {
   SENS_MIN, SENS_MAX, SENS_STEP, DEFAULT_THRESHOLD,
-  thresholdFromPct, pctFromThreshold, normalizeAccelerator, acceleratorFromKey, sameCombo,
+  thresholdFromPct, pctFromThreshold, WAKE_LEVELS, wakeSensitivity,
+  normalizeAccelerator, acceleratorFromKey, sameCombo,
 };

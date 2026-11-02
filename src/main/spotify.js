@@ -20,7 +20,12 @@ function createTokenStore({ file, safeStorage } = {}) {
     try {
       const raw = fs.readFileSync(file, 'utf8');
       return JSON.parse(safeStorage?.isEncryptionAvailable?.() ? safeStorage.decryptString(Buffer.from(raw, 'base64')) : raw);
-    } catch { return null; }
+    } catch (err) {
+      // Say it: a file we cannot decrypt is not "no tokens", and callers must not overwrite it.
+      // Only the error kind: the raw contents of a key file never go near a log.
+      if (err?.code !== 'ENOENT') console.error('[capri] could not read saved tokens:', err.code || err.name || 'unknown');
+      return null;
+    }
   }
   function write(tokens) {
     const raw = JSON.stringify(tokens);

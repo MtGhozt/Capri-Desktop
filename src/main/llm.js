@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
-const { PROVIDERS, isCloud, isAgent, requestFor, explain } = require('./chat-providers');
+const { PROVIDERS, BRAIN_GROUPS, isCloud, isAgent, requestFor, explain, provider } = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
 const { stripReplyTags, createMoodStripper } = require('./mood-tag');
@@ -9,6 +9,11 @@ const { stripReplyTags, createMoodStripper } = require('./mood-tag');
 const HISTORY_LIMIT = 20; // ~10 user+assistant turns
 const TIMEOUT_MS = 45000;
 const LOCAL_TZ = 'America/Costa_Rica';
+
+// 401/403 is a key problem: retrying it costs another wait and fails the same way.
+function isAuthError(err) {
+  return err?.status === 401 || err?.status === 403;
+}
 
 function temporalContext({ now = new Date(), lastTalkAt = null } = {}) {
   const parts = new Intl.DateTimeFormat('es-CR', {
@@ -33,13 +38,16 @@ function temporalContext({ now = new Date(), lastTalkAt = null } = {}) {
 
 function createLlm({
   loadConfig, personaPath, memoryPath, apiKey, screenContext, onFallback, ensureLocal,
-  runAgentChat, now = () => new Date(),
+  runAgentChat, localInstalled, now = () => new Date(),
 } = {}) {
   let history = [];
   let abort = null;
   let persona = null;
   let memory = null;
   let lastTalkAt = null;
+  // A key the provider already refused is not asked again this session: every message would pay
+  // the same wait.
+  const deadProviders = new Set();
 
   function readFile(file, fallback = '') {
     try {
@@ -120,6 +128,25 @@ function createLlm({
   function cancel() {
     abort?.abort();
     abort = null;
+  }
+
+  // The free ones (Gemini first) then the paid ones: a saved key answers before LM Studio is
+  // booted, which takes minutes. No key, no turn.
+  function fallbackChain(from) {
+    const order = [...(BRAIN_GROUPS.free || []), ...(BRAIN_GROUPS.own || [])];
+    return order.filter((id, index) => order.indexOf(id) === index
+      && id !== from && !isAgent(id) && !deadProviders.has(id) && apiKey?.(id));
+  }
+
+  function providerLabel(id) {
+    return provider(id).label;
+  }
+
+  // Who she moved to, in one line. An auth failure says only the key is wrong.
+  function movedTo(from, to, err) {
+    return isAuthError(err)
+      ? `La key de ${providerLabel(from)} no funciona, usando ${providerLabel(to)}.`
+      : `${explain(err, from)} Te contesto con ${providerLabel(to)} mientras tanto.`;
   }
 
   // OpenAI-style streaming (server-sent events): onToken as each piece comes, all of it at the end.
@@ -231,9 +258,9 @@ function createLlm({
       return full;
     };
 
-    const result = (outcome) => ({
-      provider: id,
-      model: modelFor(cfg, id),
+    const result = (outcome, used = id) => ({
+      provider: used,
+      model: modelFor(cfg, used),
       outcome,
       ms: Date.now() - started,
     });
@@ -253,36 +280,54 @@ function createLlm({
       onDone({ text: finalText, mood, action });
     };
 
-    const fail = (err) => {
+    const fail = (err, who = id) => {
       clearTimeout(timer);
       if (signal.aborted && !timedOut) return; // you stopped her
-      onError({ kind: 'offline', text: timedOut ? 'Se tardó demasiado en contestar.' : explain(err, id) });
+      onError({ kind: 'offline', text: timedOut ? 'Se tardó demasiado en contestar.' : explain(err, who) });
     };
 
-    if (isAgent(id) && typeof runAgentChat === 'function') {
-      try {
-        const text = await runAgentChat({ provider: id, user, signal });
+    // One turn to whoever answers: an agent CLI on this PC, or an OpenAI-compatible server.
+    const attempt = async (target) => {
+      if (isAgent(target) && typeof runAgentChat === 'function') {
+        const text = await runAgentChat({ provider: target, user, signal });
         const cleaned = stripReplyTags(String(text || ''));
         if (!cleaned.text.trim()) throw Object.assign(new Error('empty'), { code: 'empty' });
         streamed = true;
         onToken(cleaned.text);
-        done(cleaned.text);
-        return result('ok');
-      } catch (err) {
-        if (signal.aborted && !timedOut) {
-          clearTimeout(timer);
-          return null;
+        return cleaned.text;
+      }
+      return ask(target);
+    };
+
+    // A local model only answers when its CLI is installed: booting it takes minutes otherwise.
+    const askLocal = async () => {
+      if (localInstalled?.() === false) throw Object.assign(new Error('offline'), { offline: true });
+      await ensureLocal?.();
+      return attempt('local');
+    };
+
+    let start = isAgent(id) || cloud ? id : 'local';
+    if (deadProviders.has(start) && start !== 'local') {
+      // Its key already failed: answer with another saved one, never paying the same wait again.
+      const next = fallbackChain(start)[0];
+      if (next) start = next;
+      else {
+        try {
+          const text = await askLocal();
+          done(text);
+          return result('fallback', 'local');
+        } catch {
+          fail({ status: 401 }, id);
+          return result('failed', id);
         }
-        fail(err);
-        return result('failed');
       }
     }
 
     let error = null;
     try {
-      const text = await ask(cloud ? id : 'local');
+      const text = await attempt(start);
       done(text);
-      return result('ok');
+      return result(start === id ? 'ok' : 'fallback', start);
     } catch (err) {
       error = err;
     }
@@ -290,24 +335,43 @@ function createLlm({
       clearTimeout(timer); // you stopped her: nothing left to say
       return null;
     }
+    if (isAuthError(error)) deadProviders.add(start);
 
-    // The cloud is down (no network, a limit, a dead key): the local model answers instead, and she
-    // says so in her message box. Nothing streamed yet, or the two answers would mix.
-    if (cloud && !streamed) {
-      const why = explain(error, id);
-      onFallback?.(`${why} Te contesto con ${PROVIDERS.local.label} mientras tanto.`);
+    // It gave up before a word (no network, a limit, a dead key): another saved key answers before
+    // LM Studio is booted. Nothing streamed yet, or the two answers would mix.
+    if (!streamed && start !== 'local') {
+      for (const target of fallbackChain(start)) {
+        try {
+          const text = await attempt(target);
+          onFallback?.(movedTo(start, target, error));
+          done(text);
+          return result('fallback', target);
+        } catch (err) {
+          if (signal.aborted && !timedOut) {
+            clearTimeout(timer);
+            return null;
+          }
+          if (streamed) { // she already said half an answer: never mix in another voice
+            fail(err, target);
+            return result('failed', target);
+          }
+          if (isAuthError(err)) deadProviders.add(target);
+          error = err;
+        }
+      }
+      // Last resort: the local model, and only when it is installed.
       try {
-        await ensureLocal?.();
-        const text = await ask('local');
+        const text = await askLocal();
+        onFallback?.(movedTo(start, 'local', error));
         done(text);
-        return result('fallback');
+        return result('fallback', 'local');
       } catch {
-        fail(error);
-        return result('failed');
+        fail(error, start);
+        return result('failed', start);
       }
     }
-    fail(error);
-    return result('failed');
+    fail(error, start);
+    return result('failed', start);
   }
 
   return { chat, cancel, reset, rememberAssistant, reloadPersona, personaText };

@@ -7,7 +7,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { stripWakeWord, normalizeCommandText } = require('../src/main/command-text');
+const { stripWakeWord, normalizeCommandText, wakeWordAtStart, wakeTranscriptOk } = require('../src/main/command-text');
 const { parseMusicCommand } = require('../src/main/music-command');
 
 test('the wake word comes off the order, in any of its forms', () => {
@@ -39,6 +39,27 @@ test('typed orders drop the wake word too, greeting included', () => {
   assert.equal(normalizeCommandText('Hey Capri, pon música'), 'pon musica');
   assert.equal(normalizeCommandText('Hola Capri, abre Discord'), 'abre discord');
   assert.equal(normalizeCommandText('Oye Capri… silencio'), 'silencio');
+});
+
+test('the wake word has to open the utterance', () => {
+  for (const said of ['Capri, pon música', 'Hey Capri, abre Discord', 'hola capri pon tu canción', 'ACAPRI', 'Oye, Capri: ¿qué hora es?']) {
+    assert.equal(wakeWordAtStart(said), true, said);
+  }
+  for (const said of [
+    'pon música',
+    'quiero hablar con capri',
+    'estábamos viendo el video y de repente capri dijo que el otro día en el barrio pasó algo raro con la banda',
+    '',
+    null,
+  ]) {
+    assert.equal(wakeWordAtStart(said), false, String(said));
+  }
+});
+
+test('a whisper wake already stripped is fine; one that still carries the wake word elsewhere is not', () => {
+  assert.equal(wakeTranscriptOk('pon música'), true); // the sidecar strips a real wake before sending it
+  assert.equal(wakeTranscriptOk('Capri, pon música'), true);
+  assert.equal(wakeTranscriptOk('y entonces capri dijo que se fuera'), false); // video speech, not an order
 });
 
 test('her persona never greets with the date, and knows he is a man', () => {

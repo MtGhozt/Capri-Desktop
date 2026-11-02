@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.4
+
+- Acerca de: Discord y TikTok; “Donar” queda oculto hasta que exista la URL de Ko-fi
+- Enlaces externos con allowlist por host (Discord, TikTok, GitHub, keys, Ko-fi) en `about.js`
+- “Acerca de…” sale del menú rápido; queda en Ajustes
+- Menú rápido ya no queda vacío al abrir: se pinta desde caché y Rajdhani va precargada
+- `menu:get` ligero (sin escanear CLIs, apps ni mics) y caché de CLIs 60 s
+- Tests de enlaces de Acerca de y del layout del menú
+- Configuración: guardar fusiona con `config.json` en disco (una edición a mano ya no borra otros ajustes) y un archivo ilegible se conserva como `config.json.bak`
+- Claves: si `llm-keys` no se puede leer, se avisa y no se sobrescribe (antes podía quedar solo la clave nueva)
+
 ## 0.1.3
 
 - Whisper: umbral ~4 GB RAM; sin `hey_jarvis` por defecto

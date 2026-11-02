@@ -5,7 +5,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { micActive, sidecarConfig } = require('../src/main/voice-config');
+const { micActive, sidecarConfig, voiceStatus } = require('../src/main/voice-config');
 
 const base = () => ({
   muted: false,
@@ -58,4 +58,13 @@ test('folding her into DORMANT reaches the sidecar as sleeping:true', () => {
   assert.equal(sidecarConfig(base()).sleeping, false);
   assert.equal(sidecarConfig(base(), { sleeping: true }).sleeping, true);
   assert.equal(sidecarConfig(base(), { sleeping: false }).sleeping, false);
+});
+
+test('a loading OmniVoice says it is loading, not that TTS failed', () => {
+  const status = (tts) => voiceStatus(base(), { running: true, tts });
+  assert.equal(status({ engine: 'omnivoice', state: 'loading' }), 'Cargando voz…');
+  assert.equal(status({ engine: 'omnivoice', state: 'ready' }), '');
+  assert.match(status({ engine: 'kokoro', state: 'fallback' }), /Kokoro/);
+  assert.match(status({ engine: 'off', state: 'off' }), /TTS no arrancó/);
+  assert.match(voiceStatus(base(), { running: false }), /sidecar/);
 });

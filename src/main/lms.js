@@ -155,6 +155,11 @@ function createLms({ loadConfig, onStatus }) {
     return ready || Promise.resolve(status);
   }
 
+  // The CLI is what boots it: no lms.exe, no local model to wait for.
+  function installed() {
+    return fs.existsSync(binPath());
+  }
+
   function unload() {
     if (!startedByCapri) return;
     const bin = binPath();
@@ -178,6 +183,7 @@ function createLms({ loadConfig, onStatus }) {
     start,
     reload,
     whenReady,
+    installed,
     unload,
     unloadAll,
     status: () => status,

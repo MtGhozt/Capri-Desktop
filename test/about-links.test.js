@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { LINKS, isAllowedOpenUrl, aboutInfo } = require('../src/main/about');
+const { LINKS, KOFI_URL, isAllowedOpenUrl, aboutInfo } = require('../src/main/about');
 
 test('Acerca de community links include Discord invite and TikTok', () => {
   const about = aboutInfo({ version: '0.1.3' });
@@ -11,6 +11,13 @@ test('Acerca de community links include Discord invite and TikTok', () => {
   assert.ok(about.community.some((l) => l.url === LINKS.tiktok));
   assert.ok(about.dev.some((l) => l.id === 'github' && l.url === LINKS.github));
   assert.ok(about.dev.some((l) => l.id === 'issues' && l.url === LINKS.issues));
+});
+
+test('donations stay hidden until the Ko-fi URL exists', () => {
+  const about = aboutInfo({ version: '0.1.4' });
+  assert.equal(KOFI_URL, '');
+  assert.deepEqual(about.donate, []);
+  assert.equal(LINKS.kofi, KOFI_URL);
 });
 
 test('open-url allowlist: discord, tiktok, Capri github; rejects random hosts', () => {
@@ -24,6 +31,7 @@ test('open-url allowlist: discord, tiktok, Capri github; rejects random hosts', 
   assert.equal(isAllowedOpenUrl(LINKS.changelog), true);
   assert.equal(isAllowedOpenUrl(LINKS.license), true);
   assert.equal(isAllowedOpenUrl('https://console.anthropic.com/'), true);
+  assert.equal(isAllowedOpenUrl('https://ko-fi.com/someone'), true);
   assert.equal(isAllowedOpenUrl('https://evil.example/phishing'), false);
   assert.equal(isAllowedOpenUrl('https://github.com/other/repo'), false);
   assert.equal(isAllowedOpenUrl('http://discord.gg/wmVfYdjpdA'), false);

@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { createLlm, temporalContext } = require('../src/main/llm');
+const { usesLms } = require('../src/main/chat-providers');
 const { createTokenStore } = require('../src/main/spotify');
 
 const KEY = 'sk-test-do-not-log-123';
@@ -60,7 +61,7 @@ function harness({ cfg = cfgOf(), reply = () => ok('Listo, choom.'), screen = ''
   const llm = createLlm({
     loadConfig: () => cfg,
     personaPath: 'no-such-persona.md',
-    apiKey: (id) => (id === 'local' ? '' : KEY),
+    apiKey: (id) => (id === 'local' || id !== cfg.llm.provider ? '' : KEY),
     screenContext: () => screen,
     onFallback: (line) => { state.fallback += line; },
     ensureLocal: async () => 'ready',
@@ -152,6 +153,45 @@ test('a limit (429) is not retried on the cloud: straight to Gemma', async () =>
   assert.equal(out.done.text, 'Dale.');
 });
 
+test('a dead Anthropic key: Gemini answers, LM Studio is never booted nor waited on', async () => {
+  const calls = [];
+  let booted = 0;
+  globalThis.fetch = async (url) => {
+    calls.push(url);
+    return url.includes('anthropic') ? bad(401) : ok('Acá estoy, choom.');
+  };
+  let fallback = '';
+  const llm = createLlm({
+    loadConfig: () => cfgOf({ provider: 'anthropic' }),
+    personaPath: 'no-such-persona.md',
+    apiKey: (id) => ({ anthropic: KEY, gemini: KEY }[id] || ''),
+    onFallback: (line) => { fallback += line; },
+    ensureLocal: async () => { booted += 1; return 'ready'; },
+  });
+  const say = async (user) => {
+    let done = null;
+    let error = null;
+    await llm.chat({
+      user,
+      onToken: () => {},
+      onDone: (payload) => { done = payload; },
+      onError: (payload) => { error = payload; },
+    });
+    return { done, error };
+  };
+  const first = await say('hola');
+  assert.equal(first.error, null);
+  assert.equal(first.done.text, 'Acá estoy, choom.');
+  assert.match(fallback, /La key de Anthropic no funciona, usando Gemini/);
+  assert.equal(booted, 0);
+  assert.ok(calls[0].includes('anthropic'));
+  assert.ok(calls[1].includes('generativelanguage'));
+
+  const second = await say('otra');
+  assert.equal(second.done.text, 'Acá estoy, choom.');
+  assert.equal(calls.filter((url) => url.includes('anthropic')).length, 1); // not asked again
+});
+
 test('when she already started answering, a late failure is not retried (two voices)', async () => {
   const h = harness({
     cfg: cfgOf({ provider: 'openai' }),
@@ -206,6 +246,34 @@ test('the screen only goes out with its switch on', async () => {
   await on.say();
   assert.match(on.calls[0].body.messages[0].content, /chrome\.exe «GitHub»/);
   assert.match(on.calls[0].body.messages[0].content, /Capri/); // her persona still goes first
+});
+
+test('agent-claude with no LM Studio: the agent answers, LM Studio is never waited for', async () => {
+  const cfg = cfgOf({ provider: 'agent-claude', model: 'agent' });
+  let waited = 0;
+  let asked = null;
+  const lms = { whenReady: async () => { waited += 1; return 'failed'; } };
+  const llm = createLlm({
+    loadConfig: () => cfg,
+    personaPath: 'no-such-persona.md',
+    apiKey: () => '',
+    runAgentChat: async ({ provider, user }) => { asked = { provider, user }; return 'Nova, choom.'; },
+    ensureLocal: async () => { throw new Error('lms not found'); },
+  });
+  // v0.1.3 fix: the guard main.js runs before answering, with LM Studio missing
+  if (usesLms(cfg.llm.provider)) await lms.whenReady();
+  let said = '';
+  let error = null;
+  await llm.chat({
+    user: 'hola',
+    onToken: (piece) => { said += piece; },
+    onDone: () => {},
+    onError: (payload) => { error = payload; },
+  });
+  assert.equal(waited, 0);
+  assert.deepEqual(asked, { provider: 'agent-claude', user: 'hola' });
+  assert.equal(said, 'Nova, choom.');
+  assert.equal(error, null);
 });
 
 test('her key is encrypted on disk, never plain text, never in config', async () => {
