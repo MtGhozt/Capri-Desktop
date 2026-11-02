@@ -190,6 +190,8 @@ function rearmOverlay() {
 
 // Win+L / sleep freezes heartbeats and Windows drops global shortcuts. Reset so the quick menu
 // and Ajustes are not stuck under an interactive fullscreen overlay with a dead Esc hook.
+// Same root cause as the look/drag freeze: busy/dragging can stay true across the lock, so
+// refreshHit keeps the overlay interactive over the whole desktop — rearm alone is not enough.
 function recoverAfterUnlock(reason = 'unlock') {
   if (!overlay || overlay.isDestroyed()) return;
   logEvent(voiceLogPath(), `[capri] recover after ${reason}`);
@@ -201,6 +203,8 @@ function recoverAfterUnlock(reason = 'unlock') {
     overlay.showInactive();
   }
   rearmOverlay();
+  // Clear busy/drag + reapply click-through (look/speak fault path). 'rearmed' alone leaves them.
+  resetOverlayInput(reason);
   // force Esc re-bind: Windows drops the accelerator on the lock screen while we still think it's ours
   takeEscape(false);
   raiseOverlay();
@@ -2829,7 +2833,11 @@ function main() {
     // warm CLI PATH cache so Ajustes › Cerebro does not stall the first open
     setTimeout(() => { try { detectAgents(); } catch { /* PATH oddities */ } }, 2500);
 
-    screen.on('display-metrics-changed', fitOverlay);
+    // Unlock often reshuffles bounds/DPI; re-fit and reapply ignoreMouseEvents (show/hide desync).
+    screen.on('display-metrics-changed', () => {
+      fitOverlay();
+      if (overlay && !overlay.isDestroyed()) setClickThrough(clickThrough);
+    });
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });
     // after sleep or a locked screen, once Windows has settled
