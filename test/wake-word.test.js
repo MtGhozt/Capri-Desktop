@@ -71,5 +71,11 @@ test('her persona never greets with the date, and knows he is a man', () => {
   assert.match(persona, /Never "juntitas"/i);
   assert.match(persona, /You cannot create, edit, delete or move files/i);
   assert.match(persona, /Never claim you did/i);
+  assert.match(persona, /tostada de ayote|chaotic, hyper, warm/i);
+  assert.match(persona, /laugh WITH him/i);
+  assert.match(persona, /Use \[burla\] rarely/i);
+  assert.match(persona, /voseo/i);
   assert.equal(/first conversation of this session/i.test(persona), false);
+  assert.equal(/\bTeasing is mostly\b/.test(persona), false);
+  assert.equal(/needle him like a sparring partner/i.test(persona), false);
 });
