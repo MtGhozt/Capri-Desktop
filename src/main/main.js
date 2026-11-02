@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog, safeStorage, clipboard,
+  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog, safeStorage, clipboard, desktopCapturer,
 } = require('electron');
 
 const config = require('./config');
@@ -16,16 +16,21 @@ const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
 const {
   PROVIDERS, providerOptions, isCloud, usesLms, isAgent, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS,
-  providerAfterKeyRemoved,
+  providerAfterKeyRemoved, supportsVision, provider,
 } = require('./chat-providers');
+const {
+  isLookCommand, consentNotice, captureScreenJpeg, shouldAutoLook, NO_VISION, AUTO_LOOK_MS,
+} = require('./screen-look');
 const { probeProvider } = require('./llm-probe');
 const { checkForUpdate } = require('./updates');
 const { aboutInfo, isAllowedOpenUrl } = require('./about');
 const { detectAgents, pickAuto, openAgentIds, runAgent } = require('./agent-brain');
 const { switchProvider, setProviderModel, modelForProvider } = require('./chat-models');
-const { parseRenderMode, renderSwitches } = require('./render-mode');
+const { parseRenderMode, renderSwitches, HINTS: RENDER_HINTS, SOFTWARE_CONFIRM } = require('./render-mode');
 const { createLms } = require('./lms');
-const { createVoice, checkVoiceDir } = require('./voice');
+const { createVoice, checkVoiceDir, resolveVoiceDir } = require('./voice');
+const { createVoiceInstall, PYTHON_URL } = require('./voice-install');
+const { activeVoiceLabel, saveCustomRef } = require('./voice-ref');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
 const { isQuitCommand } = require('./quit-command');
@@ -103,6 +108,9 @@ let lastWindows = null;
 let llm = null;
 let lms = null;
 let voice = null;
+let voiceInstall = null;
+let lastAutoLookAt = 0;
+let autoLookTimer = null;
 let speakQueue = null;
 let comments = null;
 let ttsLoading = false;
@@ -565,7 +573,7 @@ function speakLine(line) {
   return speakId;
 }
 
-async function runAgentAsBrain(providerId, user) {
+async function runAgentAsBrain(providerId, user, persona) {
   const cfg = config.load();
   const installed = detectAgents();
   const kind = PROVIDERS[providerId]?.agent || 'auto';
@@ -577,7 +585,7 @@ async function runAgentAsBrain(providerId, user) {
     ? pickAuto({ installed, openIds: open, preferred: cfg.llm?.agentPreferred })
     : kind;
   if (!id) throw Object.assign(new Error('No hay un agente CLI listo en el PATH.'), { offline: true });
-  return runAgent({ id, prompt: user, installed });
+  return runAgent({ id, prompt: user, persona, installed });
 }
 
 let pendingUpdate = null;
@@ -1270,6 +1278,175 @@ async function pickVoiceDir() {
   return { ok: true, message: `Voz en ${path.basename(check.dir)}.${says}` };
 }
 
+// Ajustes › AUDIO › Instalar voz: sources → %LOCALAPPDATA%\capri-desktop\voice, then setup.ps1.
+async function runVoiceInstall(value = {}) {
+  if (!voiceInstall) return { ok: false, message: 'Instalador de voz no listo.' };
+  const result = await voiceInstall.start({
+    omniVoice: value?.omniVoice == null ? undefined : Boolean(value.omniVoice),
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      needPython: Boolean(result.needPython),
+      message: result.error || 'Error al instalar la voz.',
+      pythonUrl: PYTHON_URL,
+    };
+  }
+  const dir = result.dir || voiceInstall.dir();
+  const check = checkVoiceDir(dir);
+  if (!check.ok) return { ok: false, message: check.message || 'La voz no quedó usable.' };
+  voice?.stop();
+  updateConfig({
+    voice: {
+      dir: check.dir,
+      noticeShown: true,
+      ...(result.omniVoice ? { tts: 'auto' } : {}),
+    },
+  });
+  voice?.start({ force: true });
+  return { ok: true, message: 'Voz instalada', dir: check.dir };
+}
+
+// Phase 6C: JPEG of Capri's display in memory only (overlay hidden for the snap when easy).
+async function snapScreenForLook() {
+  const display = targetDisplay();
+  let hidden = false;
+  return captureScreenJpeg({
+    getSources: (opts) => desktopCapturer.getSources(opts),
+    displayId: display?.id,
+    beforeCapture: () => {
+      if (!overlay || overlay.isDestroyed()) return;
+      try {
+        overlay.hide();
+        hidden = true;
+      } catch { /* keep going with Capri in the shot */ }
+    },
+    afterCapture: () => {
+      if (!hidden || !overlay || overlay.isDestroyed()) return;
+      try { overlay.showInactive(); } catch { /* already gone */ }
+    },
+  });
+}
+
+function sayWithoutLlm(text) {
+  const line = String(text || '').trim();
+  if (!line || !overlay) return;
+  openChat();
+  const speakId = ttsOn() ? speakQueue?.start() : 0;
+  if (!speakId) speakQueue?.stop();
+  overlay.webContents.send('chat:token', line);
+  overlay.webContents.send('chat:done', { text: line });
+  if (speakId) {
+    speakQueue?.feed(line);
+    speakQueue?.flush(speakId);
+  }
+  llm?.rememberAssistant?.(line);
+}
+
+function armAutoLook() {
+  if (autoLookTimer) {
+    clearInterval(autoLookTimer);
+    autoLookTimer = null;
+  }
+  const cfg = config.load();
+  if (!cfg.llm?.autoLook || !cfg.llm?.shareScreen) return;
+  autoLookTimer = setInterval(() => {
+    void maybeAutoLook();
+  }, 60_000);
+}
+
+async function maybeAutoLook() {
+  const cfg = config.load();
+  let idleSeconds = 0;
+  try { idleSeconds = powerMonitor.getSystemIdleTime(); } catch { idleSeconds = 0; }
+  if (!shouldAutoLook({
+    enabled: cfg.llm?.autoLook === true,
+    shareScreen: cfg.llm?.shareScreen === true,
+    lastAt: lastAutoLookAt,
+    intervalMs: AUTO_LOOK_MS,
+    gameActive: Boolean(gameMode?.active?.()),
+    fullscreen: Boolean(lastWindows?.fgFull),
+    idleSeconds,
+  })) return;
+  const id = String(cfg.llm?.provider || 'local');
+  const model = String(cfg.llm?.model || provider(id).model || '');
+  if (!supportsVision(id, model)) return;
+  if (llmBusy || overlayFolded || chatOpen || voiceTalking) return;
+  const image = await snapScreenForLook();
+  if (!image) return;
+  lastAutoLookAt = Date.now();
+  const line = 'Mirá mi pantalla un segundo y comentá algo breve de lo que ves.';
+  openChat();
+  const speakId = ttsOn() ? speakQueue?.start() : 0;
+  if (!speakId) speakQueue?.stop();
+  llmBusy = true;
+  try {
+    await llm?.chat?.({
+      user: line,
+      image,
+      onMood: (name) => speakQueue?.setMood?.(name),
+      onToken: (piece) => {
+        overlay?.webContents.send('chat:token', piece);
+        if (speakId) speakQueue?.feed(piece);
+      },
+      onDone: (payload) => {
+        if (speakId) {
+          if (payload?.mood) speakQueue?.setMood?.(payload.mood);
+          speakQueue?.flush(speakId);
+        }
+        overlay?.webContents.send('chat:done', payload);
+      },
+      onError: (payload) => {
+        if (speakId) speakQueue?.stop(speakId);
+        overlay?.webContents.send('chat:error', payload);
+      },
+    });
+  } finally {
+    llmBusy = false;
+  }
+}
+
+// Ajustes › AUDIO › Usar mi propia voz: pick a short .wav (transcript typed in the panel).
+async function pickVoiceRefWav() {
+  const parent = (settingsWindow && !settingsWindow.isDestroyed()) ? settingsWindow : overlay;
+  const res = await dialog.showOpenDialog(parent, {
+    title: 'Tu voz (archivo .wav)',
+    properties: ['openFile'],
+    filters: [{ name: 'WAV', extensions: ['wav'] }],
+  });
+  const file = !res.canceled && res.filePaths?.[0];
+  if (!file) return { ok: false, message: '' };
+  return { ok: true, path: file };
+}
+
+function saveVoiceRef(value = {}) {
+  const cfg = config.load();
+  const dir = resolveVoiceDir(ROOT, cfg) || voiceInstall?.dir?.();
+  const saved = saveCustomRef({
+    voiceDir: dir,
+    wavPath: value?.path || value?.wav,
+    transcript: value?.transcript ?? value?.text,
+  });
+  if (!saved.ok) return saved;
+  voice?.stop();
+  updateConfig({
+    voice: {
+      ttsRef: saved.ttsRef,
+      ...reviveMigratedTts(cfg.voice),
+      ...(String(cfg.voice?.tts || 'off').toLowerCase() === 'off' ? { tts: 'auto' } : {}),
+    },
+  });
+  voice?.start({ force: true });
+  return { ok: true, message: saved.message || 'Tu voz (archivo) lista.', ttsRef: saved.ttsRef };
+}
+
+function clearVoiceRef() {
+  voice?.stop();
+  updateConfig({ voice: { ttsRef: null } });
+  voice?.start({ force: true });
+  return { ok: true, message: 'Voz por defecto.' };
+}
+
 function addLink(value = {}) {
   const name = String(value.name || '').trim();
   if (!name) return { ok: false, message: 'Ponle un nombre.' };
@@ -1407,6 +1584,9 @@ function setChatProvider(id) {
   const next = switchProvider(cfg.llm || {}, id, PROVIDERS);
   const patch = { provider: next.provider, model: next.model, models: next.models };
   if (id === 'local') patch.localModel = next.model;
+  // Picking a specific CLI sets the Automático primary for later.
+  const agentKind = PROVIDERS[id].agent;
+  if (agentKind && agentKind !== 'auto') patch.agentPreferred = agentKind;
   if (PROVIDERS[id].local) {
     const urls = { ...(cfg.llm?.baseUrls || {}) };
     if (PROVIDERS[from]?.local && cfg.llm?.baseUrl) urls[from] = cfg.llm.baseUrl;
@@ -1462,7 +1642,8 @@ async function probeChatFromMenu(value = {}) {
       : PROVIDERS[id].agent;
     const hit = agents.find((a) => a.id === want);
     if (!hit?.ready) {
-      return { ok: false, message: hit?.installed ? `${hit.label} aún no está cableado.` : 'No encuentro ese agente en el PATH.' };
+      const how = hit?.installHow ? ` Cómo instalarlo: ${hit.installHow}` : '';
+      return { ok: false, message: `No encuentro ese agente en el PATH.${how}` };
     }
     setChatProvider(id);
     return { ok: true, message: `Listo. Usaré ${hit.label} (más lento; gasta su plan).` };
@@ -1510,6 +1691,14 @@ function applyMenuAction(id, value) {
       } });
       break;
     case 'voice-dir': return pickVoiceDir().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
+    case 'voice-install': return runVoiceInstall(value).catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
+    case 'voice-install-cancel': return voiceInstall?.cancel() || { ok: false, message: 'Nada que cancelar.' };
+    case 'voice-ref-pick': return pickVoiceRefWav().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
+    case 'voice-ref-save': return saveVoiceRef(value);
+    case 'voice-ref-clear': return clearVoiceRef();
+    case 'open-python':
+      shell.openExternal(PYTHON_URL);
+      return { ok: true };
     case 'music-player':
       updateConfig({ music: { player: ['namida', 'spotify', 'none'].includes(value) ? value : 'namida' } });
       break;
@@ -1537,13 +1726,33 @@ function applyMenuAction(id, value) {
       shell.showItemInFolder(file);
       return { ok: true, message: 'Ruta de voice.log copiada.' };
     }
-    case 'model-share': updateConfig({ llm: value }); break;
-    case 'render':
+    case 'model-share': {
+      const wasOn = config.load().llm?.shareScreen === true;
+      updateConfig({ llm: value });
+      const cfg = config.load();
+      if (value?.shareScreen && !wasOn && !cfg.llm?.screenConsent) {
+        const id = String(cfg.llm?.provider || 'local');
+        sendCommand('line', {
+          badge: 'PANTALLA',
+          text: consentNotice({
+            label: provider(id).label,
+            model: String(cfg.llm?.model || provider(id).model || ''),
+            cloud: isCloud(id),
+          }),
+        });
+        updateConfig({ llm: { screenConsent: true } });
+      }
+      if ('autoLook' in (value || {}) || 'shareScreen' in (value || {})) armAutoLook();
+      break;
+    }
+    case 'render': {
       if (parseRenderMode(value) !== value) return { ok: false, message: 'Esa opción de pantalla no existe.' };
+      if (parseRenderMode(config.load().render) === value) return { ok: true }; // already on it
       config.save({ render: value });
       app.relaunch(); // read once, when Chromium starts
       app.exit(0);
       break;
+    }
     case 'spotify-connect':
       updateConfig({ music: { spotify: { clientId: String(value || '').trim().slice(0, 100) } } });
       return connectSpotify(value);
@@ -1792,7 +2001,9 @@ function menuState(extra = {}) {
       wakeSensitivity: String(cfg.voice?.wakeSensitivity || 'normal'),
       voice: {
         dir: String(cfg.voice?.dir || ''),
+        ttsRef: cfg.voice?.ttsRef || null,
         status: voiceStatus(cfg),
+        source: activeVoiceLabel(cfg.voice),
       },
       locked: Boolean(cfg.position?.locked),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
@@ -1816,6 +2027,8 @@ function menuState(extra = {}) {
       musicPlayer: ['namida', 'spotify', 'none'].includes(cfg.music?.player) ? cfg.music.player : 'namida',
       render: parseRenderMode(cfg.render),
     },
+    renderHints: RENDER_HINTS,
+    softwareConfirm: SOFTWARE_CONFIRM,
     hearing: {
       fixes: cleanFixes(cfg.hearing?.fixes),
       lastHeard,
@@ -1858,7 +2071,12 @@ function menuState(extra = {}) {
         hasKey: Boolean(llmKey(safe)),
         hasKeys,
         shareScreen: cfg.llm?.shareScreen === true,
+        autoLook: cfg.llm?.autoLook === true,
         shareMemory: cfg.llm?.shareMemory === true,
+        vision: supportsVision(
+          String(cfg.llm?.provider || 'local'),
+          String(cfg.llm?.model || ''),
+        ),
       };
     })(),
     about: aboutInfo({ version: app.getVersion() }),
@@ -1891,6 +2109,7 @@ function menuState(extra = {}) {
       { label: 'Escuchar / detener', accel: talkCombo || talkHotkey(cfg) },
     ],
     micDevices: voice?.devices() || [],
+    voiceInstall: voiceInstall?.status?.() || null,
     displays: displays.map((d, i) => ({
       id: d.id,
       label: `${i + 1} — ${d.size.width}×${d.size.height}`,
@@ -2176,6 +2395,26 @@ function registerIpc() {
     if (overlayFolded || isWakeCommand(line)) return goWakeReply();
     const appOrder = await apps().command(line); // "abre Discord", "cierra Spotify"
     if (appOrder) return appReply(appOrder);
+    // Phase 6C: "mirá mi pantalla" → JPEG in memory when shareScreen is on and the brain can see.
+    let lookImage = null;
+    if (isLookCommand(line)) {
+      const cfgLook = config.load();
+      if (!cfgLook.llm?.shareScreen) {
+        sayWithoutLlm('Activá «Enviar mi pantalla cuando le pida mirar» en Cerebro y pedímelo de nuevo.');
+        return { ok: true };
+      }
+      const pid = String(cfgLook.llm?.provider || 'local');
+      const model = String(cfgLook.llm?.model || provider(pid).model || '');
+      if (!supportsVision(pid, model)) {
+        sayWithoutLlm(NO_VISION);
+        return { ok: true };
+      }
+      lookImage = await snapScreenForLook();
+      if (!lookImage) {
+        sayWithoutLlm('No pude ver la pantalla ahora, choom.');
+        return { ok: true };
+      }
+    }
     // the local stack is only waited for when LM Studio is the one who answers: an agent CLI or
     // Ollama run on their own, and LM Studio may not even be installed
     if (usesLms(config.load().llm?.provider)) {
@@ -2193,6 +2432,7 @@ function registerIpc() {
     try {
       outcome = await llm.chat({
         user: line,
+        image: lookImage,
         onMood: (name) => speakQueue?.setMood?.(name),
         onToken: (piece) => {
           said += typeof piece === 'string' ? piece : piece?.text || '';
@@ -2216,6 +2456,7 @@ function registerIpc() {
       });
     } finally {
       llmBusy = false;
+      lookImage = null; // drop the JPEG; never written to disk
       // who answered and how it went, with no key and no text of the answer (Paso 4K)
       if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome}: ${outcome.ms}ms`);
     }
@@ -2369,7 +2610,7 @@ function main() {
       personaPath: userFiles.persona.path,
       memoryPath: userFiles.memory.path,
       apiKey: (id) => llmKey(id),
-      runAgentChat: ({ provider, user }) => runAgentAsBrain(provider, user),
+      runAgentChat: ({ provider, user, persona }) => runAgentAsBrain(provider, user, persona),
       // what she may tell a cloud provider about your screen, only with the switch on
       screenContext: () => {
         const title = String(lastWindows?.fgTitle || '').trim();
@@ -2385,6 +2626,15 @@ function main() {
       onStatus: (state) => overlay?.webContents.send('llm:boot', { state }),
     });
     lms.start();
+    voiceInstall = createVoiceInstall({
+      root: ROOT,
+      version: () => app.getVersion(),
+      onProgress: (state) => {
+        if (settingsWindow && !settingsWindow.isDestroyed()) {
+          settingsWindow.webContents.send('voice:install', state);
+        }
+      },
+    });
     voice = createVoice({
       root: ROOT,
       loadConfig: () => config.load(),
@@ -2487,6 +2737,7 @@ function main() {
     });
     createTray();
     comments.start();
+    armAutoLook();
     windowWatch = startWindowWatch({
       overlay,
       onUpdate: (data) => {

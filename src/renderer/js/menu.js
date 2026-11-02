@@ -66,6 +66,7 @@ export class AppMenu {
     this.openedAt = 0;
     this.expanded = null;
     this.confirmForget = false;
+    this.confirmSoftware = false; // Apariencia › Pantalla › SIN GPU: ask once before relaunch
     this.onOpenChange = null;
     this.fixNote = '';     // "GUARDADO" under Corregir lo último, once a fix is saved
     this.keyboard = false; // Corregir lo último has text fields: the overlay has the keyboard
@@ -93,6 +94,19 @@ export class AppMenu {
     this.quickAnchor = null;
     this.helpOpen = null;
     this.helpAnchor = null;
+    this.voiceNote = '';
+    this.voiceInstall = null; // live progress from main (voice:install)
+    this.voiceOmni = null;    // null = follow NVIDIA detect; boolean = checkbox override
+    this.voiceRefForm = false; // Usar mi propia voz… transcript step
+    this.pendingRefWav = '';
+    this.pendingRefText = '';
+
+    if (typeof this.host.onVoiceInstall === 'function') {
+      this.host.onVoiceInstall((payload) => {
+        this.voiceInstall = payload || null;
+        if (this.open && this.settingsMode && this.lastState) this.render(this.lastState);
+      });
+    }
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -158,6 +172,7 @@ export class AppMenu {
       this.view = expand === 'apps' ? 'apps' : 'main';
       this.resetApps();
       this.confirmForget = false;
+      this.confirmSoftware = false;
       this.fixNote = '';
       this.modelNote = '';
       this.at = { x, y };
@@ -249,6 +264,7 @@ export class AppMenu {
     this.quickOpen = null;
     this.helpOpen = null;
     this.confirmForget = false;
+    this.confirmSoftware = false;
     this.el.hidden = true;
     this.capturing = false;
     this.talkNote = '';
@@ -657,10 +673,155 @@ export class AppMenu {
         await this.refresh();
       },
     });
+    const install = this.voiceInstall || state.voiceInstall || {};
+    const installBusy = Boolean(install.busy);
+    const hasNvidia = Boolean(install.hasNvidia);
+    const omniChecked = this.voiceOmni == null ? hasNvidia : Boolean(this.voiceOmni);
+    const installRow = build('div', 'appmenu__voice-install');
+    const installBtns = build('div', 'appmenu__voice-install-btns');
+    const installBtn = build('button', `appmenu__toggle-btn is-active${installBusy ? ' is-busy' : ''}`, installBusy ? 'Instalando…' : 'Instalar voz');
+    installBtn.type = 'button';
+    installBtn.disabled = installBusy;
+    installBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      this.voiceNote = '';
+      this.voiceInstall = { ...(this.voiceInstall || {}), busy: true, phase: 'download', label: 'Descargando…', lines: [] };
+      this.render(this.lastState);
+      const res = await this.host.menuAction({
+        id: 'voice-install',
+        value: { omniVoice: omniChecked },
+      }).catch((err) => ({ ok: false, message: err?.message || 'No se pudo.' }));
+      this.voiceNote = res?.message || (res?.ok ? 'Voz instalada' : '');
+      if (res?.needPython) {
+        this.voiceInstall = {
+          ...(this.voiceInstall || {}),
+          busy: false,
+          phase: 'error',
+          label: 'Error',
+          needPython: true,
+          error: res.message,
+          lines: [res.message].filter(Boolean),
+        };
+      }
+      await this.refresh();
+    });
+    const cancelBtn = build('button', 'appmenu__toggle-btn', 'Cancelar');
+    cancelBtn.type = 'button';
+    cancelBtn.disabled = !installBusy;
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.host.menuAction({ id: 'voice-install-cancel' }).catch(() => {});
+    });
+    installBtns.append(installBtn, cancelBtn);
+    installRow.append(installBtns);
+    if (!hasNvidia) {
+      const omni = build('label', 'appmenu__voice-omni');
+      const box = build('input', '');
+      box.type = 'checkbox';
+      box.checked = omniChecked;
+      box.disabled = installBusy;
+      box.addEventListener('change', () => {
+        this.voiceOmni = box.checked;
+      });
+      omni.append(box, document.createTextNode(' OmniVoice (mejor con GPU NVIDIA)'));
+      installRow.append(omni);
+    } else {
+      installRow.append(build('div', 'appmenu__hint', 'GPU NVIDIA detectada: se instala OmniVoice.'));
+    }
+    if (install.needPython || (install.phase === 'error' && /Python 3\.11/i.test(String(install.error || this.voiceNote || '')))) {
+      const pyRow = build('div', 'appmenu__voice-install-btns');
+      const pyBtn = build('button', 'appmenu__toggle-btn is-active', 'Bajar Python 3.11');
+      pyBtn.type = 'button';
+      pyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.host.menuAction({ id: 'open-python' }).catch(() => {});
+      });
+      pyRow.append(pyBtn);
+      installRow.append(build('div', 'appmenu__hint', install.error || this.voiceNote || 'Falta Python 3.11.'), pyRow);
+    }
+    if (install.label || installBusy) {
+      installRow.append(build('div', 'appmenu__voice-progress', install.label || (installBusy ? 'Descargando…' : '')));
+    }
+    if (Array.isArray(install.lines) && install.lines.length) {
+      const log = build('pre', 'appmenu__voice-log', install.lines.slice(-12).join('\n'));
+      installRow.append(log);
+    }
+    body.append(installRow);
+    const voiceSource = voice.source
+      || (String(voice.ttsRef || '').trim() ? 'Tu voz (archivo)' : 'Voz por defecto');
+    body.append(build('div', 'appmenu__hint appmenu__voice-source', `Voz activa: ${voiceSource}`));
+    if (this.voiceRefForm) {
+      const form = build('div', 'appmenu__voice-ref');
+      form.append(build('div', 'appmenu__hint', this.pendingRefWav
+        ? `Archivo: ${String(this.pendingRefWav).split(/[\\/]/).pop()}`
+        : 'Elegí un .wav corto (5–15 s).'));
+      const transcript = build('input', 'appmenu__input');
+      transcript.type = 'text';
+      transcript.placeholder = 'Transcripción exacta del audio';
+      transcript.value = this.pendingRefText || '';
+      transcript.maxLength = 500;
+      transcript.spellcheck = true;
+      transcript.addEventListener('input', () => { this.pendingRefText = transcript.value; });
+      const saveRef = build('button', 'appmenu__toggle-btn is-active', 'GUARDAR VOZ');
+      saveRef.type = 'button';
+      saveRef.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const res = await this.host.menuAction({
+          id: 'voice-ref-save',
+          value: { path: this.pendingRefWav, transcript: transcript.value },
+        }).catch(() => ({ ok: false, message: 'No se pudo.' }));
+        this.voiceNote = res?.message || '';
+        if (res?.ok) {
+          this.voiceRefForm = false;
+          this.pendingRefWav = '';
+          this.pendingRefText = '';
+        }
+        await this.refresh();
+      });
+      const cancelRef = build('button', 'appmenu__toggle-btn', 'CANCELAR');
+      cancelRef.type = 'button';
+      cancelRef.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.voiceRefForm = false;
+        this.pendingRefWav = '';
+        this.pendingRefText = '';
+        this.render(this.lastState);
+      });
+      const refBtns = build('div', 'appmenu__voice-install-btns');
+      refBtns.append(saveRef, cancelRef);
+      form.append(transcript, refBtns);
+      body.append(form);
+    } else {
+      const refRow = build('div', 'appmenu__voice-install-btns');
+      const useMine = build('button', 'appmenu__toggle-btn is-active', 'Usar mi propia voz…');
+      useMine.type = 'button';
+      useMine.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const res = await this.host.menuAction({ id: 'voice-ref-pick' }).catch(() => null);
+        if (!res?.ok || !res.path) return;
+        this.pendingRefWav = res.path;
+        this.pendingRefText = '';
+        this.voiceRefForm = true;
+        this.render(this.lastState);
+      });
+      refRow.append(useMine);
+      if (String(voice.ttsRef || '').trim()) {
+        const clear = build('button', 'appmenu__toggle-btn', 'Voz por defecto');
+        clear.type = 'button';
+        clear.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const res = await this.host.menuAction({ id: 'voice-ref-clear' }).catch(() => null);
+          this.voiceNote = res?.message || 'Voz por defecto.';
+          await this.refresh();
+        });
+        refRow.append(clear);
+      }
+      body.append(refRow);
+    }
     body.append(build(
       'div',
       'appmenu__hint',
-      this.voiceNote || voice.dir || 'La carpeta con server.py y setup.ps1: sin ella no te escucha ni te habla.',
+      this.voiceNote || voice.dir || 'Instalá la voz con un clic, o elegí una carpeta con server.py y setup.ps1.',
     ));
     if (voice.status) body.append(build('div', 'appmenu__hint', voice.status));
 
@@ -715,13 +876,27 @@ export class AppMenu {
       labels: ['NO', 'SÍ'],
       onChange: (on) => this.saveShare({ shareScreen: on }),
     });
+    toggle('Mirar sola de vez en cuando', {
+      setting: 'model',
+      on: model.autoLook,
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.saveShare({ autoLook: on, ...(on ? { shareScreen: true } : {}) }),
+    });
     toggle('Enviar lo que recuerda de mí', {
       setting: 'model',
       on: model.shareMemory,
       labels: ['NO', 'SÍ'],
       onChange: (on) => this.saveShare({ shareMemory: on }),
     });
-    const privacy = build('div', 'appmenu__hint', 'Apagados, a la nube solo va lo que le escribes. En tu PC (LM Studio / Ollama) nada sale.');
+    const privacy = build(
+      'div',
+      'appmenu__hint',
+      model.shareScreen
+        ? (model.vision
+          ? 'Con «mirá mi pantalla» te mando una foto JPEG (solo memoria) a este cerebro.'
+          : 'Este cerebro no ve imágenes; con Gemini sí. Activá el interruptor igual para cuando cambies.')
+        : 'Apagados, a la nube solo va lo que le escribes. En tu PC (LM Studio / Ollama) nada sale.',
+    );
     privacy.dataset.setting = 'model';
     body.append(privacy);
 
@@ -891,13 +1066,28 @@ export class AppMenu {
         { id: 'software', label: 'SIN GPU' },
       ],
       current: cfg.render || 'auto',
-      onChange: (id) => this.act('render', id),
+      onChange: (id) => this.pickRender(id, state),
     });
-    if ((cfg.render || 'auto') !== 'auto') {
+    {
+      const hints = state.renderHints || {};
+      const mode = cfg.render || 'auto';
       const hint = build('div', 'appmenu__hint');
       hint.dataset.setting = 'bubble';
-      hint.textContent = 'Se reinicia para aplicarlo. Si su fondo sale negro y esto no lo arregla, vuelve a AUTOMÁTICO.';
+      hint.textContent = this.confirmSoftware
+        ? (state.softwareConfirm || 'Capri va a ir más lenta. ¿Seguro?')
+        : (hints[mode] || hints.auto || '');
       body.append(hint);
+    }
+    if (this.confirmSoftware) {
+      action('SIN GPU', {
+        setting: 'bubble',
+        value: 'CONFIRMAR',
+        danger: true,
+        onClick: () => {
+          this.confirmSoftware = false;
+          this.act('render', 'software');
+        },
+      });
     }
     section('ATAJOS', 'shortcuts');
     action('Atajos', { setting: 'shortcuts', chevron: 'shortcuts', onClick: () => this.toggle('shortcuts', state) });
@@ -1528,25 +1718,38 @@ export class AppMenu {
     wrap.append(ownCard);
 
     // —— Usar mi agente instalado ——
-    const agentIds = groups.agent || ['agent-auto', 'agent-claude', 'agent-opencode'];
+    const agentIds = groups.agent || [
+      'agent-auto', 'agent-claude', 'agent-cursor', 'agent-opencode', 'agent-codex', 'agent-gemini',
+    ];
     const installed = model.agentsInstalled || [];
     const agentCard = card(
       'Usar mi agente instalado',
-      'Corre el CLI de tu cuenta (claude -p / opencode run). Más lento y puede gastar su plan. Capri no guarda esas keys.',
+      'Corre el CLI de tu cuenta (claude / cursor-agent / opencode / codex / gemini). Capri no guarda esas keys.',
     );
-    const status = build('div', 'appmenu__hint');
-    status.textContent = installed
-      .map((a) => `${a.label}: ${a.ready ? 'listo' : a.installed ? 'detectado (próximamente)' : 'no encontrado'}`)
-      .join(' · ') || 'Ningún CLI en el PATH.';
-    agentCard.append(status);
+    agentCard.append(build(
+      'div',
+      'appmenu__hint',
+      'Es más lento que una API y puede gastar tu plan.',
+    ));
+    if (!installed.length) {
+      agentCard.append(build('div', 'appmenu__hint', 'Ningún CLI en el PATH.'));
+    } else {
+      for (const a of installed) {
+        const line = a.ready
+          ? `${a.label}: instalado`
+          : a.installed
+            ? `${a.label}: detectado`
+            : `${a.label}: no instalado`;
+        agentCard.append(build('div', 'appmenu__hint', line));
+        if (!a.installed && a.installHow) {
+          agentCard.append(build('div', 'appmenu__hint', `Cómo instalarlo: ${a.installHow}`));
+        }
+      }
+    }
     agentCard.append(pickRow(agentIds, (id) => this.act('model-provider', id)));
     agentCard.append(probeBtn(() => ({
       provider: agentIds.includes(active) ? active : 'agent-auto',
     })));
-    const todo = installed.filter((a) => a.installed && !a.ready).map((a) => a.label);
-    if (todo.length) {
-      agentCard.append(build('div', 'appmenu__hint', `TODO: cablear ${todo.join(', ')}.`));
-    }
     wrap.append(agentCard);
 
     if (this.probeNote) {
@@ -1770,9 +1973,22 @@ export class AppMenu {
 
   toggle(name, state) {
     this.confirmForget = false;
+    this.confirmSoftware = false;
     this.fixNote = '';
     this.expanded = this.expanded === name ? null : name;
     this.render(state);
+  }
+
+  // Apariencia › Pantalla: SIN GPU asks once (CONFIRMAR) before the relaunch.
+  pickRender(id, state) {
+    const current = state?.cfg?.render || 'auto';
+    if (id === 'software' && id !== current && !this.confirmSoftware) {
+      this.confirmSoftware = true;
+      if (this.lastState) this.render(this.lastState);
+      return;
+    }
+    this.confirmSoftware = false;
+    this.act('render', id);
   }
 
   async act(id, value) {
@@ -1783,6 +1999,7 @@ export class AppMenu {
       return;
     }
     this.confirmForget = false;
+    if (id !== 'render') this.confirmSoftware = false;
     const keep = this.settingsMode || id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'music-player'
       || id === 'model-provider' || id === 'spotify-connect' || id === 'spotify-disconnect' || id === 'drag-lock' || id === 'theme'
       || id === 'startup' || id === 'gaming-mode' || id === 'drone-mode' || id === 'comments' || id === 'comments-range'

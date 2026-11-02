@@ -66,12 +66,13 @@ function harness({ cfg = cfgOf(), reply = () => ok('Listo, choom.'), screen = ''
     onFallback: (line) => { state.fallback += line; },
     ensureLocal: async () => 'ready',
   });
-  const say = async (user = 'hola') => {
+  const say = async (user = 'hola', opts = {}) => {
     state.tokens = '';
     state.done = null;
     state.error = null;
     await llm.chat({
       user,
+      image: opts.image || null,
       onToken: (piece) => { state.tokens += piece; },
       onDone: (payload) => { state.done = payload; },
       onError: (payload) => { state.error = payload; },
@@ -237,15 +238,23 @@ test('rolling history keeps about the last 10 turns on every request', async () 
   assert.equal(turns.at(-1).content, 'turno 11');
 });
 
-test('the screen only goes out with its switch on', async () => {
-  const off = harness({ cfg: cfgOf({ provider: 'openai' }), screen: 'chrome.exe «GitHub»' });
-  await off.say();
-  assert.ok(!JSON.stringify(off.calls[0].body.messages).includes('GitHub'));
-
+test('screen exe/title is not stuffed into every system prompt anymore', async () => {
+  // Phase 6C: looking sends a JPEG on the user turn; shareScreen no longer leaks fg text each chat.
   const on = harness({ cfg: cfgOf({ provider: 'openai', shareScreen: true }), screen: 'chrome.exe «GitHub»' });
   await on.say();
-  assert.match(on.calls[0].body.messages[0].content, /chrome\.exe «GitHub»/);
+  assert.ok(!JSON.stringify(on.calls[0].body.messages).includes('GitHub'));
   assert.match(on.calls[0].body.messages[0].content, /Capri/); // her persona still goes first
+});
+
+test('a look with image attaches a multimodal user part', async () => {
+  const h = harness({ cfg: cfgOf({ provider: 'gemini', shareScreen: true }), screen: 'chrome.exe «Docs»' });
+  await h.say('mirá mi pantalla', { image: 'qqqq' });
+  const user = h.calls[0].body.messages.at(-1);
+  assert.equal(Array.isArray(user.content), true);
+  assert.equal(user.content[0].type, 'text');
+  assert.match(user.content[0].text, /pantalla/);
+  assert.match(user.content[0].text, /Docs/);
+  assert.match(user.content[1].image_url.url, /jpeg;base64,qqqq/);
 });
 
 test('agent-claude with no LM Studio: the agent answers, LM Studio is never waited for', async () => {
@@ -257,7 +266,10 @@ test('agent-claude with no LM Studio: the agent answers, LM Studio is never wait
     loadConfig: () => cfg,
     personaPath: 'no-such-persona.md',
     apiKey: () => '',
-    runAgentChat: async ({ provider, user }) => { asked = { provider, user }; return 'Nova, choom.'; },
+    runAgentChat: async ({ provider, user, persona }) => {
+      asked = { provider, user, persona };
+      return 'Nova, choom.';
+    },
     ensureLocal: async () => { throw new Error('lms not found'); },
   });
   // v0.1.3 fix: the guard main.js runs before answering, with LM Studio missing
@@ -271,7 +283,9 @@ test('agent-claude with no LM Studio: the agent answers, LM Studio is never wait
     onError: (payload) => { error = payload; },
   });
   assert.equal(waited, 0);
-  assert.deepEqual(asked, { provider: 'agent-claude', user: 'hola' });
+  assert.equal(asked.provider, 'agent-claude');
+  assert.equal(asked.user, 'hola');
+  assert.match(asked.persona, /Capri/);
   assert.equal(said, 'Nova, choom.');
   assert.equal(error, null);
 });

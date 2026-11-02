@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.5
+
+- Ajustes → AUDIO: botón **Instalar voz** (descarga sources a `%LOCALAPPDATA%\capri-desktop\voice`, Python 3.11, `setup.ps1`, progreso en el panel)
+- Voz por defecto sin audio clonado: si `ttsRef` falta, OmniVoice usa voice-design (`ttsDesign`); **Usar mi propia voz…** copia un `.wav` + transcripción a `ref\my_ref.*`
+- Botones **?** de Ajustes centrados (círculo + fila del título alineada)
+- No se empaquetan ni se suben a git wavs / refs / voces clonadas
+- Pantalla: pistas claras en Apariencia; confirmación antes de SIN GPU
+- 6C: “mirá mi pantalla” con JPEG en memoria (opt-in + consentimiento); auto-look opcional
+- 6E: Cerebro › Usar mi agente instalado (Claude, Cursor, OpenCode, Codex, Gemini CLI) + Automático
+- Persona: menos burla/tsundere; más energía loca tica (ríe con él, voseo)
+
 ## 0.1.4
 
 - Acerca de: Discord y TikTok; “Donar” queda oculto hasta que exista la URL de Ko-fi

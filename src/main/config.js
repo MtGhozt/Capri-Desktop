@@ -23,7 +23,9 @@ const DEFAULTS = {
     localModel: 'google/gemma-4-e2b', // LM Studio's, kept apart so going to the cloud and back doesn't lose it
     models: {},
     agentPreferred: 'claude', // when provider is agent-auto and nothing is open
-    shareScreen: false,      // send what is open on screen (cloud only): off by default
+    shareScreen: false,      // on-demand screen look (image) when she is asked to look
+    autoLook: false,         // optional: look every ≥10 min while the user is active
+    screenConsent: false,    // first-enable notice for shareScreen already shown
     shareMemory: false,      // send her memory of the conversation (cloud only): off by default
     baseUrl: 'http://localhost:1235/v1',
     autoStart: true,
@@ -119,8 +121,9 @@ const DEFAULTS = {
     inputDevice: null,
     debugSave: false,
     tts: 'off',              // public default: no spoken TTS (code path kept; enable locally if you have voice/)
-    ttsRef: null,            // optional local clone path (playful default); never bundled in the public build
-    ttsMoods: {              // [burla]/[emocion]/[aburrida]/[seria] → ref wav (+ .txt); missing → ttsRef
+    ttsRef: null,            // optional local clone path; null → OmniVoice voice-design (ttsDesign). Never ship wavs.
+    ttsDesign: 'voz femenina joven, juguetona, español latino, clara',
+    ttsMoods: {              // [burla]/[emocion]/[aburrida]/[seria] → ref wav (+ .txt); missing → ttsRef / design
       burla: 'ref/capri_mood_burla.wav',
       emocion: 'ref/capri_mood_emocion.wav',
       aburrida: 'ref/capri_mood_aburrida.wav',

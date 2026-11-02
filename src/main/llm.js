@@ -5,6 +5,7 @@ const { PROVIDERS, BRAIN_GROUPS, isCloud, isAgent, requestFor, explain, provider
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
 const { stripReplyTags, createMoodStripper } = require('./mood-tag');
+const { userContentWithImage } = require('./screen-look');
 
 const HISTORY_LIMIT = 20; // ~10 user+assistant turns
 const TIMEOUT_MS = 45000;
@@ -58,7 +59,7 @@ function createLlm({
   }
 
   function readPersona() {
-    return readFile(personaPath, 'You are Capri. Short, sarcastic, loyal. 1–3 sentences.');
+    return readFile(personaPath, 'You are Capri. Short, chaotic, warm, loyal. 1–3 sentences.');
   }
 
   function readMemory() {
@@ -104,18 +105,19 @@ function createLlm({
     if (notes) parts.push(`Notas fijas sobre el usuario (memory.md):\n${notes}`);
     // her answer is shown in a terminal box and read out loud: markers would be spelled out
     if (cloud) parts.push('Responde en texto plano, sin Markdown, sin asteriscos ni listas; frases cortas para ser leídas en voz alta. Nada de etiquetas de seguridad ni de tu razonamiento.');
-    // off by default: only what she is told to send leaves this PC
-    const screen = cfg.llm?.shareScreen ? String(screenContext?.() || '').trim() : '';
-    if (screen) parts.push(`What is open on the user's screen right now: ${screen}`);
+    // Screen images ride on the user turn (screen-look), not the system prompt.
     return parts.join('\n\n');
   }
 
   // Last ~10 turns travel with every request (local and cloud): follow-ups like "sí, cuéntame"
   // need the question she just asked. Voice uses the same history via chat:send → llm.chat.
-  function messagesFor(cfg, cloud, user) {
+  // `image` is a raw JPEG base64 (no data: prefix); history keeps text only.
+  function messagesFor(cfg, cloud, user, image) {
     const messages = [{ role: 'system', content: systemPrompt(cfg, cloud) }];
     messages.push(...history);
-    messages.push({ role: 'user', content: user });
+    const fg = String(screenContext?.() || '').trim();
+    const text = image && fg ? `${user}\n\n(Ventana al frente: ${fg})` : user;
+    messages.push({ role: 'user', content: userContentWithImage(text, image) });
     return messages;
   }
 
@@ -197,7 +199,7 @@ function createLlm({
     return full;
   }
 
-  async function chat({ user, onToken, onDone, onError, onMood }) {
+  async function chat({ user, image = null, onToken, onDone, onError, onMood }) {
     cancel();
     abort = new AbortController();
     const signal = abort.signal;
@@ -212,6 +214,7 @@ function createLlm({
     const cfg = loadConfig();
     const id = String(cfg.llm?.provider || 'local');
     const cloud = isCloud(id);
+    const jpeg = image ? String(image) : null;
     let streamed = false;
     let full = '';
     let replyMood = null;
@@ -243,7 +246,7 @@ function createLlm({
         : null;
       await streamChat(requestFor(target, {
         model: modelFor(cfg, target),
-        messages: messagesFor(cfg, isCloud(target), user),
+        messages: messagesFor(cfg, isCloud(target), user, jpeg),
         key: apiKey?.(target) || '',
         baseUrl: cfg.llm?.baseUrl,
       }), (piece) => {
@@ -289,7 +292,12 @@ function createLlm({
     // One turn to whoever answers: an agent CLI on this PC, or an OpenAI-compatible server.
     const attempt = async (target) => {
       if (isAgent(target) && typeof runAgentChat === 'function') {
-        const text = await runAgentChat({ provider: target, user, signal });
+        const text = await runAgentChat({
+          provider: target,
+          user,
+          persona: systemPrompt(cfg, false),
+          signal,
+        });
         const cleaned = stripReplyTags(String(text || ''));
         if (!cleaned.text.trim()) throw Object.assign(new Error('empty'), { code: 'empty' });
         streamed = true;
