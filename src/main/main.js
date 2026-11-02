@@ -19,7 +19,7 @@ const {
   providerAfterKeyRemoved, supportsVision, provider,
 } = require('./chat-providers');
 const {
-  isLookCommand, consentNotice, captureScreenJpeg, shouldAutoLook, NO_VISION, AUTO_LOOK_MS,
+  isLookCommand, consentNotice, captureScreenJpeg, createCaptureShield, shouldAutoLook, NO_VISION, AUTO_LOOK_MS,
 } = require('./screen-look');
 const { patchGamingApps, gameAppKey } = require('./game-detect');
 const { probeProvider } = require('./llm-probe');
@@ -1307,25 +1307,51 @@ async function runVoiceInstall(value = {}) {
   return { ok: true, message: 'Voz instalada', dir: check.dir };
 }
 
-// Phase 6C: JPEG of Capri's display in memory only (overlay hidden for the snap when easy).
+// After look/speak/hide: never leave the overlay eating the desktop or stuck click-through.
+function resetOverlayInput(reason = 'reset') {
+  if (!overlay || overlay.isDestroyed()) return;
+  try {
+    if (!overlay.isVisible()) overlay.showInactive();
+  } catch { /* gone */ }
+  // show()/hide() can desync ignoreMouseEvents from our clickThrough flag — reapply.
+  setClickThrough(clickThrough);
+  sendCommand('input-reset', { reason: String(reason || 'reset') });
+}
+
+// Phase 6C: JPEG in memory. Win32 uses setContentProtection so Capri stays visible and out of the shot.
 async function snapScreenForLook() {
   const display = targetDisplay();
-  let hidden = false;
-  return captureScreenJpeg({
-    getSources: (opts) => desktopCapturer.getSources(opts),
-    displayId: display?.id,
-    beforeCapture: () => {
-      if (!overlay || overlay.isDestroyed()) return;
-      try {
-        overlay.hide();
-        hidden = true;
-      } catch { /* keep going with Capri in the shot */ }
+  const shield = createCaptureShield({
+    platform: process.platform,
+    setContentProtection: (on) => {
+      if (!overlay || overlay.isDestroyed()) throw new Error('no overlay');
+      overlay.setContentProtection(Boolean(on));
     },
-    afterCapture: () => {
-      if (!hidden || !overlay || overlay.isDestroyed()) return;
-      try { overlay.showInactive(); } catch { /* already gone */ }
+    hide: () => {
+      if (!overlay || overlay.isDestroyed()) return;
+      overlay.hide();
+    },
+    show: () => {
+      if (!overlay || overlay.isDestroyed()) return;
+      overlay.showInactive();
+    },
+    reapplyClickThrough: () => {
+      if (!overlay || overlay.isDestroyed()) return;
+      setClickThrough(clickThrough);
     },
   });
+  try {
+    return await captureScreenJpeg({
+      getSources: (opts) => desktopCapturer.getSources(opts),
+      displayId: display?.id,
+      beforeCapture: () => shield.before(),
+      afterCapture: () => shield.after(),
+    });
+  } catch (err) {
+    try { shield.after(); } catch { /* already cleaned */ }
+    resetOverlayInput('look-capture-error');
+    throw err;
+  }
 }
 
 function sayWithoutLlm(text) {
@@ -2411,75 +2437,86 @@ function registerIpc() {
     if (appOrder) return appReply(appOrder);
     // Phase 6C: "mirá mi pantalla" → JPEG in memory when shareScreen is on and the brain can see.
     let lookImage = null;
-    if (isLookCommand(line)) {
-      const cfgLook = config.load();
-      if (!cfgLook.llm?.shareScreen) {
-        sayWithoutLlm('Activá «Enviar mi pantalla cuando le pida mirar» en Cerebro y pedímelo de nuevo.');
-        return { ok: true };
-      }
-      const pid = String(cfgLook.llm?.provider || 'local');
-      const model = String(cfgLook.llm?.model || provider(pid).model || '');
-      if (!supportsVision(pid, model)) {
-        sayWithoutLlm(NO_VISION);
-        return { ok: true };
-      }
-      lookImage = await snapScreenForLook();
-      if (!lookImage) {
-        sayWithoutLlm('No pude ver la pantalla ahora, choom.');
-        return { ok: true };
-      }
-    }
-    // the local stack is only waited for when LM Studio is the one who answers: an agent CLI or
-    // Ollama run on their own, and LM Studio may not even be installed
-    if (usesLms(config.load().llm?.provider)) {
-      const boot = await lms.whenReady();
-      if (boot === 'failed') {
-        overlay.webContents.send('chat:error', { kind: 'offline', text: 'No pude despertar LM Studio. Revisa que esté instalado y vuelve a intentarlo.' });
-        return { ok: false };
-      }
-    }
-    const speakId = ttsOn() ? speakQueue?.start() : 0;
-    if (!speakId) speakQueue?.stop();
-    llmBusy = true;
-    let said = '';
-    let outcome = null;
+    let didLook = false;
     try {
-      outcome = await llm.chat({
-        user: line,
-        image: lookImage,
-        onMood: (name) => speakQueue?.setMood?.(name),
-        onToken: (piece) => {
-          said += typeof piece === 'string' ? piece : piece?.text || '';
-          overlay?.webContents.send('chat:token', piece);
-          if (speakId) speakQueue?.feed(piece);
-        },
-        onDone: (payload) => {
-          if (speakId) {
-            if (payload?.mood) speakQueue?.setMood?.(payload.mood);
-            speakQueue?.flush(speakId);
-          }
-          overlay?.webContents.send('chat:done', payload);
-          followUp.reply(payload?.text || said, { spoken: Boolean(speakId) });
-          if (payload?.action) void runReplyAction(payload.action);
-        },
-        onError: (payload) => {
-          if (speakId) speakQueue?.stop(speakId);
-          followUp.reply('', {});
-          overlay?.webContents.send('chat:error', payload);
-        },
-      });
+      if (isLookCommand(line)) {
+        didLook = true;
+        const cfgLook = config.load();
+        if (!cfgLook.llm?.shareScreen) {
+          sayWithoutLlm('Activá «Enviar mi pantalla cuando le pida mirar» en Cerebro y pedímelo de nuevo.');
+          return { ok: true };
+        }
+        const pid = String(cfgLook.llm?.provider || 'local');
+        const model = String(cfgLook.llm?.model || provider(pid).model || '');
+        if (!supportsVision(pid, model)) {
+          sayWithoutLlm(NO_VISION);
+          return { ok: true };
+        }
+        lookImage = await snapScreenForLook();
+        if (!lookImage) {
+          sayWithoutLlm('No pude ver la pantalla ahora, choom.');
+          return { ok: true };
+        }
+      }
+      // the local stack is only waited for when LM Studio is the one who answers: an agent CLI or
+      // Ollama run on their own, and LM Studio may not even be installed
+      if (usesLms(config.load().llm?.provider)) {
+        const boot = await lms.whenReady();
+        if (boot === 'failed') {
+          overlay.webContents.send('chat:error', { kind: 'offline', text: 'No pude despertar LM Studio. Revisa que esté instalado y vuelve a intentarlo.' });
+          return { ok: false };
+        }
+      }
+      const speakId = ttsOn() ? speakQueue?.start() : 0;
+      if (!speakId) speakQueue?.stop();
+      llmBusy = true;
+      let said = '';
+      let outcome = null;
+      try {
+        outcome = await llm.chat({
+          user: line,
+          image: lookImage,
+          onMood: (name) => speakQueue?.setMood?.(name),
+          onToken: (piece) => {
+            said += typeof piece === 'string' ? piece : piece?.text || '';
+            overlay?.webContents.send('chat:token', piece);
+            if (speakId) speakQueue?.feed(piece);
+          },
+          onDone: (payload) => {
+            if (speakId) {
+              if (payload?.mood) speakQueue?.setMood?.(payload.mood);
+              speakQueue?.flush(speakId);
+            }
+            overlay?.webContents.send('chat:done', payload);
+            followUp.reply(payload?.text || said, { spoken: Boolean(speakId) });
+            if (payload?.action) void runReplyAction(payload.action);
+          },
+          onError: (payload) => {
+            if (speakId) speakQueue?.stop(speakId);
+            followUp.reply('', {});
+            overlay?.webContents.send('chat:error', payload);
+          },
+        });
+      } finally {
+        llmBusy = false;
+        lookImage = null; // drop the JPEG; never written to disk
+        // who answered and how it went, with no key and no text of the answer (Paso 4K)
+        if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome}: ${outcome.ms}ms`);
+      }
+      return { ok: true };
+    } catch (err) {
+      logEvent(voiceLogPath(), `[capri] chat failed: ${err?.message || err}`);
+      resetOverlayInput('chat-error');
+      return { ok: false };
     } finally {
-      llmBusy = false;
-      lookImage = null; // drop the JPEG; never written to disk
-      // who answered and how it went, with no key and no text of the answer (Paso 4K)
-      if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome}: ${outcome.ms}ms`);
+      if (didLook) resetOverlayInput('look-done');
     }
-    return { ok: true };
   });
   ipcMain.on('chat:cancel', () => {
     llm?.cancel();
     speakQueue?.stop();
     followUp.cancel();
+    resetOverlayInput('chat-cancel');
   });
   ipcMain.on('voice:interrupt', () => {
     llm?.cancel();
@@ -2487,6 +2524,8 @@ function registerIpc() {
     followUp.cancel();
     voice?.pttStart();
   });
+  ipcMain.on('voice:ptt-start', () => { voice?.pttStart(); });
+  ipcMain.on('voice:ptt-stop', () => { voice?.pttStop(); });
   ipcMain.on('chat:close', () => closeChat());
   ipcMain.handle('sounds:list', () => {
     try {

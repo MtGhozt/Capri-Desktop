@@ -787,6 +787,20 @@ async function boot() {
   window.addEventListener('error', () => forceFree());
   window.addEventListener('unhandledrejection', () => forceFree());
 
+  // Main asks after look/capture errors: idle + clickable again (drag/menu/Settings).
+  // Also clears a stuck dragging/busy/fold so she does not freeze over the desktop.
+  const inputReset = () => {
+    try {
+      if (capri.busy) {
+        capri.endAct?.(false);
+        capri.busy = false;
+      }
+      if (capri.dragging) window.dispatchEvent(new MouseEvent('mouseup'));
+      if (bubble.dragging) window.dispatchEvent(new MouseEvent('mouseup'));
+    } catch { /* best effort */ }
+    forceFree();
+  };
+
   // Gamepad LB+RB (configurable) = push-to-talk while a pad is connected.
   startGamepadPtt({
     getCombo: () => config.gaming?.gamepadPtt || [6, 7],
@@ -1025,6 +1039,9 @@ async function boot() {
       case 'rearmed': // a new mouse hook (main.js): click-through until the pointer comes over her again
         mouse = null;
         refreshHit();
+        break;
+      case 'input-reset': // look/speak/capture fault: never leave click-through or busy stuck
+        inputReset();
         break;
       case 'rearm': // --dev: as if she'd noticed the pointer no longer reaches her
         host.rearm();

@@ -58,6 +58,52 @@ function shouldAutoLook({
   return true;
 }
 
+/**
+ * Windows: setContentProtection(true) so Capri stays visible but out of the JPEG
+ * (WDA_EXCLUDEFROMCAPTURE). Elsewhere (or if protection throws): hide/show fallback.
+ * Always reapply click-through after — show()/hide() can desync ignoreMouseEvents.
+ */
+function createCaptureShield({
+  platform = process.platform,
+  setContentProtection = null,
+  hide = null,
+  show = null,
+  reapplyClickThrough = null,
+} = {}) {
+  let mode = 'none'; // 'protect' | 'hide' | 'none'
+  return {
+    before() {
+      if (platform === 'win32' && typeof setContentProtection === 'function') {
+        try {
+          setContentProtection(true);
+          mode = 'protect';
+          return;
+        } catch { /* fall through to hide */ }
+      }
+      if (typeof hide === 'function') {
+        try {
+          hide();
+          mode = 'hide';
+        } catch { mode = 'none'; }
+      }
+    },
+    after() {
+      try {
+        if (mode === 'protect' && typeof setContentProtection === 'function') {
+          try { setContentProtection(false); } catch { /* keep going */ }
+        } else if (mode === 'hide' && typeof show === 'function') {
+          try { show(); } catch { /* already gone */ }
+        }
+      } finally {
+        mode = 'none';
+        try { reapplyClickThrough?.(); } catch { /* click-through best-effort */ }
+      }
+    },
+    /** @returns {'protect'|'hide'|'none'} */
+    mode: () => mode,
+  };
+}
+
 async function captureScreenJpeg({
   getSources,
   displayId = null,
@@ -105,5 +151,6 @@ module.exports = {
   consentNotice,
   userContentWithImage,
   shouldAutoLook,
+  createCaptureShield,
   captureScreenJpeg,
 };

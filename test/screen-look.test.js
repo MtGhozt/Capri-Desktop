@@ -12,6 +12,7 @@ const {
   userContentWithImage,
   shouldAutoLook,
   captureScreenJpeg,
+  createCaptureShield,
   AUTO_LOOK_MS,
 } = require('../src/main/screen-look');
 
@@ -86,3 +87,94 @@ test('consent names provider and cloud/local', () => {
   assert.match(consentNotice({ label: 'Gemini', model: 'flash', cloud: true }), /nube/);
   assert.match(consentNotice({ label: 'LM Studio', model: 'llava', cloud: false }), /en tu PC/);
 });
+
+test('win32 capture uses content protection, restores in finally, never hides', async () => {
+  const calls = [];
+  const shield = createCaptureShield({
+    platform: 'win32',
+    setContentProtection: (on) => calls.push(['protect', on]),
+    hide: () => calls.push('hide'),
+    show: () => calls.push('show'),
+    reapplyClickThrough: () => calls.push('reapply'),
+  });
+  const fakeThumb = {
+    isEmpty: () => false,
+    getSize: () => ({ width: 800, height: 450 }),
+    toJPEG: () => Buffer.from('jpeg'),
+  };
+  const b64 = await captureScreenJpeg({
+    getSources: async () => [{ id: 'screen:0', thumbnail: fakeThumb }],
+    beforeCapture: () => shield.before(),
+    afterCapture: () => shield.after(),
+  });
+  assert.ok(b64);
+  assert.deepEqual(calls, [['protect', true], ['protect', false], 'reapply']);
+  assert.ok(!calls.includes('hide'));
+  assert.ok(!calls.includes('show'));
+});
+
+test('capture protection is restored in finally even when getSources throws', async () => {
+  const calls = [];
+  const shield = createCaptureShield({
+    platform: 'win32',
+    setContentProtection: (on) => calls.push(['protect', on]),
+    hide: () => calls.push('hide'),
+    reapplyClickThrough: () => calls.push('reapply'),
+  });
+  await assert.rejects(() => captureScreenJpeg({
+    getSources: async () => { throw new Error('boom'); },
+    beforeCapture: () => shield.before(),
+    afterCapture: () => shield.after(),
+  }), /boom/);
+  assert.deepEqual(calls, [['protect', true], ['protect', false], 'reapply']);
+});
+
+test('non-Windows (or protect throw) falls back to hide/show', async () => {
+  const calls = [];
+  const shield = createCaptureShield({
+    platform: 'linux',
+    setContentProtection: (on) => calls.push(['protect', on]),
+    hide: () => calls.push('hide'),
+    show: () => calls.push('show'),
+    reapplyClickThrough: () => calls.push('reapply'),
+  });
+  shield.before();
+  assert.equal(shield.mode(), 'hide');
+  shield.after();
+  assert.deepEqual(calls, ['hide', 'show', 'reapply']);
+
+  const calls2 = [];
+  const shield2 = createCaptureShield({
+    platform: 'win32',
+    setContentProtection: () => { throw new Error('no WDA'); },
+    hide: () => calls2.push('hide'),
+    show: () => calls2.push('show'),
+    reapplyClickThrough: () => calls2.push('reapply'),
+  });
+  shield2.before();
+  shield2.after();
+  assert.deepEqual(calls2, ['hide', 'show', 'reapply']);
+});
+
+test('look/speak fault path restores clickable overlay (regression)', () => {
+  // Mirrors resetOverlayInput: after capture/error we must reapply click-through and
+  // ask the renderer to forceFree so drag/menu/Settings never stay stuck.
+  const calls = [];
+  const shield = createCaptureShield({
+    platform: 'win32',
+    setContentProtection: (on) => calls.push(['protect', on]),
+    hide: () => calls.push('hide'),
+    reapplyClickThrough: () => calls.push('reapply'),
+  });
+  shield.before();
+  // simulate an exception mid-look while she was talking / user tried to drag
+  try {
+    throw new Error('look-speak-drag');
+  } catch {
+    shield.after();
+    calls.push('input-reset');
+  }
+  assert.deepEqual(calls, [['protect', true], ['protect', false], 'reapply', 'input-reset']);
+  assert.ok(!calls.includes('hide'));
+});
+
