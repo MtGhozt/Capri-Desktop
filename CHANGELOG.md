@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0
+
+- Instalar voz con progreso, estado final y detalles colapsables; voz OmniVoice por defecto y Usar mi propia voz con `.wav` + `.txt`.
+- Modelo de wake `hey_capri`, filtro que conserva despertares reales y arranque/reinicio del sidecar sin procesos huerfanos.
+- Nueva persona, vista de pantalla 6C con consentimiento, ventana activa y lista de apps en el contexto.
+- Modo juego 6D con despertar silenciado, opciones por juego agrupadas en Juego y exclusion de Electron, Capri y grabadores como Recordly.
+- Cerebros 6E: Cursor, Codex, Gemini, OpenCode, Claude y Automatico, con fallback de Gemini para vision.
+- Pistas de Pantalla, confirmacion de SIN GPU, ayuda detallada con enlaces clickeables y Atajos siempre visibles.
+- Correcciones de congelamiento, hit-test, arrastre, cierre del chat, recuperacion al desbloquear y relanzamiento visible.
+
 ## 0.1.5
 
 - Ajustes → AUDIO: botón **Instalar voz** (descarga sources a `%LOCALAPPDATA%\capri-desktop\voice`, Python 3.11, `setup.ps1`, progreso en el panel)

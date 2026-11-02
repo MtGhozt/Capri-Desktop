@@ -100,6 +100,8 @@ export class AppMenu {
     this.voiceRefForm = false; // Usar mi propia voz… transcript step
     this.pendingRefWav = '';
     this.pendingRefText = '';
+    this.pendingRefTranscriptPath = '';
+    this.voiceDetails = false;
 
     if (typeof this.host.onVoiceInstall === 'function') {
       this.host.onVoiceInstall((payload) => {
@@ -395,14 +397,12 @@ export class AppMenu {
     row('Dron en modo juego', cfg.gaming?.drone === false ? 'NO' : 'SÍ', 'drone-mode',
       (anchor) => openSubmenu('drone-mode', [{ id: false, label: 'NO' }, { id: true, label: 'SÍ' }],
         cfg.gaming?.drone !== false, 'drone-mode', anchor));
-    if (cfg.gaming?.fgKey) {
-      row(`Juego: ${cfg.gaming.fgKey}`, 'LISTA', 'game-list',
-        (anchor) => openSubmenu('game-list', [
-          { id: 'allow', label: 'TRATAR COMO JUEGO' },
-          { id: 'ignore', label: 'IGNORAR' },
-          { id: 'remove', label: 'SACAR DE LA LISTA' },
-        ], null, 'game-list', anchor));
-    }
+    row('Juego', cfg.gaming?.fgKey || 'SIN APP ACTIVA', 'game-list',
+      (anchor) => openSubmenu('game-list', [
+        { id: 'allow', label: 'TRATAR COMO JUEGO' },
+        { id: 'ignore', label: 'IGNORAR' },
+        { id: 'remove', label: 'SACAR DE LA LISTA' },
+      ], null, 'game-list', anchor));
     row('Tema', cfg.theme === 'capri' ? 'CAPRI' : 'CYBERPUNK', 'theme',
       (anchor) => openSubmenu('theme', THEME_OPTIONS, cfg.theme, 'theme', anchor));
     const rule = build('div', 'appmenu__quick-rule');
@@ -725,6 +725,7 @@ export class AppMenu {
     const installBtns = build('div', 'appmenu__voice-install-btns');
     const installBtn = build('button', `appmenu__toggle-btn is-active${installBusy ? ' is-busy' : ''}`, installBusy ? 'Instalando…' : 'Instalar voz');
     installBtn.type = 'button';
+    installBtn.dataset.state = 'on';
     installBtn.disabled = installBusy;
     installBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -784,11 +785,25 @@ export class AppMenu {
       installRow.append(build('div', 'appmenu__hint', install.error || this.voiceNote || 'Falta Python 3.11.'), pyRow);
     }
     if (install.label || installBusy) {
-      installRow.append(build('div', 'appmenu__voice-progress', install.label || (installBusy ? 'Descargando…' : '')));
+      const progress = build('div', 'appmenu__voice-progress');
+      progress.append(build('div', 'appmenu__voice-progress-label', install.label || (installBusy ? 'Descargando…' : '')));
+      const bar = build('div', 'appmenu__voice-progress-bar');
+      const fill = build('span');
+      fill.style.width = install.phase === 'done' ? '100%' : install.phase === 'install' ? '70%' : '35%';
+      bar.append(fill);
+      progress.append(bar);
+      installRow.append(progress);
     }
     if (Array.isArray(install.lines) && install.lines.length) {
-      const log = build('pre', 'appmenu__voice-log', install.lines.slice(-12).join('\n'));
-      installRow.append(log);
+      const details = build('button', 'appmenu__toggle-btn', this.voiceDetails ? 'Ocultar detalles' : 'Ver detalles');
+      details.type = 'button';
+      details.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.voiceDetails = !this.voiceDetails;
+        this.render(this.lastState);
+      });
+      installRow.append(details);
+      if (this.voiceDetails) installRow.append(build('pre', 'appmenu__voice-log', install.lines.join('\n')));
     }
     body.append(installRow);
     const voiceSource = voice.source
@@ -812,13 +827,18 @@ export class AppMenu {
         e.stopPropagation();
         const res = await this.host.menuAction({
           id: 'voice-ref-save',
-          value: { path: this.pendingRefWav, transcript: transcript.value },
+          value: {
+            path: this.pendingRefWav,
+            transcript: transcript.value,
+            transcriptPath: this.pendingRefTranscriptPath,
+          },
         }).catch(() => ({ ok: false, message: 'No se pudo.' }));
         this.voiceNote = res?.message || '';
         if (res?.ok) {
           this.voiceRefForm = false;
           this.pendingRefWav = '';
           this.pendingRefText = '';
+          this.pendingRefTranscriptPath = '';
         }
         await this.refresh();
       });
@@ -829,6 +849,7 @@ export class AppMenu {
         this.voiceRefForm = false;
         this.pendingRefWav = '';
         this.pendingRefText = '';
+        this.pendingRefTranscriptPath = '';
         this.render(this.lastState);
       });
       const refBtns = build('div', 'appmenu__voice-install-btns');
@@ -844,22 +865,24 @@ export class AppMenu {
         const res = await this.host.menuAction({ id: 'voice-ref-pick' }).catch(() => null);
         if (!res?.ok || !res.path) return;
         this.pendingRefWav = res.path;
+        this.pendingRefTranscriptPath = res.transcriptPath || '';
         this.pendingRefText = '';
         this.voiceRefForm = true;
         this.render(this.lastState);
       });
       refRow.append(useMine);
-      if (String(voice.ttsRef || '').trim()) {
-        const clear = build('button', 'appmenu__toggle-btn', 'Voz por defecto');
-        clear.type = 'button';
-        clear.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const res = await this.host.menuAction({ id: 'voice-ref-clear' }).catch(() => null);
-          this.voiceNote = res?.message || 'Voz por defecto.';
-          await this.refresh();
-        });
-        refRow.append(clear);
-      }
+      const custom = String(voice.ttsRef || '').trim();
+      const clear = build('button', `appmenu__toggle-btn${custom ? '' : ' is-active'}`, 'Voz por defecto');
+      clear.type = 'button';
+      clear.dataset.state = custom ? 'off' : 'on';
+      clear.disabled = !custom;
+      clear.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const res = await this.host.menuAction({ id: 'voice-ref-clear' }).catch(() => null);
+        this.voiceNote = res?.message || 'Voz por defecto.';
+        await this.refresh();
+      });
+      refRow.append(clear);
       body.append(refRow);
     }
     body.append(build(
@@ -1134,18 +1157,15 @@ export class AppMenu {
       });
     }
     section('ATAJOS', 'shortcuts');
-    action('Atajos', { setting: 'shortcuts', chevron: 'shortcuts', onClick: () => this.toggle('shortcuts', state) });
-    if (this.expanded === 'shortcuts') {
-      for (const s of state.shortcuts || []) {
-        action(s.label, s.accel ? { hotkey: s.accel, sub: true, setting: 'shortcuts' } : { value: '—', sub: true, setting: 'shortcuts' });
-      }
-      action('Abrir config.json', {
-        setting: 'shortcuts',
-        value: 'EDITAR',
-        sub: true,
-        onClick: () => this.act('shortcuts-file'),
-      });
+    for (const s of state.shortcuts || []) {
+      action(s.label, s.accel ? { hotkey: s.accel, sub: true, setting: 'shortcuts' } : { value: '—', sub: true, setting: 'shortcuts' });
     }
+    action('Abrir config.json', {
+      setting: 'shortcuts',
+      value: 'EDITAR',
+      sub: true,
+      onClick: () => this.act('shortcuts-file'),
+    });
 
     // ACERCA DE
     section('ACERCA DE', 'about');

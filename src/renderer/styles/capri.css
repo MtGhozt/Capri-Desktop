@@ -1672,6 +1672,28 @@ button.appmenu__row {
   text-transform: uppercase;
 }
 
+.appmenu__voice-progress-label {
+  margin-bottom: 4px;
+}
+
+.appmenu__voice-progress-bar {
+  height: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--title) 12%, transparent);
+}
+
+.appmenu__voice-progress-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent-on);
+  transition: width 180ms ease;
+}
+
+.appmenu__toggle-btn:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
 .appmenu__voice-log {
   margin: 0;
   max-height: 96px;
