@@ -340,6 +340,7 @@ class Engine:
         self.cfg = {
             "enabled": True,
             "wakeWord": True,
+            "wakeMuted": False,
             "wakeMode": "both",
             "wakeThreshold": WAKE_THRESHOLD,
             "wakeSensitivity": "normal",
@@ -754,6 +755,9 @@ class Engine:
             return False
         if self.cfg.get("muted"):
             return False
+        # Fullscreen game: wake is off but push-to-talk still needs the stream.
+        if self.cfg.get("wakeMuted"):
+            return True
         return not (self.cfg.get("sleeping") and not self.cfg.get("wakeWord"))
 
     def restart_stream(self) -> None:
@@ -1516,6 +1520,7 @@ class Engine:
     def oww_live(self) -> bool:
         return (
             bool(self.cfg.get("wakeWord"))
+            and not bool(self.cfg.get("wakeMuted"))
             and self.wake_mode() != "whisper"
             and self._wake not in (None, False)
         )
@@ -1523,6 +1528,7 @@ class Engine:
     def whisper_wake_live(self) -> bool:
         return (
             bool(self.cfg.get("wakeWord"))
+            and not bool(self.cfg.get("wakeMuted"))
             and self.wake_mode() != "oww"
             and self._whisper is not None
         )

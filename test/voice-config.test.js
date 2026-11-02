@@ -60,6 +60,15 @@ test('folding her into DORMANT reaches the sidecar as sleeping:true', () => {
   assert.equal(sidecarConfig(base(), { sleeping: false }).sleeping, false);
 });
 
+test('fullscreen game mutes wake in the sidecar payload (PTT still has a mic)', () => {
+  assert.equal(sidecarConfig(base()).wakeMuted, false);
+  const sent = sidecarConfig(base(), { wakeMuted: true, sleeping: true });
+  assert.equal(sent.wakeMuted, true);
+  assert.equal(sent.sleeping, true);
+  assert.equal(sent.wakeWord, true); // wake gated by wakeMuted, not by clearing wakeWord
+  assert.equal(sent.enabled, true);
+});
+
 test('a loading OmniVoice says it is loading, not that TTS failed', () => {
   const status = (tts) => voiceStatus(base(), { running: true, tts });
   assert.equal(status({ engine: 'omnivoice', state: 'loading' }), 'Cargando voz…');

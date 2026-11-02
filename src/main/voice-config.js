@@ -17,6 +17,8 @@ function sidecarConfig(cfg, state = {}) {
     muted: Boolean(cfg?.muted),
     volume: cfg?.volume,
     sleeping: Boolean(state.sleeping),
+    // Fullscreen game: skip wake detection but keep the mic for push-to-talk.
+    wakeMuted: Boolean(state.wakeMuted),
     llmBaseUrl: cfg?.llm?.baseUrl || 'http://localhost:1235/v1',
     // With a cloud provider no local model is ever loaded, so the sidecar must not keep VRAM free
     // for Gemma: it was skipping OmniVoice (her real voice) and answering in Kokoro's instead.

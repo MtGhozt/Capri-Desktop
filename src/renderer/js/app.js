@@ -14,6 +14,7 @@ import { POSE_FILES } from './poses.js';
 import { SystemFx } from './system-fx.js';
 import { createDrone } from './drone.js';
 import { runArtKit } from './art-kit.js';
+import { startGamepadPtt } from './gamepad-ptt.js';
 import { pick, fmt, sleep, tween, reducedMotion } from './util.js';
 
 const host = window.host;
@@ -785,6 +786,13 @@ async function boot() {
   // A thrown act (or any other renderer fault) must not leave click-through / the menu stuck.
   window.addEventListener('error', () => forceFree());
   window.addEventListener('unhandledrejection', () => forceFree());
+
+  // Gamepad LB+RB (configurable) = push-to-talk while a pad is connected.
+  startGamepadPtt({
+    getCombo: () => config.gaming?.gamepadPtt || [6, 7],
+    onStart: () => host.pttStart?.(),
+    onStop: () => host.pttStop?.(),
+  });
 
   // Playwright E2E (fresh profile): drive menu / faults without fighting OS click-through.
   if (config.e2e) {

@@ -12,6 +12,7 @@ function createGameMode({
   apps = () => [],
   onEnter = () => {},
   onExit = () => {},
+  setWakeMuted = () => {},
   exitDelayMs = EXIT_DELAY_MS,
   timers = global,
 } = {}) {
@@ -29,6 +30,7 @@ function createGameMode({
     cancelExit();
     if (!active) return;
     active = false;
+    try { setWakeMuted(false); } catch { /* voice gone */ }
     onExit();
   };
 
@@ -41,6 +43,8 @@ function createGameMode({
       cancelExit();
       if (!active) {
         active = true;
+        // Wake muted while the game is fullscreen; PTT still works (sidecar keeps the mic).
+        try { setWakeMuted(true); } catch { /* voice gone */ }
         onEnter(windows);
       }
       return;
@@ -56,6 +60,9 @@ function createGameMode({
     update,
     stop: () => {
       cancelExit();
+      if (active) {
+        try { setWakeMuted(false); } catch { /* voice gone */ }
+      }
       active = false;
     },
     active: () => active,

@@ -43,6 +43,8 @@ contextBridge.exposeInMainWorld('host', {
   onVoice: on('voice:event'),
   onVoiceInstall: on('voice:install'),
   interruptVoice: () => ipcRenderer.send('voice:interrupt'),
+  pttStart: () => ipcRenderer.send('voice:ptt-start'),
+  pttStop: () => ipcRenderer.send('voice:ptt-stop'),
   speak: (text) => ipcRenderer.invoke('capri:speak', String(text || '')),
   llmStatus: () => ipcRenderer.invoke('llm:status'),
   getMenu: (opts) => ipcRenderer.invoke('menu:get', opts || {}),

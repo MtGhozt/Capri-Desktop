@@ -64,6 +64,36 @@ class MissingWakeModelTests(unittest.TestCase):
         self.assertTrue(engine.whisper_wake_live())
 
 
+class WakeMutedGameTests(unittest.TestCase):
+    """Fullscreen game: wake off, mic stays for push-to-talk."""
+
+    def engine(self, **cfg):
+        engine = server.Engine.__new__(server.Engine)
+        engine.cfg = {
+            "enabled": True,
+            "muted": False,
+            "sleeping": True,
+            "wakeWord": True,
+            "wakeMuted": False,
+            "wakeMode": "both",
+        }
+        engine.cfg.update(cfg)
+        engine._wake = object()
+        engine._whisper = object()
+        engine.stream = None
+        return engine
+
+    def test_wake_muted_keeps_mic_while_sleeping(self):
+        engine = self.engine(wakeMuted=True)
+        self.assertTrue(engine.stream_needed())
+        self.assertFalse(engine.oww_live())
+        self.assertFalse(engine.whisper_wake_live())
+
+    def test_sleeping_without_wake_releases_mic(self):
+        engine = self.engine(wakeWord=False, wakeMuted=False)
+        self.assertFalse(engine.stream_needed())
+
+
 class UtteranceTests(unittest.TestCase):
     def test_one_utterance_is_one_transcript(self):
         engine = server.Engine.__new__(server.Engine)

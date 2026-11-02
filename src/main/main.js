@@ -21,6 +21,7 @@ const {
 const {
   isLookCommand, consentNotice, captureScreenJpeg, shouldAutoLook, NO_VISION, AUTO_LOOK_MS,
 } = require('./screen-look');
+const { patchGamingApps, gameAppKey } = require('./game-detect');
 const { probeProvider } = require('./llm-probe');
 const { checkForUpdate } = require('./updates');
 const { aboutInfo, isAllowedOpenUrl } = require('./about');
@@ -128,7 +129,6 @@ let gameMode = null;
 let gameWork = Promise.resolve();
 let gameWasFolded = false;
 let gameHadLlm = false;
-let gameHadVoice = false;
 let lastGreetingAt = 0;
 let bootGreetingDone = false;
 let greeting = null;
@@ -1509,18 +1509,17 @@ function queueGame(step) {
 
 async function gameEnter(windows) {
   gameWasFolded = overlayFolded;
-  gameHadVoice = Boolean(voice?.running?.());
   gameLog(`game on exe=${windows?.fgExe || '?'} ${vramText()}`);
   llm?.cancel();
-  speakQueue?.stop();
   goodnight.cancel();
   followUp.cancel();
-  sendCommand('sleep'); // DORMANT, and the chat bubble goes with it
+  // Brief line, then quiet. Wake mute is set by createGameMode; sidecar stays up for PTT.
+  try { speakLine(pickLine('juegoEntrar')); } catch { /* pool missing in old builds */ }
+  sendCommand('sleep'); // DORMANT / hidden; drone may replace her
   if (lms?.status() === 'booting') await lms.whenReady(); // a load in flight would land anyway
   gameHadLlm = lms?.status() === 'ready';
-  voice?.stop(); // the sidecar holds OmniVoice: stopping it hands the VRAM back
   await lms?.unloadAll?.();
-  gameLog(`game on after unload ${vramText()}`);
+  gameLog(`game on after unload wakeMuted=${Boolean(voice?.wakeMuted?.())} ${vramText()}`);
   if (config.load().gaming?.drone !== false) {
     sendCommand('game-drone', { on: true });
     gameLog(`drone visible ${vramText()}`);
@@ -1531,12 +1530,11 @@ async function gameLeave() {
   gameLog(`game off ${vramText()}`);
   sendCommand('game-drone', { on: false });
   if (!gameWasFolded) sendCommand('wake');
-  if (gameHadVoice) voice?.start({ force: true });
   if (gameHadLlm) await lms?.reload?.();
+  try { speakLine(pickLine('juegoSalir')); } catch { /* pool missing */ }
   gameLog(`game off after reload ${vramText()}`);
   gameWasFolded = false;
   gameHadLlm = false;
-  gameHadVoice = false;
 }
 
 function ttsOn() {
@@ -1776,6 +1774,18 @@ function applyMenuAction(id, value) {
     case 'forget': goForgetReply({ chat: false }); break;
     case 'gaming-mode': updateConfig({ gaming: { mode: value === 'off' ? 'off' : 'auto' } }); break;
     case 'drone-mode': updateConfig({ gaming: { drone: Boolean(value) } }); break;
+    case 'game-list':
+    case 'game-allow':
+    case 'game-ignore':
+    case 'game-forget': {
+      const exe = String(value?.exe || lastWindows?.fgExe || '').trim();
+      if (!exe) break;
+      const action = id === 'game-ignore' || value === 'ignore' ? 'ignore'
+        : id === 'game-forget' || value === 'remove' ? 'remove'
+          : 'allow';
+      updateConfig({ gaming: { apps: patchGamingApps(config.load().gaming?.apps, exe, action) } });
+      break;
+    }
     case 'comments': updateConfig({ comments: { enabled: Boolean(value) } }); break;
     case 'comments-range': updateConfig({ comments: {
       ...(value?.minMinutes != null ? { minMinutes: Number(value.minMinutes) } : {}),
@@ -2010,6 +2020,10 @@ function menuState(extra = {}) {
       gaming: {
         mode: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
         drone: cfg.gaming?.drone !== false,
+        apps: Array.isArray(cfg.gaming?.apps) ? cfg.gaming.apps : [],
+        gamepadPtt: Array.isArray(cfg.gaming?.gamepadPtt) ? cfg.gaming.gamepadPtt.map(Number).filter(Number.isFinite) : [6, 7],
+        fgExe: lastWindows?.fgExe || '',
+        fgKey: gameAppKey(lastWindows?.fgExe || ''),
       },
       comments: {
         enabled: cfg.comments?.enabled !== false,
@@ -2732,6 +2746,7 @@ function main() {
     gameMode = createGameMode({
       enabled: () => config.load().gaming?.mode !== 'off',
       apps: () => config.load().gaming?.apps || [],
+      setWakeMuted: (on) => voice?.setWakeMuted?.(on),
       onEnter: (windows) => queueGame(() => gameEnter(windows)),
       onExit: () => queueGame(gameLeave),
     });

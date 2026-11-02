@@ -390,6 +390,19 @@ const POOLS = {
     'Dale, que quiero verte festejar como un tonto.',
     'La próxima invito yo. Y gano.',
   ],
+  // Phase 6D: one short line when a fullscreen game starts / ends, then she stays quiet.
+  juegoEntrar: [
+    'Bueno, a jugar. Me callo un rato.',
+    'Juego detectado. Nos vemos después, choom.',
+    'Ahí va. Te dejo con la pantalla; wake apagado.',
+    'Divertite. Yo me escondo un toque.',
+  ],
+  juegoSalir: [
+    '¿Ya saliste? Volví.',
+    'Fin del round. ¿Ganaste o te hicieron polvo?',
+    'De vuelta. Contame cómo te fue, humanito.',
+    'El juego se fue. Yo no.',
+  ],
   video: [
     '¿Qué estamos viendo? Pásame las palomitas, tontito.',
     'Eso se ve interesante… para un humano.',

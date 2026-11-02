@@ -395,6 +395,14 @@ export class AppMenu {
     row('Dron en modo juego', cfg.gaming?.drone === false ? 'NO' : 'SÍ', 'drone-mode',
       (anchor) => openSubmenu('drone-mode', [{ id: false, label: 'NO' }, { id: true, label: 'SÍ' }],
         cfg.gaming?.drone !== false, 'drone-mode', anchor));
+    if (cfg.gaming?.fgKey) {
+      row(`Juego: ${cfg.gaming.fgKey}`, 'LISTA', 'game-list',
+        (anchor) => openSubmenu('game-list', [
+          { id: 'allow', label: 'TRATAR COMO JUEGO' },
+          { id: 'ignore', label: 'IGNORAR' },
+          { id: 'remove', label: 'SACAR DE LA LISTA' },
+        ], null, 'game-list', anchor));
+    }
     row('Tema', cfg.theme === 'capri' ? 'CAPRI' : 'CYBERPUNK', 'theme',
       (anchor) => openSubmenu('theme', THEME_OPTIONS, cfg.theme, 'theme', anchor));
     const rule = build('div', 'appmenu__quick-rule');

@@ -54,6 +54,7 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
   let stopped = false;
   let retries = 0;
   let sleeping = false;
+  let wakeMuted = false; // fullscreen game: no wake word; PTT still works
   let greetItems = [];
   let pendingGreet = null; // the boot hello when the socket was not open yet
   let forced = false; // started by game mode's end even with the mic off
@@ -88,7 +89,7 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
   }
 
   function speakCfg() {
-    return sidecarConfig(loadConfig(), { sleeping });
+    return sidecarConfig(loadConfig(), { sleeping, wakeMuted });
   }
 
   function send(payload) {
@@ -274,6 +275,14 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
     send({ type: 'config', ...speakCfg() });
   }
 
+  function setWakeMuted(on) {
+    const next = Boolean(on);
+    if (next === wakeMuted) return;
+    wakeMuted = next;
+    logLines(logFile, `[capri] voice wakeMuted=${wakeMuted}`);
+    send({ type: 'config', ...speakCfg() });
+  }
+
   function applyConfig() {
     const cfg = loadConfig();
     if (cfg.voice && cfg.voice.enabled === false) {
@@ -289,6 +298,8 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
     stop,
     applyConfig,
     setSleeping,
+    setWakeMuted,
+    wakeMuted: () => wakeMuted,
     prepareGreetings: (items) => {
       greetItems = (Array.isArray(items) ? items : [])
         .map((item) => ({ id: String(item?.id || ''), text: String(item?.text || '') }))

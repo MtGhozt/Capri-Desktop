@@ -46,6 +46,7 @@ function harness({ enabled = true, apps = [] } = {}) {
     apps: () => apps,
     onEnter: (windows) => events.push(['enter', windows.fgExe]),
     onExit: () => events.push(['exit']),
+    setWakeMuted: (on) => events.push(['wakeMuted', on]),
     timers,
   });
   return { mode, events, timers };
@@ -60,8 +61,21 @@ test('a fullscreen game takes her off the GPU once, even over many updates', () 
   mode.update(game);
   mode.update(game);
   mode.update(game);
-  assert.deepEqual(events, [['enter', GAME]]);
+  assert.deepEqual(events, [['wakeMuted', true], ['enter', GAME]]);
   assert.equal(mode.active(), true);
+});
+
+test('wake muted in fullscreen game and cleared on exit', () => {
+  const { mode, events, timers } = harness();
+  mode.update(game);
+  assert.deepEqual(events.slice(0, 2), [['wakeMuted', true], ['enter', GAME]]);
+  mode.update(desktop);
+  timers.tick(EXIT_DELAY_MS);
+  assert.deepEqual(events, [
+    ['wakeMuted', true], ['enter', GAME],
+    ['wakeMuted', false], ['exit'],
+  ]);
+  assert.equal(mode.active(), false);
 });
 
 test('game mode exposes one enter and one delayed exit for the drone integration', () => {
@@ -69,7 +83,10 @@ test('game mode exposes one enter and one delayed exit for the drone integration
   mode.update(game);
   mode.update(desktop);
   timers.tick(EXIT_DELAY_MS);
-  assert.deepEqual(events, [['enter', GAME], ['exit']]);
+  assert.deepEqual(events, [
+    ['wakeMuted', true], ['enter', GAME],
+    ['wakeMuted', false], ['exit'],
+  ]);
 });
 
 test('a maximized browser never fires it', () => {
@@ -83,11 +100,14 @@ test('she comes back thirty seconds after the game is gone', () => {
   const { mode, events, timers } = harness();
   mode.update(game);
   mode.update(desktop);
-  assert.equal(events.length, 1); // still away, the clock is running
+  assert.equal(events.length, 2); // wakeMuted + enter; still away, the clock is running
   timers.tick(29_999);
-  assert.equal(events.length, 1);
+  assert.equal(events.length, 2);
   timers.tick(1);
-  assert.deepEqual(events, [['enter', GAME], ['exit']]);
+  assert.deepEqual(events, [
+    ['wakeMuted', true], ['enter', GAME],
+    ['wakeMuted', false], ['exit'],
+  ]);
   assert.equal(mode.active(), false);
 });
 
@@ -98,7 +118,7 @@ test('a game that comes back cancels the wait', () => {
   timers.tick(10_000);
   mode.update(game); // alt-tabbed back in
   timers.tick(30_000);
-  assert.deepEqual(events, [['enter', GAME]]);
+  assert.deepEqual(events, [['wakeMuted', true], ['enter', GAME]]);
   assert.equal(timers.pending(), 0);
 });
 
@@ -107,14 +127,21 @@ test('another game while she is away does not fire twice', () => {
   mode.update(game);
   mode.update(desktop);
   mode.update({ fgExe: 'D:\\Epic Games\\Fortnite\\Fortnite.exe', fgFull: true });
-  assert.deepEqual(events, [['enter', GAME]]);
+  assert.deepEqual(events, [['wakeMuted', true], ['enter', GAME]]);
   assert.equal(mode.active(), true);
 });
 
 test('gaming.apps makes an emulator count', () => {
   const { mode, events } = harness({ apps: ['dolphin.exe'] });
   mode.update({ fgExe: 'C:\\emu\\Dolphin.exe', fgFull: true });
-  assert.deepEqual(events, [['enter', 'C:\\emu\\Dolphin.exe']]);
+  assert.deepEqual(events, [['wakeMuted', true], ['enter', 'C:\\emu\\Dolphin.exe']]);
+});
+
+test('ignored exe in gaming.apps never enters game mode', () => {
+  const { mode, events } = harness({ apps: [{ match: 'Hades.exe', ignore: true }] });
+  mode.update(game);
+  assert.deepEqual(events, []);
+  assert.equal(mode.active(), false);
 });
 
 test('OFF leaves at once, even in the middle of a game', () => {
@@ -124,17 +151,18 @@ test('OFF leaves at once, even in the middle of a game', () => {
     enabled: () => enabled,
     onEnter: () => events.push('enter'),
     onExit: () => events.push('exit'),
+    setWakeMuted: (on) => events.push(['wakeMuted', on]),
     timers: fakeTimers(),
   });
   mode.update(game);
   enabled = false;
   mode.update(game);
-  assert.deepEqual(events, ['enter', 'exit']);
+  assert.deepEqual(events, [['wakeMuted', true], 'enter', ['wakeMuted', false], 'exit']);
   assert.equal(mode.active(), false);
 
   enabled = true;
   mode.update(game);
-  assert.deepEqual(events, ['enter', 'exit', 'enter']);
+  assert.deepEqual(events, [['wakeMuted', true], 'enter', ['wakeMuted', false], 'exit', ['wakeMuted', true], 'enter']);
 });
 
 test('OFF from the start does nothing at all', () => {
@@ -150,6 +178,6 @@ test('stop() drops a pending return without calling onExit', () => {
   mode.update(desktop);
   mode.stop();
   timers.tick(60_000);
-  assert.deepEqual(events, [['enter', GAME]]);
+  assert.deepEqual(events, [['wakeMuted', true], ['enter', GAME], ['wakeMuted', false]]);
   assert.equal(mode.active(), false);
 });
