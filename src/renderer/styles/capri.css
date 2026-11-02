@@ -1700,8 +1700,10 @@ button.appmenu__row {
 }
 
 .appmenu__submenu--help {
-  width: 300px;
+  width: 360px;
+  max-width: min(360px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -1714,7 +1716,19 @@ button.appmenu__row {
 }
 
 .appmenu__help-step + .appmenu__help-step {
-  margin-top: 6px;
+  margin-top: 8px;
+}
+
+.appmenu__help-link {
+  color: var(--accent-on);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.appmenu__help-link:hover {
+  color: var(--title);
 }
 
 .appmenu__help-cmd {

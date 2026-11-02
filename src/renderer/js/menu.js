@@ -2,7 +2,7 @@
 // toggles as OFF|ON blocks, selectors as ◀ value ▶, and microtext on the rails.
 
 import { clamp } from './util.js';
-import { HELP_STEPS, toggleHelp } from './help-steps.js';
+import { HELP_STEPS, toggleHelp, splitHelpText } from './help-steps.js';
 
 const REPLY_OPTIONS = [
   { id: 'voice', label: 'VOZ' },
@@ -451,6 +451,7 @@ export class AppMenu {
   }
 
   // The numbered steps for one "?", beside the button that opened it.
+  // http(s) in the copy open via menu open-url → shell.openExternal (never inside Capri).
   helpPanel(helpId, build) {
     const help = HELP_STEPS[helpId];
     if (!help) return null;
@@ -459,14 +460,49 @@ export class AppMenu {
     menu.append(build('div', 'appmenu__submenu-title', help.title.toUpperCase()));
     if (help.note) menu.append(build('div', 'appmenu__hint', help.note));
     const list = build('ol', 'appmenu__help-list');
+    const fillText = (parent, text) => {
+      for (const part of splitHelpText(text)) {
+        if (part.type === 'url') {
+          const a = build('a', 'appmenu__help-link', part.value);
+          a.href = part.value;
+          a.rel = 'noopener noreferrer';
+          a.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.host.menuAction({ id: 'open-url', value: part.value }).catch(() => {});
+          });
+          parent.append(a);
+        } else {
+          parent.append(document.createTextNode(part.value));
+        }
+      }
+    };
     for (const step of help.steps) {
       const item = build('li', 'appmenu__help-step');
       if (typeof step === 'string') {
-        item.textContent = step;
+        fillText(item, step);
       } else {
-        item.append(build('div', '', step.text));
+        const line = build('div', '');
+        fillText(line, step.text);
+        item.append(line);
         const cmd = build('div', 'appmenu__help-cmd');
-        cmd.append(build('code', 'appmenu__help-code', step.command));
+        const code = build('code', 'appmenu__help-code', step.command);
+        // Command row may be a URL: same external open on click, plus COPIAR.
+        if (/^https?:\/\//i.test(String(step.command || ''))) {
+          code.classList.add('appmenu__help-link');
+          code.setAttribute('role', 'link');
+          code.tabIndex = 0;
+          const openCmd = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.host.menuAction({ id: 'open-url', value: step.command }).catch(() => {});
+          };
+          code.addEventListener('click', openCmd);
+          code.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') openCmd(e);
+          });
+        }
+        cmd.append(code);
         const copy = build('button', 'appmenu__toggle-btn', 'COPIAR');
         copy.type = 'button';
         copy.addEventListener('click', async (e) => {

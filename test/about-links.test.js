@@ -20,7 +20,7 @@ test('donations stay hidden until the Ko-fi URL exists', () => {
   assert.equal(LINKS.kofi, KOFI_URL);
 });
 
-test('open-url allowlist: discord, tiktok, Capri github; rejects random hosts', () => {
+test('open-url allowlist: discord, tiktok, Capri github, Spotify; http/https only', () => {
   assert.equal(isAllowedOpenUrl(LINKS.discord), true);
   assert.equal(isAllowedOpenUrl('https://discord.com/invite/wmVfYdjpdA'), true);
   assert.equal(isAllowedOpenUrl(LINKS.tiktok), true);
@@ -33,7 +33,11 @@ test('open-url allowlist: discord, tiktok, Capri github; rejects random hosts', 
   assert.equal(isAllowedOpenUrl('https://console.anthropic.com/'), true);
   assert.equal(isAllowedOpenUrl('https://ko-fi.com/someone'), true);
   assert.equal(isAllowedOpenUrl('https://www.python.org/downloads/release/python-3119/'), true);
+  assert.equal(isAllowedOpenUrl('https://developer.spotify.com/dashboard'), true);
+  assert.equal(isAllowedOpenUrl('http://discord.gg/wmVfYdjpdA'), true); // http allowed on allowlisted hosts
   assert.equal(isAllowedOpenUrl('https://evil.example/phishing'), false);
   assert.equal(isAllowedOpenUrl('https://github.com/other/repo'), false);
-  assert.equal(isAllowedOpenUrl('http://discord.gg/wmVfYdjpdA'), false);
+  assert.equal(isAllowedOpenUrl('http://127.0.0.1:47835/callback'), false);
+  assert.equal(isAllowedOpenUrl('file:///C:/secret'), false);
+  assert.equal(isAllowedOpenUrl('javascript:alert(1)'), false);
 });

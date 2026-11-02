@@ -19,7 +19,7 @@ const LINKS = {
 
 const AUTHOR = 'MtGhozt';
 
-// Hosts Capri may open from Acerca de / Cerebro key links (https only).
+// Hosts Capri may open from Acerca de / Cerebro / help "?" (http or https only).
 const OPEN_HOSTS = new Set([
   'discord.gg', 'discord.com', 'www.discord.com',
   'tiktok.com', 'www.tiktok.com',
@@ -27,13 +27,14 @@ const OPEN_HOSTS = new Set([
   'python.org', 'www.python.org',
   'build.nvidia.com', 'aistudio.google.com',
   'console.anthropic.com', 'console.x.ai', 'platform.openai.com',
+  'developer.spotify.com',
   'ko-fi.com', 'www.ko-fi.com',
 ]);
 
 function isAllowedOpenUrl(url) {
   try {
     const u = new URL(String(url || ''));
-    if (u.protocol !== 'https:') return false;
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
     const host = u.hostname.toLowerCase();
     if (!OPEN_HOSTS.has(host) && !host.endsWith('.discord.com')) return false;
     if (host === 'github.com' && !u.pathname.startsWith('/MtGhozt/Capri-Desktop')) return false;
