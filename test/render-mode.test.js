@@ -46,6 +46,6 @@ test('Normal asks Chromium for nothing in particular', () => {
 });
 
 test('OpenGL and no-graphics-card each get their own switches', () => {
-  assert.deepEqual(renderSwitches('gl'), { software: false, switches: [['use-angle', 'gl']] });
+  assert.deepEqual(renderSwitches('gl'), { software: false, switches: [] });
   assert.deepEqual(renderSwitches('software'), { software: true, switches: [['enable-unsafe-swiftshader', null]] });
 });

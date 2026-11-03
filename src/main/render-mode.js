@@ -37,7 +37,8 @@ function nextRenderAction(requested, current, { confirmed = false } = {}) {
 // What Chromium is told before it starts, so picking one only takes a restart.
 function renderSwitches(value) {
   const mode = parseRenderMode(value);
-  if (mode === 'gl') return { software: false, switches: [['use-angle', 'gl']] };
+  // Electron's forced ANGLE OpenGL path can leave transparent canvases blank on Windows.
+  if (mode === 'gl') return { software: false, switches: [] };
   if (mode === 'software') return { software: true, switches: [['enable-unsafe-swiftshader', null]] };
   return { software: false, switches: [] };
 }

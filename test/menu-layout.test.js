@@ -136,6 +136,13 @@ test('startup logs window, renderer, intro, and opacity state', () => {
   assert.match(capri, /p\.alpha = 1;\s*this\.onStartupLog/);
 });
 
+test('dev startup does not force the broken OpenGL angle backend', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(source, /if \(software\) app\.disableHardwareAcceleration/);
+  const render = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'render-mode.js'), 'utf8');
+  assert.doesNotMatch(render, /use-angle/);
+});
+
 test('brain settings render keeps old-format configs visible', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(source, /body\.append\(this\.brainPanel\(model, \{ build \}\)\)/);

@@ -1791,14 +1791,14 @@ export class AppMenu {
             command.readOnly = true;
             command.title = 'Seleccioná y copiá el comando';
             row.append(command);
-            if (item.id === 'cursor-agent') {
-              row.append(build('span', 'appmenu__hint', 'El editor Cursor solo no alcanza.'));
-            }
           }
+          const hint = item.installed
+            ? 'Instalado · clic para activar/apagar'
+            : `No instalado · copiá el comando${item.id === 'cursor-agent' ? ' · El editor Cursor solo no alcanza.' : ''}`;
           row.append(build('span', 'appmenu__hint appmenu__agent-hint',
             this.agentNote?.startsWith(item.label)
               ? this.agentNote
-              : item.installed ? 'Instalado · clic para activar/apagar' : 'No instalado · copiá el comando'));
+              : hint));
           agents.append(row);
         }
         wrap.append(agents);

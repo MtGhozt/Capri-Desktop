@@ -1762,19 +1762,26 @@ button.appmenu__row {
 
 .appmenu__agent-row {
   display: grid;
-  grid-template-columns: minmax(130px, auto) auto minmax(220px, 1fr);
+  grid-template-columns: minmax(150px, auto) auto minmax(260px, 1fr);
   gap: 8px;
   align-items: center;
   margin: 4px 0;
 }
 
 .appmenu__agent-name {
-  color: var(--title);
+  color: var(--label);
+  white-space: nowrap;
   font-weight: 700;
 }
 
 .appmenu__agent-hint {
   grid-column: 1 / -1;
+  white-space: nowrap;
+}
+
+.appmenu__agent-row .appmenu__toggle-btn {
+  min-width: 112px;
+  white-space: nowrap;
 }
 
 .appmenu__radio-group {
