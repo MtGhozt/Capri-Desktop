@@ -954,7 +954,7 @@ export class AppMenu {
       welcome.dataset.setting = 'model';
       body.append(welcome);
     }
-    body.append(this.brainPanel(model, { build }));
+    body.append(this.providerCardsPanel(model, { build }));
     toggle('Enviar mi pantalla cuando le pida mirar', {
       setting: 'model',
       on: model.shareScreen,
@@ -1143,26 +1143,24 @@ export class AppMenu {
       current: cfg.theme,
       onChange: (id) => this.act('theme', id),
     });
-    selector('Pantalla', {
-      setting: 'bubble',
-      options: [
-        { id: 'auto', label: 'Automático (recomendado)', hint: 'Usa la configuración gráfica normal de Windows.' },
-        { id: 'gl', label: 'OpenGL', hint: 'Fuerza OpenGL si Capri se ve negra o falla con Automático.' },
-        { id: 'software', label: 'Sin GPU (lento)', hint: 'Dibuja por CPU; sirve como último recurso y consume más tiempo.' },
-      ],
-      current: cfg.render || 'auto',
-      onChange: (id) => this.pickRender(id, state),
-    });
-    {
-      const hints = state.renderHints || {};
-      const mode = cfg.render || 'auto';
-      const hint = build('div', 'appmenu__hint');
-      hint.dataset.setting = 'bubble';
-      hint.textContent = this.confirmSoftware
-        ? (state.softwareConfirm || 'Capri va a ir más lenta. ¿Seguro?')
-        : `Pantalla activa: ${mode === 'auto' ? 'Automático (recomendado)' : mode === 'gl' ? 'OpenGL' : 'Sin GPU (lento)'}. ${hints[mode] || hints.auto || ''}`;
-      body.append(hint);
+    const renderOptions = [
+      { id: 'auto', label: 'Automático (recomendado)', hint: 'Usa la configuración gráfica normal de Windows.' },
+      { id: 'gl', label: 'OpenGL', hint: 'Fuerza OpenGL si Capri se ve negra o falla con Automático.' },
+      { id: 'software', label: 'Sin GPU (lento)', hint: 'Dibuja por CPU; sirve como último recurso.' },
+    ];
+    const renderRow = build('div', 'appmenu__radio-group');
+    renderRow.dataset.setting = 'bubble';
+    for (const option of renderOptions) {
+      const label = build('label', 'appmenu__radio');
+      const input = build('input');
+      input.type = 'radio';
+      input.name = 'capri-render';
+      input.checked = (cfg.render || 'auto') === option.id;
+      input.addEventListener('change', () => this.pickRender(option.id, state));
+      label.append(input, build('span', 'appmenu__label', option.label), build('span', 'appmenu__hint', option.hint));
+      renderRow.append(label);
     }
+    body.append(renderRow);
     if (this.confirmSoftware) {
       action('SIN GPU', {
         setting: 'bubble',
@@ -1635,8 +1633,136 @@ export class AppMenu {
         });
         row.append(btn);
       }
+
       return row;
     };
+
+    const providerCardsPanel = (model, { build }) => {
+        const wrap = build('div', 'appmenu__brain');
+        const providers = model.providers || [];
+        const labelOf = (id) => providers.find((p) => p.id === id)?.label || id;
+        const cards = ['gemini', 'openai', 'anthropic', 'deepseek', 'nvidia', 'openrouter', 'xai', 'local'];
+        const active = new Set(model.brains || []);
+        const links = { ...(model.freeLinks || {}), ...(model.ownLinks || {}) };
+        const models = model.models || {};
+        const notes = this.probeNotes || {};
+        const field = (label, value, placeholder, type = 'text') => {
+          const input = build('input', 'appmenu__input');
+          input.type = type;
+          input.value = value || '';
+          input.placeholder = placeholder;
+          input.spellcheck = false;
+          input.autocomplete = 'off';
+          input.addEventListener('keydown', (e) => e.stopPropagation());
+          for (const ev of ['mousedown', 'click']) input.addEventListener(ev, (e) => e.stopPropagation());
+          const row = build('label', 'appmenu__fix-field');
+          row.append(build('span', 'appmenu__fix-label', label), input);
+          return { input, row };
+        };
+        const move = (id, direction) => this.host.menuAction({ id: 'model-reorder', value: { id, direction } }).then(() => this.refresh());
+        const priority = build('div', 'appmenu__brain-card');
+        priority.append(build('div', 'appmenu__brain-card-title', 'Prioridad'));
+        priority.append(build('div', 'appmenu__hint', 'Orden en que Capri prueba los cerebros'));
+        for (const [index, id] of (model.brainChain || []).entries()) {
+          const row = build('div', 'appmenu__row appmenu__row--sub');
+          row.append(build('span', 'appmenu__label', `${index + 1}. ${id.label}`));
+          for (const [direction, glyph, disabled] of [['up', '↑', index === 0], ['down', '↓', index === model.brainChain.length - 1]]) {
+            const btn = build('button', 'appmenu__arrow', glyph);
+            btn.type = 'button';
+            btn.disabled = disabled;
+            btn.addEventListener('click', (e) => { e.stopPropagation(); move(id.id, direction); });
+            row.append(btn);
+          }
+          priority.append(row);
+        }
+        wrap.append(priority);
+        for (const id of cards) {
+          const p = providers.find((item) => item.id === id) || { label: id };
+          const card = build('div', 'appmenu__brain-card');
+          const title = build('div', 'appmenu__brain-card-title', p.label);
+          const toggle = build('button', `appmenu__toggle-btn${active.has(id) ? ' is-active' : ''}`,
+            active.has(id) ? 'Activo' : 'Apagado');
+          toggle.type = 'button';
+          toggle.setAttribute('aria-pressed', String(active.has(id)));
+          toggle.addEventListener('click', (e) => { e.stopPropagation(); this.act('model-provider', id); });
+          title.append(toggle);
+          card.append(title);
+          const key = !model.localIds?.includes(id) && !['local'].includes(id)
+            ? field('Key', '', model.hasKeys?.[id] ? 'key guardada: pega otra para cambiarla' : 'Pega tu key', 'password')
+            : null;
+          const modelField = field('Modelo', models[id], p.model || 'nombre exacto del modelo');
+          const url = id === 'local' ? field('URL', model.baseUrls?.[id] || model.baseUrl, 'http://localhost:1235/v1') : null;
+          const link = links[id];
+          if (link?.url) {
+            const get = build('button', 'appmenu__toggle-btn', `Conseguir key · ${link.label}`);
+            get.type = 'button';
+            get.addEventListener('click', (e) => { e.stopPropagation(); this.host.menuAction({ id: 'open-url', value: link.url }); });
+            card.append(get);
+          }
+          if (key) card.append(key.row);
+          card.append(modelField.row);
+          if (url) card.append(url.row);
+          const actions = build('div', 'appmenu__fix-actions');
+          const probe = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'Probar');
+          probe.type = 'button';
+          probe.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            probe.disabled = true;
+            const result = await this.host.menuAction({
+              id: 'model-probe',
+              value: {
+                provider: id,
+                key: key?.input.value,
+                model: modelField.input.value.trim(),
+                baseUrl: url?.input.value.trim(),
+              },
+            }).catch(() => ({ ok: false, message: 'No se pudo probar.' }));
+            this.probeNotes = { ...(this.probeNotes || {}), [id]: result?.message || 'Falló.' };
+            await this.refresh();
+          });
+          actions.append(probe);
+          if (model.hasKeys?.[id]) {
+            const remove = build('button', 'appmenu__toggle-btn', 'Quitar key');
+            remove.type = 'button';
+            remove.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              await this.host.menuAction({ id: 'model-key', value: { provider: id, key: '' } });
+              await this.refresh();
+            });
+            actions.append(remove);
+          }
+          if (notes[id]) {
+            const message = notes[id].startsWith('Listo') ? `Listo, ${labelOf(id)} contesta.` : notes[id];
+            actions.append(build('span', `appmenu__hint appmenu__brain-status${notes[id].startsWith('Listo') ? ' is-ok' : ' is-bad'}`, message));
+          }
+          card.append(actions);
+          wrap.append(card);
+        }
+        const agents = build('div', 'appmenu__brain-card');
+        agents.append(build('div', 'appmenu__brain-card-title', 'Agentes instalados'));
+        agents.append(build('div', 'appmenu__hint', 'Se instalan desde cualquier ventana de PowerShell.'));
+        for (const item of model.agentsInstalled || []) {
+          const brainId = `agent-${item.id === 'cursor-agent' ? 'cursor' : item.id}`;
+          const row = build('div', 'appmenu__agent-row');
+          const toggle = build('button', `appmenu__toggle-btn${active.has(brainId) ? ' is-active' : ''}`,
+            `${item.label} · ${item.installed ? 'instalado' : 'no instalado'}`);
+          toggle.type = 'button';
+          toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.act('model-provider', brainId);
+          });
+          const command = build('input', 'appmenu__input');
+          command.value = item.installHow || '';
+          command.readOnly = true;
+          command.title = 'Seleccioná y copiá el comando';
+          row.append(toggle, command);
+          agents.append(row);
+        }
+        wrap.append(agents);
+        return wrap;
+      };
+
+    return providerCardsPanel(model, { build });
 
     const textField = (label, value, placeholder, type = 'text') => {
       const field = build('label', 'appmenu__fix-field');

@@ -26,6 +26,19 @@ test('detectAgents marks PATH hits; all five CLIs are wired when present', () =>
   assert.equal(calls, 10); // 5 bins × 2 calls
 });
 
+test('detectAgents only marks CLIs found by where on PATH', () => {
+  const list = detectAgents({
+    platform: 'win32',
+    execFileSync: (cmd, [bin]) => {
+      assert.equal(cmd, 'where');
+      if (bin === 'claude') return 'C:\\tools\\claude.cmd\n';
+      throw new Error('not found');
+    },
+  });
+  assert.equal(list.find((a) => a.id === 'claude').installed, true);
+  assert.equal(list.find((a) => a.id === 'opencode').installed, false);
+});
+
 test('each CLI builds the right command (read-only flags where the CLI has them)', () => {
   const by = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
   assert.deepEqual(by.claude.args('hola'), ['-p', '--permission-mode', 'plan', 'hola']);

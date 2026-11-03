@@ -1641,7 +1641,12 @@ function setChatProvider(id) {
   const enabled = active.includes(id);
   const brains = enabled
     ? active.filter((brain) => brain !== id)
-    : [...active, id];
+    : (() => {
+      const next = active.filter((brain) => brain !== id);
+      const localIndex = next.indexOf('local');
+      next.splice(localIndex < 0 ? next.length : localIndex, 0, id);
+      return next;
+    })();
   if (!brains.length) brains.push('local');
   const primary = brains[0];
   const next = switchProvider(cfg.llm || {}, primary, PROVIDERS);
@@ -1663,23 +1668,34 @@ function setChatProvider(id) {
 
 function setChatModel(value) {
   const provider = String(value?.provider || config.load().llm?.provider || 'local');
-  if (value?.provider && PROVIDERS[value.provider]) setChatProvider(value.provider);
   const model = String(value?.model ?? value ?? '').trim().slice(0, 120);
   if (!model) return { ok: false, message: 'Falta el nombre del modelo.' };
-  const next = setProviderModel(config.load().llm || {}, provider, model);
+  const cfg = config.load();
+  const next = setProviderModel(cfg.llm || {}, provider, model);
   const patch = {
-    model: next.model,
     models: next.models,
+    ...(provider === cfg.llm?.provider ? { model } : {}),
     ...(provider === 'local' ? { localModel: model } : {}),
   };
   if (value?.baseUrl != null && PROVIDERS[provider]?.local) {
     const baseUrl = String(value.baseUrl).trim().replace(/\/+$/, '') || defaultBaseUrl(provider);
-    const urls = { ...(config.load().llm?.baseUrls || {}), [provider]: baseUrl };
-    patch.baseUrl = baseUrl;
+    const urls = { ...(cfg.llm?.baseUrls || {}), [provider]: baseUrl };
+    if (provider === cfg.llm?.provider) patch.baseUrl = baseUrl;
     patch.baseUrls = urls;
   }
   updateConfig({ llm: patch });
   return { ok: true, model };
+}
+
+function reorderBrains(value) {
+  const cfg = config.load();
+  const brains = activeBrainIds(cfg.llm);
+  const index = brains.indexOf(String(value?.id || ''));
+  const next = index + (value?.direction === 'up' ? -1 : 1);
+  if (index < 0 || next < 0 || next >= brains.length) return { ok: true };
+  [brains[index], brains[next]] = [brains[next], brains[index]];
+  updateConfig({ llm: { brains, provider: brains[0], model: modelForProvider(cfg.llm, brains[0], PROVIDERS) } });
+  return { ok: true };
 }
 
 function setChatKey(value) {
@@ -1716,7 +1732,6 @@ async function probeChatFromMenu(value = {}) {
     const clean = String(value.key).trim();
     if (clean) saveLlmKey(id, clean);
   }
-  if (value.provider) setChatProvider(id);
   if (value.model || value.baseUrl != null) {
     setChatModel({
       provider: id,
@@ -1727,9 +1742,9 @@ async function probeChatFromMenu(value = {}) {
   const cfg = config.load();
   const result = await probeProvider({
     id,
-    model: String(cfg.llm?.model || PROVIDERS[id].model),
+    model: String(cfg.llm?.models?.[id] || (id === 'local' ? cfg.llm?.localModel : null) || PROVIDERS[id].model),
     key: PROVIDERS[id].local ? '' : llmKey(id),
-    baseUrl: cfg.llm?.baseUrl,
+    baseUrl: cfg.llm?.baseUrls?.[id] || cfg.llm?.baseUrl,
   });
   // Capri's line only — never echo the key or the raw server body.
   return { ok: Boolean(result.ok), message: String(result.message || '') };
@@ -1767,6 +1782,7 @@ function applyMenuAction(id, value) {
       updateConfig({ music: { player: ['namida', 'spotify', 'none'].includes(value) ? value : 'namida' } });
       break;
     case 'model-provider': return setChatProvider(value);
+    case 'model-reorder': return reorderBrains(value);
     case 'model-set': return setChatModel(value);
     case 'model-key': return setChatKey(value);
     case 'model-probe': return probeChatFromMenu(value);
@@ -2157,6 +2173,11 @@ function menuState(extra = {}) {
         agentsInstalled: extra.light ? (extra.agentsInstalled || []) : detectAgents(),
         agentPreferred: String(cfg.llm?.agentPreferred || 'claude'),
         model: String(cfg.llm?.model || ''),
+        models: Object.fromEntries(BRAIN_GROUPS.cards.map((pid) => [
+          pid,
+          modelForProvider(cfg.llm || {}, pid, PROVIDERS),
+        ])),
+        baseUrls: { ...(cfg.llm?.baseUrls || {}) },
         baseUrl: String(cfg.llm?.baseUrl || defaultBaseUrl(safe)),
         local: !isCloud(safe),
         agent: isAgent(safe),

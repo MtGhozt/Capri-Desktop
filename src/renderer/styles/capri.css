@@ -1718,6 +1718,31 @@ button.appmenu__row {
   margin: 4px 0;
 }
 
+.appmenu__radio-group {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.appmenu__radio {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px;
+  align-items: start;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.appmenu__radio input {
+  accent-color: var(--cyan);
+  margin-top: 3px;
+}
+
+.appmenu__radio .appmenu__hint {
+  grid-column: 2;
+}
+
 .appmenu__agent-row .appmenu__input {
   user-select: text;
   cursor: text;

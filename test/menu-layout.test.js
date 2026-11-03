@@ -79,7 +79,20 @@ test('render selector explains and marks the active mode', () => {
   assert.match(source, /Automático \(recomendado\)/);
   assert.match(source, /OpenGL/);
   assert.match(source, /Sin GPU \(lento\)/);
-  assert.match(source, /Pantalla activa/);
+  assert.match(source, /appmenu__radio/);
+});
+
+test('brain UI uses provider cards, priority controls, and per-card probe status', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(source, /Orden en que Capri prueba los cerebros/);
+  assert.match(source, /model-reorder/);
+  assert.match(source, /Listo, \$\{labelOf\(id\)\} contesta/);
+});
+
+test('render mode is presented as visible radio options without duplicate active hint', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(source, /appmenu__radio/);
+  assert.doesNotMatch(source, /Pantalla activa:/);
 });
 
 test('voice loading stays visible until a ready state', () => {

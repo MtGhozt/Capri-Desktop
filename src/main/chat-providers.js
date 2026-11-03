@@ -34,6 +34,7 @@ const BRAIN_GROUPS = {
   local: ['local', 'ollama'],
   own: ['openai', 'anthropic', 'xai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'],
   agent: ['agent-auto', 'agent-claude', 'agent-cursor', 'agent-opencode', 'agent-codex', 'agent-gemini'],
+  cards: ['gemini', 'nvidia', 'openai', 'anthropic', 'deepseek', 'openrouter', 'xai', 'local'],
 };
 
 const FREE_KEY_LINKS = {
@@ -45,6 +46,8 @@ const OWN_KEY_LINKS = {
   anthropic: { label: 'console.anthropic.com', url: 'https://console.anthropic.com/' },
   xai: { label: 'console.x.ai', url: 'https://console.x.ai/' },
   openai: { label: 'platform.openai.com', url: 'https://platform.openai.com/api-keys' },
+  deepseek: { label: 'platform.deepseek.com', url: 'https://platform.deepseek.com/api_keys' },
+  openrouter: { label: 'openrouter.ai', url: 'https://openrouter.ai/keys' },
 };
 
 const DEFAULT_PROVIDER = 'local';

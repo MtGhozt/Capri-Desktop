@@ -139,7 +139,6 @@ function createLlm({
   function fallbackChain(from, cfg, image = false) {
     const order = [
       ...activeBrainIds(cfg.llm),
-      ...(image ? [...(BRAIN_GROUPS.free || []), ...(BRAIN_GROUPS.own || [])] : []),
       ...(!Array.isArray(cfg.llm.brains) ? [...(BRAIN_GROUPS.free || []), ...(BRAIN_GROUPS.own || [])] : []),
       'local',
     ];
@@ -220,7 +219,10 @@ function createLlm({
     const started = Date.now();
 
     const cfg = loadConfig();
-    const id = String(cfg.llm?.provider || 'local');
+    const configuredId = String(cfg.llm?.provider || 'local');
+    const id = Array.isArray(cfg.llm?.brains)
+      ? activeBrainIds(cfg.llm)[0]
+      : configuredId;
     const cloud = isCloud(id);
     const jpeg = image ? String(image) : null;
     let streamed = false;

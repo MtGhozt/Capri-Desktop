@@ -19,7 +19,7 @@ const DEFAULTS = {
   render: 'auto',    // her window: 'auto', 'gl' (OpenGL) or 'software' (no graphics card), for black screens
   llm: {
     provider: 'local',       // 'local' (LM Studio) or a cloud one: see chat-providers.js
-    brains: ['local'],       // ordered active fallback brains; provider remains the first for compatibility
+    brains: ['gemini', 'local'], // ordered active fallback brains; cloud first, LM Studio last
     model: 'google/gemma-4-e2b', // the model of the provider in use
     localModel: 'google/gemma-4-e2b', // LM Studio's, kept apart so going to the cloud and back doesn't lose it
     models: {},
@@ -172,6 +172,15 @@ function reviveMigratedTts(voice) {
   return { tts: 'auto' };
 }
 
+function migrateBrainOrder(llm) {
+  const value = { ...(llm || {}) };
+  if (Array.isArray(value.brains) && value.brains.length === 1 && value.brains[0] === 'local') {
+    value.brains = ['gemini', 'local'];
+    return { llm: value, changed: true };
+  }
+  return { llm: value, changed: false };
+}
+
 function file() {
   return path.join(app.getPath('userData'), 'config.json');
 }
@@ -275,6 +284,9 @@ function load() {
   const reply = migratePublicReply(cache.voice);
   cache.voice = reply.voice;
   if (reply.changed) dirty = true;
+  const brains = migrateBrainOrder(cache.llm);
+  cache.llm = brains.llm;
+  if (brains.changed) dirty = true;
   if (dirty) persist();
   return cache;
 }
@@ -337,4 +349,6 @@ function save(patch) {
   return cache;
 }
 
-module.exports = { load, save, filePath: file, DEFAULTS, migratePublicReply, reviveMigratedTts };
+module.exports = {
+  load, save, filePath: file, DEFAULTS, migratePublicReply, reviveMigratedTts, migrateBrainOrder,
+};

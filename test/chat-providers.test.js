@@ -6,7 +6,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  PROVIDERS, BRAIN_GROUPS, FREE_KEY_LINKS, providerOptions, provider, isCloud, usesLms, activeBrainIds,
+  PROVIDERS, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS, providerOptions, provider, isCloud, usesLms, activeBrainIds,
   defaultBaseUrl, requestFor, explain, providerAfterKeyRemoved, supportsVision,
 } = require('../src/main/chat-providers');
 
@@ -57,6 +57,14 @@ test('vision flag: Gemini/OpenAI yes; agents and plain local Gemma no', () => {
 test('active brains preserve order and fall back to the configured provider', () => {
   assert.deepEqual(activeBrainIds({ brains: ['gemini', 'agent-cursor', 'local'] }), ['gemini', 'agent-cursor', 'local']);
   assert.deepEqual(activeBrainIds({ provider: 'gemini' }), ['gemini']);
+});
+
+test('brain cards expose one key/model provider and the default order keeps LM Studio last', () => {
+  assert.deepEqual(BRAIN_GROUPS.cards, ['gemini', 'nvidia', 'openai', 'anthropic', 'deepseek', 'openrouter', 'xai', 'local']);
+  assert.equal(FREE_KEY_LINKS.gemini.url, 'https://aistudio.google.com/apikey');
+  assert.ok(OWN_KEY_LINKS.deepseek.url);
+  assert.ok(OWN_KEY_LINKS.openrouter.url);
+  assert.ok(OWN_KEY_LINKS.xai.url);
 });
 
 test('LM Studio is only booted and waited for when it is the one who answers', () => {
