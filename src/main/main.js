@@ -277,6 +277,8 @@ function createOverlay() {
     rendererRecover.reset();
   });
   overlay.webContents.on('did-finish-load', () => {
+    fitOverlay();
+    overlay.showInactive();
     rendererRecover.reset();
     for (const payload of voiceQueue) overlay.webContents.send('voice:event', payload);
     voiceQueue = [];
@@ -1284,7 +1286,7 @@ async function pickVoiceDir() {
   if (!chosen) return { ok: false, message: '' };
   const check = checkVoiceDir(chosen);
   if (!check.ok) return check;
-  voice?.stop(); // applyConfig below brings it back up on the new folder
+  await voice?.stop(); // applyConfig below brings it back up on the new folder
   updateConfig({ voice: { dir: check.dir, ...reviveMigratedTts(config.load().voice) } });
   const says = String(config.load().voice?.replyMode || 'blips') === 'voice' ? '' : ' Elegí VOZ en Respuesta para que te hable.';
   return { ok: true, message: `Voz en ${path.basename(check.dir)}.${says}` };
@@ -1307,7 +1309,7 @@ async function runVoiceInstall(value = {}) {
   const dir = result.dir || voiceInstall.dir();
   const check = checkVoiceDir(dir);
   if (!check.ok) return { ok: false, message: check.message || 'La voz no quedó usable.' };
-  voice?.stop();
+  await voice?.stop();
   updateConfig({
     voice: {
       dir: check.dir,
@@ -1408,9 +1410,7 @@ async function maybeAutoLook() {
   })) return;
   const id = String(cfg.llm?.provider || 'local');
   const model = String(cfg.llm?.model || provider(id).model || '');
-  const agentCanSee = id === 'agent-gemini'
-    || (id === 'agent-auto' && detectAgents().some((a) => a.id === 'gemini' && a.ready));
-  if (!supportsVision(id, model) && !agentCanSee) return;
+  if (!supportsVision(id, model) && !isAgent(id)) return;
   if (llmBusy || overlayFolded || chatOpen || voiceTalking) return;
   const image = await snapScreenForLook();
   if (!image) return;
@@ -1468,7 +1468,7 @@ async function pickVoiceRefWav() {
   return { ok: true, path: file, transcriptPath: selectedTxt || (fs.existsSync(sidecar) ? sidecar : '') };
 }
 
-function saveVoiceRef(value = {}) {
+async function saveVoiceRef(value = {}) {
   const cfg = config.load();
   const dir = resolveVoiceDir(ROOT, cfg) || voiceInstall?.dir?.();
   const saved = saveCustomRef({
@@ -1478,16 +1478,22 @@ function saveVoiceRef(value = {}) {
     transcriptPath: value?.transcriptPath,
   });
   if (!saved.ok) return saved;
-  voice?.stop();
+  await voice?.stop();
   updateConfig({
     voice: {
       ttsRef: saved.ttsRef,
+      ttsSourceName: saved.sourceName,
       ...reviveMigratedTts(cfg.voice),
       ...(String(cfg.voice?.tts || 'off').toLowerCase() === 'off' ? { tts: 'auto' } : {}),
     },
   });
   voice?.start({ force: true });
-  return { ok: true, message: saved.message || 'Tu voz (archivo) lista.', ttsRef: saved.ttsRef };
+  return {
+    ok: true,
+    message: saved.message || 'Tu voz (archivo) lista.',
+    ttsRef: saved.ttsRef,
+    sourceName: saved.sourceName,
+  };
 }
 
 function clearVoiceRef() {
@@ -1628,7 +1634,10 @@ function setChatProvider(id) {
   if (!PROVIDERS[id]) return { ok: false, message: 'Ese proveedor no existe.' };
   const cfg = config.load();
   const from = String(cfg.llm?.provider || 'local');
-  if (id === from) return { ok: true };
+  if (id === from) {
+    if (!isAgent(id)) return { ok: true };
+    id = 'gemini';
+  }
   const next = switchProvider(cfg.llm || {}, id, PROVIDERS);
   const patch = { provider: next.provider, model: next.model, models: next.models };
   if (id === 'local') patch.localModel = next.model;
@@ -1797,6 +1806,10 @@ function applyMenuAction(id, value) {
       if (parseRenderMode(value) !== value) return { ok: false, message: 'Esa opción de pantalla no existe.' };
       if (parseRenderMode(config.load().render) === value) return { ok: true }; // already on it
       config.save({ render: value, visible: true });
+      if (DEV) {
+        doQuit();
+        return { ok: true, message: 'Cerré Capri. Volvé a ejecutar pnpm start para aplicar Pantalla.' };
+      }
       app.relaunch(); // read once, when Chromium starts
       app.exit(0);
       break;
@@ -1834,7 +1847,9 @@ function applyMenuAction(id, value) {
         : id === 'game-forget' || value === 'remove' ? 'remove'
           : 'allow';
       updateConfig({ gaming: { apps: patchGamingApps(config.load().gaming?.apps, exe, action) } });
-      break;
+      return action === 'remove'
+        ? { ok: true, message: `${path.basename(exe, path.extname(exe))} quitado de la lista ✓` }
+        : { ok: true };
     }
     case 'comments': updateConfig({ comments: { enabled: Boolean(value) } }); break;
     case 'comments-range': updateConfig({ comments: {

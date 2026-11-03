@@ -54,6 +54,7 @@ test('ttsRef null → default voice path, not tts off', () => {
 test('custom ttsRef is labeled as archivo', () => {
   assert.equal(usesCloneRef({ ttsRef: 'ref/my_ref.wav' }), true);
   assert.equal(activeVoiceLabel({ ttsRef: 'ref/my_ref.wav' }), 'Tu voz (my_ref.wav)');
+  assert.equal(activeVoiceLabel({ ttsRef: 'ref/my_ref.wav', ttsSourceName: 'capri_ref.wav' }), 'Tu voz (capri_ref.wav)');
 });
 
 test('custom ref picker rejects an empty transcript', () => {
@@ -77,6 +78,7 @@ test('custom ref picker copies wav+txt and returns ttsRef', () => {
   });
   assert.equal(ok.ok, true);
   assert.equal(ok.ttsRef, 'ref/my_ref.wav');
+  assert.equal(ok.sourceName, 'sample.wav');
   assert.ok(fs.existsSync(path.join(dir, 'ref', 'my_ref.wav')));
   assert.equal(
     fs.readFileSync(path.join(dir, 'ref', 'my_ref.txt'), 'utf8').trim(),
@@ -92,4 +94,10 @@ test('custom ref picker loads a matching transcript file beside the wav', () => 
   const ok = saveCustomRef({ voiceDir: dir, wavPath: wav });
   assert.equal(ok.ok, true);
   assert.equal(fs.readFileSync(path.join(dir, 'ref', 'my_ref.txt'), 'utf8').trim(), 'Hola desde archivo.');
+});
+
+test('voice loading only shows a percentage for real non-zero progress', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'bubble.js'), 'utf8');
+  assert.match(source, /Number\(progress\) > 0/);
+  assert.match(source, /cargando voz…/);
 });

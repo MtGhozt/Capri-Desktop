@@ -11,7 +11,7 @@ const CUSTOM_REF_REL = path.join('ref', 'my_ref.wav');
 
 function activeVoiceLabel(voice) {
   const ref = String(voice?.ttsRef || '').trim();
-  return ref ? `Tu voz (${path.basename(ref)})` : 'Voz por defecto';
+  return ref ? `Tu voz (${String(voice?.ttsSourceName || path.basename(ref))})` : 'Voz por defecto';
 }
 
 function usesCloneRef(voice) {
@@ -47,7 +47,12 @@ function saveCustomRef({
   const destTxt = destWav.replace(/\.wav$/i, '.txt');
   copyFileSync(src, destWav);
   writeFileSync(destTxt, `${text}\n`, 'utf8');
-  return { ok: true, ttsRef: CUSTOM_REF_REL.replace(/\\/g, '/'), message: 'Tu voz (archivo) lista.' };
+  return {
+    ok: true,
+    ttsRef: CUSTOM_REF_REL.replace(/\\/g, '/'),
+    sourceName: path.basename(src),
+    message: 'Tu voz (archivo) lista.',
+  };
 }
 
 module.exports = {

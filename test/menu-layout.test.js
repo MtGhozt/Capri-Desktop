@@ -52,6 +52,28 @@ test('startup keeps the intro animation enabled by default', () => {
   assert.match(source, /else if \(config\.fx\?\.intro !== false\) await capri\.intro/);
 });
 
+test('overlay is shown when the renderer finishes loading, not only ready-to-show', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(source, /did-finish-load[\s\S]{0,300}overlay\.showInactive\(\)/);
+});
+
+test('render changes do not relaunch the development process', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(source, /if \(DEV\)[\s\S]{0,160}doQuit\(\)/);
+  assert.match(source, /app\.relaunch\(\)/);
+});
+
+test('game removal returns visible feedback', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(source, /message: .*quitado de la lista/);
+});
+
+test('agent rows include install guidance for every supported CLI', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(source, /for \(const id of agentIds\.filter/);
+  assert.match(source, /PowerShell/);
+});
+
 test('screen context includes visible windows for desktop screenshots', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
   assert.match(source, /Apps\/ventanas abiertas/);

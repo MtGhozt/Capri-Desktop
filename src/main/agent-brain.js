@@ -14,6 +14,7 @@ const AGENTS = [
     bin: 'claude',
     args: (prompt) => ['-p', '--permission-mode', 'plan', prompt],
     installHow: 'irm https://claude.ai/install.ps1 | iex',
+    note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri.',
     ready: true,
   },
   {
@@ -22,6 +23,7 @@ const AGENTS = [
     bin: 'cursor-agent',
     args: (prompt) => ['-p', '--mode=ask', '--output-format', 'text', prompt],
     installHow: 'curl https://cursor.com/install -fsS | bash',
+    note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri.',
     ready: true,
   },
   {
@@ -30,6 +32,7 @@ const AGENTS = [
     bin: 'opencode',
     args: (prompt) => ['run', prompt],
     installHow: 'npm install -g @opencode/cli',
+    note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri.',
     ready: true,
   },
   {
@@ -38,6 +41,7 @@ const AGENTS = [
     bin: 'codex',
     args: (prompt) => ['exec', '--sandbox', 'read-only', '--ask-for-approval', 'never', prompt],
     installHow: 'npm install -g @openai/codex',
+    note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri. Luego confiá los hooks solo si querés que Codex los ejecute.',
     ready: true,
   },
   {
@@ -46,6 +50,7 @@ const AGENTS = [
     bin: 'gemini',
     args: (prompt) => ['-p', '--approval-mode=plan', prompt],
     installHow: 'npm install -g @google/gemini-cli',
+    note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri.',
     ready: true,
   },
 ];
@@ -82,7 +87,7 @@ function detectAgents(opts = {}) {
       path: file,
       ready: a.ready && Boolean(file),
       installHow: a.installHow || '',
-      note: a.ready ? '' : 'Próximamente',
+      note: a.note || (a.ready ? '' : 'Próximamente'),
     };
   });
   if (!opts.execFileSync) {

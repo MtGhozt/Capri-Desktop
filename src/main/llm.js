@@ -1,7 +1,9 @@
 'use strict';
 
 const fs = require('node:fs');
-const { PROVIDERS, BRAIN_GROUPS, isCloud, isAgent, requestFor, explain, provider } = require('./chat-providers');
+const {
+  PROVIDERS, BRAIN_GROUPS, isCloud, isAgent, requestFor, explain, provider,
+} = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
 const { stripReplyTags, createMoodStripper } = require('./mood-tag');
@@ -292,6 +294,9 @@ function createLlm({
     // One turn to whoever answers: an agent CLI on this PC, or an OpenAI-compatible server.
     const attempt = async (target) => {
       if (isAgent(target) && typeof runAgentChat === 'function') {
+        if (jpeg) {
+          throw Object.assign(new Error('agent vision fallback'), { code: 'no-vision' });
+        }
         const text = await runAgentChat({
           provider: target,
           user,

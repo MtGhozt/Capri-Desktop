@@ -129,6 +129,34 @@ test('a cloud that fails hands it to Gemma, and she says so in Spanish', async (
   assert.equal(out.error, null);
 });
 
+test('an agent brain with a screenshot falls back to vision-capable Gemini', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return ok('Veo la pantalla.');
+  };
+  let agentCalls = 0;
+  const cfg = cfgOf({ provider: 'agent-gemini', model: 'agent' });
+  const llm = createLlm({
+    loadConfig: () => cfg,
+    personaPath: 'no-such-persona.md',
+    apiKey: (id) => (id === 'gemini' ? KEY : ''),
+    runAgentChat: async () => { agentCalls += 1; return 'No puedo ver imágenes.'; },
+  });
+  let done = null;
+  await llm.chat({
+    user: 'Mirá mi pantalla',
+    image: 'jpeg-base64',
+    onToken: () => {},
+    onDone: (payload) => { done = payload; },
+    onError: (payload) => { throw new Error(payload.text); },
+  });
+  assert.equal(agentCalls, 0);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /generativelanguage/);
+  assert.equal(done.text, 'Veo la pantalla.');
+});
+
 test('no network at all: the same fallback, said plainly', async () => {
   const h = harness({
     cfg: cfgOf({ provider: 'deepseek' }),

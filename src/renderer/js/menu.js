@@ -76,6 +76,7 @@ export class AppMenu {
     this.view = 'main';     // 'apps': her app table instead of the menu (Paso 4C)
     this.appOpen = null;    // the app being edited
     this.appNote = '';      // what came of the last add / save / delete
+    this.gameNote = '';
     this.appDelete = null;  // BORRAR pressed once: the next press deletes
     this.linkForm = false;  // Añadir enlace open
     this.testText = '';     // Probar comando
@@ -176,6 +177,7 @@ export class AppMenu {
       this.confirmForget = false;
       this.confirmSoftware = false;
       this.fixNote = '';
+      this.gameNote = '';
       this.modelNote = '';
       this.at = { x, y };
       this.avoid = avoid || { left: x, top: y, right: x, bottom: y };
@@ -403,6 +405,7 @@ export class AppMenu {
         { id: 'ignore', label: 'IGNORAR' },
         { id: 'remove', label: 'SACAR DE LA LISTA' },
       ], null, 'game-list', anchor));
+    if (this.gameNote) body.append(build('div', 'appmenu__hint', this.gameNote));
     row('Tema', cfg.theme === 'capri' ? 'CAPRI' : 'CYBERPUNK', 'theme',
       (anchor) => openSubmenu('theme', THEME_OPTIONS, cfg.theme, 'theme', anchor));
     const rule = build('div', 'appmenu__quick-rule');
@@ -759,13 +762,13 @@ export class AppMenu {
       this.host.menuAction({ id: 'voice-install-cancel' }).catch(() => {});
     });
     installBtns.append(installBtn, cancelBtn);
-    installRow.append(installBtns);
     if (installed && !installBusy) {
       const reinstall = build('button', 'appmenu__toggle-btn appmenu__toggle-btn--small', 'Reinstalar');
       reinstall.type = 'button';
       reinstall.addEventListener('click', (e) => installBtn.click(e));
-      installRow.append(reinstall);
+      installBtns.append(reinstall);
     }
+    installRow.append(installBtns);
     if (!hasNvidia) {
       const omni = build('label', 'appmenu__voice-omni');
       const box = build('input', '');
@@ -822,15 +825,20 @@ export class AppMenu {
         ? `Archivo: ${String(this.pendingRefWav).split(/[\\/]/).pop()}`
         : 'Elegí un .wav corto (5–15 s).'));
       const transcript = build('input', 'appmenu__input');
+      let saveRef;
       transcript.type = 'text';
       transcript.placeholder = 'Transcripción exacta del audio';
       transcript.value = this.pendingRefText || '';
       transcript.maxLength = 500;
       transcript.spellcheck = true;
       transcript.hidden = Boolean(this.pendingRefTranscriptPath);
-      transcript.addEventListener('input', () => { this.pendingRefText = transcript.value; });
-      const saveRef = build('button', 'appmenu__toggle-btn is-active', 'GUARDAR VOZ');
+      transcript.addEventListener('input', () => {
+        this.pendingRefText = transcript.value;
+        if (saveRef) saveRef.disabled = !transcript.value.trim();
+      });
+      saveRef = build('button', 'appmenu__toggle-btn is-active', 'GUARDAR VOZ');
       saveRef.type = 'button';
+      saveRef.disabled = !this.pendingRefTranscriptPath && !transcript.value.trim();
       saveRef.addEventListener('click', async (e) => {
         e.stopPropagation();
         const res = await this.host.menuAction({
@@ -883,7 +891,6 @@ export class AppMenu {
       const clear = build('button', `appmenu__toggle-btn${custom ? '' : ' is-active'}`, 'Voz por defecto');
       clear.type = 'button';
       clear.dataset.state = custom ? 'off' : 'on';
-      clear.disabled = !custom;
       clear.addEventListener('click', async (e) => {
         e.stopPropagation();
         const res = await this.host.menuAction({ id: 'voice-ref-clear' }).catch(() => null);
@@ -1805,18 +1812,13 @@ export class AppMenu {
     ));
     if (!installed.length) {
       agentCard.append(build('div', 'appmenu__hint', 'Ningún CLI en el PATH.'));
-    } else {
-      for (const a of installed) {
-        const line = a.ready
-          ? `${a.label}: instalado`
-          : a.installed
-            ? `${a.label}: detectado`
-            : `${a.label}: no instalado`;
-        agentCard.append(build('div', 'appmenu__hint', line));
-        if (!a.installed && a.installHow) {
-          agentCard.append(build('div', 'appmenu__hint', `Cómo instalarlo: ${a.installHow}`));
-        }
-      }
+    }
+    for (const id of agentIds.filter((item) => item !== 'agent-auto')) {
+      const a = installed.find((item) => item.id === (id === 'agent-cursor' ? 'cursor-agent' : id.replace(/^agent-/, '')));
+      const label = labelOf(id);
+      agentCard.append(build('div', 'appmenu__hint', `${label}: ${a?.ready ? 'instalado' : 'no instalado'}`));
+      if (a?.installHow) agentCard.append(build('div', 'appmenu__hint', `Instalalo desde cualquier ventana de PowerShell: ${a.installHow}`));
+      if (a?.note) agentCard.append(build('div', 'appmenu__hint', a.note));
     }
     agentCard.append(pickRow(agentIds, (id) => this.act('model-provider', id)));
     agentCard.append(probeBtn(() => ({
@@ -2077,7 +2079,8 @@ export class AppMenu {
       || id === 'startup' || id === 'gaming-mode' || id === 'drone-mode' || id === 'comments' || id === 'comments-range'
       || id === 'greetings' || id === 'unlock-greeting' || id === 'caresses' || id === 'music-dance'
       || id === 'app-fx' || id === 'scanlines' || id === 'game-list';
-    await this.host.menuAction({ id, value });
+    const result = await this.host.menuAction({ id, value });
+    if (id === 'game-list' && result?.message) this.gameNote = result.message;
     if (!keep) {
       this.hide();
       return;

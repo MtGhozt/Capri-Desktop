@@ -322,12 +322,14 @@ export class Bubble {
 
   setVoiceLoading(on, progress = null) {
     this.voiceLoading = Boolean(on);
+    const hasProgress = this.voiceLoading && Number.isFinite(Number(progress))
+      && Number(progress) > 0 && Number(progress) <= 100;
     if (this.voiceEl) {
       this.voiceEl.hidden = !this.voiceLoading;
-      this.voiceEl.textContent = this.voiceLoading && Number.isFinite(Number(progress))
+      this.voiceEl.textContent = hasProgress
         ? `cargando voz… ${Math.round(Number(progress))}%`
         : 'cargando voz…';
-      this.voiceEl.classList.toggle('has-progress', this.voiceLoading && Number.isFinite(Number(progress)));
+      this.voiceEl.classList.toggle('has-progress', hasProgress);
       this.voiceEl.style.setProperty('--voice-progress', `${Math.max(0, Math.min(100, Number(progress) || 0))}%`);
     }
   }
