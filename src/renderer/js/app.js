@@ -19,6 +19,18 @@ import { pick, fmt, sleep, tween, reducedMotion } from './util.js';
 
 const host = window.host;
 
+const rendererError = (kind, value) => {
+  const message = value instanceof Error ? (value.stack || value.message) : String(value || '');
+  if (message) host.rendererLog?.({ kind, message });
+};
+const nativeConsoleError = console.error.bind(console);
+console.error = (...args) => {
+  nativeConsoleError(...args);
+  rendererError('console.error', args.map((arg) => (
+    arg instanceof Error ? (arg.stack || arg.message) : String(arg)
+  )).join(' '));
+};
+
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -791,8 +803,14 @@ async function boot() {
   }
 
   // A thrown act (or any other renderer fault) must not leave click-through / the menu stuck.
-  window.addEventListener('error', () => forceFree());
-  window.addEventListener('unhandledrejection', () => forceFree());
+  window.addEventListener('error', (event) => {
+    rendererError('window.error', event.error || event.message);
+    forceFree();
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    rendererError('unhandledrejection', event.reason);
+    forceFree();
+  });
 
   // Main asks after look/capture errors: idle + clickable again (drag/menu/Settings).
   // Also clears a stuck dragging/busy/fold so she does not freeze over the desktop.

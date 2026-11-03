@@ -89,6 +89,24 @@ test('brain UI uses provider cards, priority controls, and per-card probe status
   assert.match(source, /Listo, \$\{labelOf\(id\)\} contesta/);
 });
 
+test('brain settings render keeps old-format configs visible', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(source, /body\.append\(this\.brainPanel\(model, \{ build \}\)\)/);
+  assert.match(source, /const model = state\.model \|\| \{/);
+  assert.match(source, /No se pudo dibujar esta sección/);
+});
+
+test('renderer forwards console and window errors to the main log', () => {
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'src', 'preload.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(preload, /rendererLog/);
+  assert.match(source, /rendererError\('console\.error'/);
+  assert.match(source, /rendererError\('window\.error'/);
+  assert.match(source, /rendererError\('unhandledrejection'/);
+  assert.match(main, /renderer:log/);
+});
+
 test('render mode is presented as visible radio options without duplicate active hint', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(source, /appmenu__radio/);

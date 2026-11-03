@@ -351,7 +351,16 @@ export class AppMenu {
 
   render(state) {
     if (!this.settingsMode) return this.renderQuick(state);
-    this.renderFull(state);
+    try {
+      this.renderFull(state);
+    } catch (err) {
+      console.error('[capri] settings render failed:', err);
+      this.lastState = state;
+      const line = document.createElement('div');
+      line.className = 'appmenu__hint appmenu__brain-status is-bad';
+      line.textContent = `No se pudo dibujar esta sección: ${err?.message || 'error desconocido'}`;
+      this.el.replaceChildren(line);
+    }
   }
 
   renderQuick(state) {
@@ -954,7 +963,7 @@ export class AppMenu {
       welcome.dataset.setting = 'model';
       body.append(welcome);
     }
-    body.append(this.providerCardsPanel(model, { build }));
+    body.append(this.brainPanel(model, { build }));
     toggle('Enviar mi pantalla cuando le pida mirar', {
       setting: 'model',
       on: model.shareScreen,

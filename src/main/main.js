@@ -2358,6 +2358,11 @@ function createTray() {
 
 function registerIpc() {
   ipcMain.on('overlay:interactive', (_e, on) => setClickThrough(!on));
+  ipcMain.on('renderer:log', (_e, payload = {}) => {
+    const kind = String(payload.kind || 'error').slice(0, 30);
+    const message = String(payload.message || '').slice(0, 2000);
+    if (message) logEvent(voiceLogPath(), `[renderer:${kind}] ${message}`);
+  });
   ipcMain.on('overlay:rearm', () => rearmOverlay()); // the pointer moved over her and she never heard of it
   ipcMain.on('appfx:hit', (_e, id) => appFx.hit(id));
   ipcMain.on('overlay:menu', (_e, open) => menuGuard.menuChanged(Boolean(open)));

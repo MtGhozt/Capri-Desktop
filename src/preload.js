@@ -54,4 +54,5 @@ contextBridge.exposeInMainWorld('host', {
   closeSettings: () => ipcRenderer.send('settings:close'),
   greet: () => ipcRenderer.invoke('greet'),
   artCapture: (name) => ipcRenderer.invoke('art:capture', { name: String(name || 'frame') }),
+  rendererLog: (payload) => ipcRenderer.send('renderer:log', payload),
 });
