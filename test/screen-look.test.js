@@ -70,27 +70,27 @@ test('capture reports the selected display and image dimensions', async () => {
     displayId: 'monitor-2',
     onCapture: (value) => { info = value; },
   });
-
-  test('capture marks a black frame as blank', async () => {
-    let info;
-    await captureScreenJpeg({
-      getSources: async () => [{
-        display_id: '1',
-        thumbnail: {
-          isEmpty: () => false,
-          getSize: () => ({ width: 2, height: 2 }),
-          getBitmap: () => Buffer.alloc(16),
-          toJPEG: () => Buffer.from('black'),
-        },
-      }],
-      onCapture: (value) => { info = value; },
-    });
-    assert.equal(info.blank, true);
-  });
   assert.deepEqual(info.size, { width: 800, height: 450 });
   assert.equal(info.displayId, 'monitor-2');
   assert.equal(info.bytes, Buffer.byteLength('fresh-frame'));
   assert.match(info.hash, /^[a-f0-9]{40}$/);
+});
+
+test('capture marks a black frame as blank', async () => {
+  let info;
+  await captureScreenJpeg({
+    getSources: async () => [{
+      display_id: '1',
+      thumbnail: {
+        isEmpty: () => false,
+        getSize: () => ({ width: 2, height: 2 }),
+        getBitmap: () => Buffer.alloc(16),
+        toJPEG: () => Buffer.from('black'),
+      },
+    }],
+    onCapture: (value) => { info = value; },
+  });
+  assert.equal(info.blank, true);
 });
 
 test('user content with image is multimodal; without stays a string', () => {
