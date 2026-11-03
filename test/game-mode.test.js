@@ -96,6 +96,13 @@ test('a maximized browser never fires it', () => {
   assert.equal(mode.active(), false);
 });
 
+test('reports why a non-game foreground window is ignored', () => {
+  const decisions = [];
+  const mode = createGameMode({ onDecision: (decision) => decisions.push(decision) });
+  mode.update({ fgExe: 'C:\\Users\\Matias\\Opera\\opera.exe', fgFull: true });
+  assert.deepEqual(decisions, [{ reason: 'ignored', rule: 'not-fullscreen-game', exe: 'C:\\Users\\Matias\\Opera\\opera.exe', full: true }]);
+});
+
 test('she comes back thirty seconds after the game is gone', () => {
   const { mode, events, timers } = harness();
   mode.update(game);

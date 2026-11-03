@@ -13,6 +13,7 @@ function createGameMode({
   onEnter = () => {},
   onExit = () => {},
   setWakeMuted = () => {},
+  onDecision = () => {},
   exitDelayMs = EXIT_DELAY_MS,
   timers = global,
 } = {}) {
@@ -40,6 +41,7 @@ function createGameMode({
       return;
     }
     if (gameOnScreen(windows, apps())) {
+      onDecision({ reason: 'enter', rule: 'fullscreen-game', exe: windows?.fgExe, full: Boolean(windows?.fgFull) });
       cancelExit();
       if (!active) {
         active = true;
@@ -49,6 +51,7 @@ function createGameMode({
       }
       return;
     }
+    onDecision({ reason: active ? 'focus-lost' : 'ignored', rule: 'not-fullscreen-game', exe: windows?.fgExe, full: Boolean(windows?.fgFull) });
     if (!active || pendingExit !== null) return;
     pendingExit = timers.setTimeout(() => {
       pendingExit = null;

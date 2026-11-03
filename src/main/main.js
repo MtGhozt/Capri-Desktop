@@ -19,7 +19,7 @@ const {
   providerAfterKeyRemoved, supportsVision, provider, activeBrainIds,
 } = require('./chat-providers');
 const {
-  isLookCommand, consentNotice, captureScreenJpeg, createCaptureShield, shouldAutoLook, NO_VISION, AUTO_LOOK_MS,
+  isLookCommand, consentNotice, captureScreenJpeg, createCaptureShield, shouldAutoLook, AUTO_LOOK_MS,
 } = require('./screen-look');
 const { patchGamingApps, gameAppKey } = require('./game-detect');
 const { probeProvider } = require('./llm-probe');
@@ -1340,7 +1340,7 @@ function resetOverlayInput(reason = 'reset') {
 
 // Phase 6C: JPEG in memory. Win32 uses setContentProtection so Capri stays visible and out of the shot.
 async function snapScreenForLook() {
-  const display = targetDisplay();
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) || targetDisplay();
   const shield = createCaptureShield({
     platform: process.platform,
     setContentProtection: (on) => {
@@ -1361,12 +1361,36 @@ async function snapScreenForLook() {
     },
   });
   try {
-    return await captureScreenJpeg({
-      getSources: (opts) => desktopCapturer.getSources(opts),
-      displayId: display?.id,
-      beforeCapture: () => shield.before(),
-      afterCapture: () => shield.after(),
-    });
+    let previousHash = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let captured = null;
+      const image = await captureScreenJpeg({
+        getSources: (opts) => desktopCapturer.getSources(opts),
+        displayId: display?.id,
+        beforeCapture: () => shield.before(),
+        afterCapture: () => shield.after(),
+        onCapture: (info) => { captured = info; },
+      });
+      if (!image) {
+        logEvent(voiceLogPath(), `[capri] screen capture time=${Date.now()} display=${display?.id || '?'} size=0x0 blank=empty brain=pending image=none`);
+        continue;
+      }
+      const repeated = Boolean(captured?.hash && captured.hash === previousHash);
+      const blank = Boolean(captured?.blank || repeated);
+      logEvent(voiceLogPath(), `[capri] screen capture time=${Date.now()} display=${captured?.displayId || display?.id || '?'} size=${captured?.size?.width || 0}x${captured?.size?.height || 0} blank=${blank ? (captured?.blank ? 'black' : 'repeated') : 'no'} brain=pending image=attached`);
+      previousHash = captured?.hash || '';
+      if (blank) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        continue;
+      }
+      try {
+        fs.writeFileSync(path.join(path.dirname(voiceLogPath()), 'last-capture.jpg'), Buffer.from(image, 'base64'));
+      } catch (err) {
+        logEvent(voiceLogPath(), `[capri] last capture save failed: ${err.message}`);
+      }
+      return image;
+    }
+    return null;
   } catch (err) {
     try { shield.after(); } catch { /* already cleaned */ }
     resetOverlayInput('look-capture-error');
@@ -1580,13 +1604,20 @@ async function gameEnter(windows) {
   // Brief line, then quiet. Wake mute is set by createGameMode; sidecar stays up for PTT.
   try { speakLine(pickLine('juegoEntrar')); } catch { /* pool missing in old builds */ }
   sendCommand('sleep'); // DORMANT / hidden; drone may replace her
+  if (config.load().gaming?.drone !== false) {
+    sendCommand('game-drone', { on: true });
+    gameLog('drone visible before unload');
+  }
   if (lms?.status() === 'booting') await lms.whenReady(); // a load in flight would land anyway
   gameHadLlm = lms?.status() === 'ready';
   await lms?.unloadAll?.();
+  if (!gameMode?.active()) {
+    gameLog('game enter cancelled after focus lost');
+    return;
+  }
   gameLog(`game on after unload wakeMuted=${Boolean(voice?.wakeMuted?.())} ${vramText()}`);
   if (config.load().gaming?.drone !== false) {
-    sendCommand('game-drone', { on: true });
-    gameLog(`drone visible ${vramText()}`);
+    gameLog(`drone ready ${vramText()}`);
   }
 }
 
@@ -2528,17 +2559,9 @@ function registerIpc() {
           sayWithoutLlm('Activá «Enviar mi pantalla cuando le pida mirar» en Cerebro y pedímelo de nuevo.');
           return { ok: true };
         }
-        const pid = String(cfgLook.llm?.provider || 'local');
-        const model = String(cfgLook.llm?.model || provider(pid).model || '');
-        const agentCanSee = pid === 'agent-gemini'
-          || (pid === 'agent-auto' && detectAgents().some((a) => a.id === 'gemini' && a.ready));
-        if (!supportsVision(pid, model) && !agentCanSee) {
-          sayWithoutLlm(NO_VISION);
-          return { ok: true };
-        }
         lookImage = await snapScreenForLook();
         if (!lookImage) {
-          sayWithoutLlm('No pude ver la pantalla ahora, choom.');
+          sayWithoutLlm('No puedo ver juegos en pantalla completa, ponelo en modo ventana sin bordes.');
           return { ok: true };
         }
       }
@@ -2582,10 +2605,11 @@ function registerIpc() {
           },
         });
       } finally {
+        const hadImage = Boolean(lookImage);
         llmBusy = false;
         lookImage = null; // drop the JPEG; never written to disk
         // who answered and how it went, with no key and no text of the answer (Paso 4K)
-        if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome}: ${outcome.ms}ms`);
+        if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome} image=${hadImage}: ${outcome.ms}ms`);
       }
       return { ok: true };
     } catch (err) {
@@ -2890,6 +2914,8 @@ function main() {
       enabled: () => config.load().gaming?.mode !== 'off',
       apps: () => config.load().gaming?.apps || [],
       setWakeMuted: (on) => voice?.setWakeMuted?.(on),
+      exitDelayMs: 0,
+      onDecision: (decision) => gameLog(`game decision=${decision.reason} rule=${decision.rule} exe=${decision.exe || '?'} full=${decision.full}`),
       onEnter: (windows) => queueGame(() => gameEnter(windows)),
       onExit: () => queueGame(gameLeave),
     });

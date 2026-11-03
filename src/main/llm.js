@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const {
-  PROVIDERS, BRAIN_GROUPS, isCloud, isAgent, requestFor, explain, provider, activeBrainIds,
+  PROVIDERS, BRAIN_GROUPS, isCloud, isAgent, supportsVision, requestFor, explain, provider, activeBrainIds,
 } = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
@@ -144,7 +144,8 @@ function createLlm({
     ];
     return order.filter((id, index) => order.indexOf(id) === index
       && id !== from && !deadProviders.has(id)
-      && (!isCloud(id) || apiKey?.(id) || id === 'local'));
+      && (!isCloud(id) || apiKey?.(id) || id === 'local')
+      && (!image || supportsVision(id, modelFor(cfg, id))));
   }
 
   function providerLabel(id) {
@@ -328,6 +329,13 @@ function createLlm({
     };
 
     let start = isAgent(id) || cloud ? id : 'local';
+    if (jpeg && !supportsVision(start, modelFor(cfg, start))) {
+      start = fallbackChain(start, cfg, true)[0] || '';
+    }
+    if (!start) {
+      fail({ code: 'no-vision' }, id);
+      return result('failed', id);
+    }
     if (deadProviders.has(start) && start !== 'local') {
       // Its key already failed: answer with another saved one, never paying the same wait again.
       const next = fallbackChain(start, cfg, Boolean(jpeg))[0];

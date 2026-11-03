@@ -3,6 +3,7 @@
 // Phase 6C: on-demand (and optional auto) screen look. JPEG stays in memory only.
 
 const { normalizeCommandText } = require('./command-text');
+const crypto = require('node:crypto');
 
 const NO_VISION = 'Este cerebro no puede ver imágenes; probá con Gemini.';
 const MAX_WIDTH = 1280;
@@ -111,6 +112,7 @@ async function captureScreenJpeg({
   quality = JPEG_QUALITY,
   beforeCapture = null,
   afterCapture = null,
+  onCapture = null,
 } = {}) {
   if (typeof getSources !== 'function') return null;
   try {
@@ -135,7 +137,25 @@ async function captureScreenJpeg({
     if (typeof img.toJPEG !== 'function') return null;
     const buf = img.toJPEG(quality);
     if (!buf || !buf.length) return null;
-    return Buffer.from(buf).toString('base64');
+    const base64 = Buffer.from(buf).toString('base64');
+    let blank = false;
+    if (typeof img.getBitmap === 'function') {
+      const pixels = img.getBitmap();
+      let bright = 0;
+      const step = Math.max(4, Math.floor(pixels.length / 4096 / 4) * 4);
+      for (let i = 0; i < pixels.length; i += step) {
+        bright += pixels[i] + pixels[i + 1] + pixels[i + 2];
+      }
+      blank = bright === 0;
+    }
+    onCapture?.({
+      displayId: source?.display_id ?? displayId,
+      size,
+      bytes: buf.length,
+      hash: crypto.createHash('sha1').update(buf).digest('hex'),
+      blank,
+    });
+    return base64;
   } finally {
     try { afterCapture?.(); } catch { /* show overlay again even if capture failed */ }
   }
