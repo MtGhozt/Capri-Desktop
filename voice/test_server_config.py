@@ -63,6 +63,27 @@ class MissingWakeModelTests(unittest.TestCase):
         self.assertFalse(engine.oww_live())
         self.assertTrue(engine.whisper_wake_live())
 
+    def test_missing_openwakeword_resources_fall_back_to_whisper(self):
+        engine = self.engine()
+        engine.cfg["wakeModel"] = "hey_capri"
+        model_cls = object()
+        lines = []
+        notices = []
+        def fail_download(**_kwargs):
+            raise FileNotFoundError("melspectrogram.onnx")
+        with patch.object(server, "resolve_wake_model", return_value=("hey_capri", False)), \
+             patch.object(server, "load_openwakeword", return_value=(model_cls, fail_download)), \
+             patch.object(server, "log", lines.append), \
+             patch.object(engine, "broadcast", side_effect=notices.append):
+            self.assertIs(engine._load_wake(), False)
+        self.assertTrue(engine.whisper_wake_live())
+        self.assertTrue(any("melspectrogram.onnx" in line for line in lines), lines)
+        self.assertEqual(notices, [{
+            "type": "notice",
+            "level": "info",
+            "message": "El 'Hey Capri' no pudo arrancar; uso la detección por voz mientras tanto. Detalles en el log.",
+        }])
+
 
 class WakeMutedGameTests(unittest.TestCase):
     """Fullscreen game: wake off, mic stays for push-to-talk."""

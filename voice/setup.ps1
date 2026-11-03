@@ -31,6 +31,7 @@ if (-not (Test-Path $venvPy)) {
 }
 & $venvPy -m pip install -U pip
 & $venvPy -m pip install -r (Join-Path $Root 'requirements.txt')
+& $venvPy -c "from openwakeword.utils import download_models; download_models()"
 if ($OmniVoice) {
   Write-Host 'Installing pinned PyTorch CUDA (torch/torchaudio 2.11.0+cu130) + OmniVoice. First run downloads k2-fsa/OmniVoice.'
   & $venvPy -m pip install --upgrade -r (Join-Path $Root 'requirements-torch.txt')

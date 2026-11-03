@@ -577,15 +577,15 @@ class Engine:
         for attempt in range(1, WAKE_ATTEMPTS + 1):
             try:
                 Model, download_models = load_openwakeword()
+                if attempt == 1:
+                    # The installer normally seeds these; repair an incomplete venv once.
+                    download_models()
                 # a custom .onnx is already on disk; a built-in name is downloaded once
                 if not model.lower().endswith(".onnx"):
-                    download_models(model_names=[model], target_directory=str(MODELS))
                     download_models(model_names=[model])
                 wake = Model(
                     wakeword_models=[model],
                     inference_framework="onnx",
-                    melspec_model_path=str(MODELS / "melspectrogram.onnx"),
-                    embedding_model_path=str(MODELS / "embedding_model.onnx"),
                 )
                 log(f"wake word {model} ready threshold={self.wake_threshold()}")
                 return wake
@@ -594,7 +594,12 @@ class Engine:
                 log(f"wake word failed attempt={attempt}/{WAKE_ATTEMPTS}: {err}")
                 time.sleep(0.4 * attempt)
         log(f"wake word unavailable: {last_err}")
-        self.broadcast({"type": "notice", "message": f"Wake word no arrancó: {last_err}"})
+        self.cfg["wakeMode"] = "whisper"
+        self.broadcast({
+            "type": "notice",
+            "level": "info",
+            "message": "El 'Hey Capri' no pudo arrancar; uso la detección por voz mientras tanto. Detalles en el log.",
+        })
         return False
 
     def _load_whisper(self):
