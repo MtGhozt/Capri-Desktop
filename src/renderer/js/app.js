@@ -187,9 +187,8 @@ async function boot() {
   const refreshHit = () => {
     if (quitConfirm) return setInteractive(true);
     if (folding || capri.dragging || bubble.dragging || appMenu.visible) return setInteractive(true);
-    // First chat/box open after launch: mouse may be null until a move; keep the overlay live
-    // so the bubble tab is grabable (same as re-opening once the pointer already moved).
-    if (bubble.open && !mouse) return setInteractive(true);
+    // Keep the overlay interactive while the chat bubble is open, including before the first mouse move.
+    if (bubble.open) return setInteractive(true);
     if (!mouse) return setInteractive(false);
     const r = panel.rect();
     const onPanel = r && mouse.x >= r.left && mouse.x <= r.right && mouse.y >= r.top && mouse.y <= r.bottom;
