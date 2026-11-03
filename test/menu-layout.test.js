@@ -117,6 +117,25 @@ test('provider and agent controls keep state in their headers and hide installed
   assert.match(agents, /Cursor Agent \(CLI\)/);
 });
 
+test('agent rows show a name, state, and actionable hint', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(source, /build\('span', 'appmenu__agent-name', item\.label\)/);
+  assert.match(source, /Instalado · clic para activar\/apagar/);
+  assert.match(source, /No instalado · copiá el comando/);
+  assert.match(source, /activado/);
+});
+
+test('startup logs window, renderer, intro, and opacity state', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  const capri = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'capri.js'), 'utf8');
+  assert.match(main, /startup window show/);
+  assert.match(app, /startup renderer first render/);
+  assert.match(app, /startup intro start/);
+  assert.match(capri, /startup intro end/);
+  assert.match(capri, /p\.alpha = 1;\s*this\.onStartupLog/);
+});
+
 test('brain settings render keeps old-format configs visible', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(source, /body\.append\(this\.brainPanel\(model, \{ build \}\)\)/);

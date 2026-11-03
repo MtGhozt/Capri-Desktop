@@ -256,11 +256,13 @@ function createOverlay() {
   overlay.setIgnoreMouseEvents(true, { forward: true });
   overlay.loadURL('capri://app/src/renderer/index.html');
   overlay.showInactive();
+  logEvent(voiceLogPath(), `[capri] startup window show visible=${overlay.isVisible()} opacity=${overlay.getOpacity()} render=${config.load().render}`);
   // always shown: put away, she's still there as her biochip in the corner. Sized again first:
   // Windows keeps a new window inside the work area, and resting on the taskbar it covers it too.
   overlay.once('ready-to-show', () => {
     fitOverlay();
     overlay.showInactive();
+    logEvent(voiceLogPath(), `[capri] startup ready-to-show visible=${overlay.isVisible()} opacity=${overlay.getOpacity()}`);
     if (!menuGuardTimer) menuGuardTimer = setInterval(() => menuGuard.tick(), 2000);
     for (const payload of voiceQueue) overlay.webContents.send('voice:event', payload);
     voiceQueue = [];
@@ -280,6 +282,7 @@ function createOverlay() {
   overlay.webContents.on('did-finish-load', () => {
     fitOverlay();
     overlay.showInactive();
+    logEvent(voiceLogPath(), `[capri] startup did-finish-load visible=${overlay.isVisible()} opacity=${overlay.getOpacity()}`);
     rendererRecover.reset();
     for (const payload of voiceQueue) overlay.webContents.send('voice:event', payload);
     voiceQueue = [];

@@ -62,6 +62,8 @@ export class Capri {
     this.poseStart = 0;
     this.fx = fx;
     this.voice = voice;
+    this.root = root;
+    this.onStartupLog = null;
     this.messageBox = null; // () => ledge | null, set by app.js when the box is up
 
     this.scale = 0.6;
@@ -1829,7 +1831,8 @@ export class Capri {
     this.setStance('stand');
     this.busy = true;
     this.onTeleport?.('start'); // the panel waits for her
-    p.alpha = 0;
+    p.alpha = 1;
+    this.onStartupLog?.(`startup intro visible rootOpacity=${getComputedStyle(this.root).opacity} rootClass=${this.root.className} alpha=${p.alpha}`);
     p.collapse = 1;
     p.dissolve = 0.5;
     this.place();
@@ -1854,6 +1857,7 @@ export class Capri {
       await this.arrive(at, { face: this.facing, beam: false });
     } finally {
       p.alpha = 1;
+      this.onStartupLog?.(`startup intro end rootOpacity=${getComputedStyle(this.root).opacity} rootClass=${this.root.className} alpha=${p.alpha}`);
       this.busy = false;
       this.onTeleport?.('end');
     }

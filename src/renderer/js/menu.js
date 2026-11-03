@@ -1769,6 +1769,7 @@ export class AppMenu {
         for (const item of model.agentsInstalled || []) {
           const brainId = `agent-${item.id === 'cursor-agent' ? 'cursor' : item.id}`;
           const row = build('div', 'appmenu__agent-row');
+          row.append(build('span', 'appmenu__agent-name', item.label));
           const toggle = build('button', `appmenu__toggle-btn${active.has(brainId) ? ' is-active' : ''}`,
             item.installed ? (active.has(brainId) ? 'Activo' : 'Apagado') : 'No instalado');
           toggle.type = 'button';
@@ -1780,6 +1781,7 @@ export class AppMenu {
               this.refresh();
               return;
             }
+            this.agentNote = `${item.label} ${active.has(brainId) ? 'desactivado' : 'activado'}`;
             this.act('model-provider', brainId);
           });
           row.append(toggle);
@@ -1793,6 +1795,10 @@ export class AppMenu {
               row.append(build('span', 'appmenu__hint', 'El editor Cursor solo no alcanza.'));
             }
           }
+          row.append(build('span', 'appmenu__hint appmenu__agent-hint',
+            this.agentNote?.startsWith(item.label)
+              ? this.agentNote
+              : item.installed ? 'Instalado · clic para activar/apagar' : 'No instalado · copiá el comando'));
           agents.append(row);
         }
         wrap.append(agents);

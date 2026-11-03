@@ -23,6 +23,7 @@ const rendererError = (kind, value) => {
   const message = value instanceof Error ? (value.stack || value.message) : String(value || '');
   if (message) host.rendererLog?.({ kind, message });
 };
+const logStartup = (message) => host.rendererLog?.({ kind: 'startup', message: `${Math.round(performance.now())}ms ${message}` });
 const nativeConsoleError = console.error.bind(console);
 console.error = (...args) => {
   nativeConsoleError(...args);
@@ -113,6 +114,9 @@ async function boot() {
   capri.restOn = config.rest || 'taskbar';
   capri.setView(innerWidth, innerHeight, innerHeight - floorGap);
   capri.setScale(config.scale);
+  capri.onStartupLog = logStartup;
+  capri.drawFrame();
+  logStartup(`startup renderer first render rootOpacity=${getComputedStyle(capri.root).opacity} rootClass=${capri.root.className} alpha=${capri.p.alpha} render=${config.render}`);
 
   // COMPORTAMIENTO > Arrastrar: FIJO keeps her where she was dropped and remembers it.
   const applyPosition = (cfg) => {
@@ -1210,6 +1214,7 @@ async function boot() {
 
   // entrance: she grabs the screen, says hi, then dives down to her spot
   // (put away last time: she starts in her biochip; fx.intro false: skip the grab)
+  logStartup(`startup intro start rootOpacity=${getComputedStyle(capri.root).opacity} rootClass=${capri.root.className} alpha=${capri.p.alpha}`);
   await capri.intro(entrance());
   bumpIdle();
   const hello = async () => {
