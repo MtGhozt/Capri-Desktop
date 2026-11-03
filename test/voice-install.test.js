@@ -78,6 +78,36 @@ test('ensureVoiceSources copies allowlisted files from a local voice/ folder', a
   assert.equal(fs.existsSync(path.join(dest, 'ref')), false);
 });
 
+test('syncManagedVoiceSources updates stale bundled files but preserves user voice files', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-sync-src-'));
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-sync-dst-'));
+  t.after(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(dest, { recursive: true, force: true });
+  });
+  const voice = path.join(root, 'voice');
+  fs.mkdirSync(path.join(voice, 'models'), { recursive: true });
+  fs.mkdirSync(path.join(dest, 'models'), { recursive: true });
+  for (const rel of VOICE_FILES) fs.writeFileSync(path.join(voice, rel), `new ${rel}\n`);
+  fs.writeFileSync(path.join(voice, 'models', 'hey_capri.onnx'), 'new model');
+  fs.writeFileSync(path.join(dest, 'server.py'), 'old server\n');
+  fs.writeFileSync(path.join(dest, 'ref.wav'), 'user audio');
+  fs.writeFileSync(path.join(dest, 'models', 'hey_capri.onnx'), 'old model');
+  const lines = [];
+  const out = require('../src/main/voice-install').syncManagedVoiceSources({
+    root,
+    destRoot: dest,
+    version: '0.2.0',
+    onSync: (rel) => lines.push(rel),
+  });
+  assert.equal(out.ok, true);
+  assert.equal(fs.readFileSync(path.join(dest, 'server.py'), 'utf8'), 'new server.py\n');
+  assert.equal(fs.readFileSync(path.join(dest, 'models', 'hey_capri.onnx'), 'utf8'), 'new model');
+  assert.equal(fs.readFileSync(path.join(dest, 'ref.wav'), 'utf8'), 'user audio');
+  assert.ok(lines.includes('server.py'));
+  assert.ok(lines.includes('models/hey_capri.onnx'));
+});
+
 test('findPython311 reports the download page when py -3.11 is missing', () => {
   const miss = findPython311({
     spawnSyncImpl: () => ({ status: 1, stdout: '' }),

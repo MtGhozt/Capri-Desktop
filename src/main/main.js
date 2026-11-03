@@ -30,7 +30,7 @@ const { switchProvider, setProviderModel, modelForProvider } = require('./chat-m
 const { parseRenderMode, renderSwitches, HINTS: RENDER_HINTS, SOFTWARE_CONFIRM } = require('./render-mode');
 const { createLms } = require('./lms');
 const { createVoice, checkVoiceDir, resolveVoiceDir } = require('./voice');
-const { createVoiceInstall, PYTHON_URL } = require('./voice-install');
+const { createVoiceInstall, PYTHON_URL, voiceInstallDir } = require('./voice-install');
 const { activeVoiceLabel, saveCustomRef } = require('./voice-ref');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
@@ -2710,6 +2710,18 @@ function main() {
         }
       },
     });
+    const managedVoiceDir = path.resolve(voiceInstallDir());
+    const configuredVoiceDir = String(config.load().voice?.dir || '').trim();
+    if (configuredVoiceDir && path.resolve(configuredVoiceDir).toLowerCase() === managedVoiceDir.toLowerCase()) {
+      try {
+        voiceInstall.syncManaged({
+          destRoot: managedVoiceDir,
+          onSync: (rel) => logEvent(voiceLogPath(), `[capri] synced managed voice source: ${rel}`),
+        });
+      } catch (err) {
+        logEvent(voiceLogPath(), `[capri] managed voice source sync failed: ${err.message}`);
+      }
+    }
     voice = createVoice({
       root: ROOT,
       loadConfig: () => config.load(),

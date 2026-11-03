@@ -5,6 +5,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawn, spawnSync } = require('node:child_process');
 const { REPO, fetchLatest } = require('./updates');
 const { readVram } = require('./vram');
@@ -24,6 +25,7 @@ const VOICE_FILES = [
 ];
 // Public wake word only when it already ships with the sources (gitignored onnx stays local).
 const OPTIONAL_FILES = ['models/hey_capri.onnx'];
+const SYNC_MANIFEST = '.capri-voice-sources.json';
 
 function voiceInstallDir(env = process.env) {
   const local = env.LOCALAPPDATA
@@ -94,6 +96,38 @@ function copyBundledVoice(srcRoot, destRoot, { onProgress } = {}) {
     if (fs.existsSync(src)) writeVoiceFile(destRoot, rel, fs.readFileSync(src));
   }
   return { ok: true, from: 'bundled' };
+}
+
+function fileHash(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+function syncManagedVoiceSources({ root, destRoot, version, onSync } = {}) {
+  const bundled = bundledVoiceDir(root);
+  if (!bundled) return { ok: false, synced: [] };
+  const manifestPath = path.join(destRoot, SYNC_MANIFEST);
+  let previous = {};
+  try { previous = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch { /* first sync */ }
+  const currentVersion = typeof version === 'function' ? version() : version;
+  const versionChanged = previous.version !== currentVersion;
+  const synced = [];
+  for (const rel of [...VOICE_FILES, ...OPTIONAL_FILES]) {
+    const src = path.join(bundled, rel);
+    if (!fs.existsSync(src)) continue;
+    const hash = fileHash(src);
+    const dest = path.join(destRoot, rel);
+    if (!versionChanged && previous.files?.[rel] === hash && fs.existsSync(dest)) continue;
+    writeVoiceFile(destRoot, rel, fs.readFileSync(src));
+    synced.push(rel);
+    onSync?.(rel);
+  }
+  fs.writeFileSync(manifestPath, JSON.stringify({
+    version: currentVersion,
+    files: Object.fromEntries([...VOICE_FILES, ...OPTIONAL_FILES]
+      .filter((rel) => fs.existsSync(path.join(bundled, rel)))
+      .map((rel) => [rel, fileHash(path.join(bundled, rel))])),
+  }, null, 2));
+  return { ok: true, synced };
 }
 
 async function downloadVoiceFile(url, fetchImpl) {
@@ -374,6 +408,12 @@ function createVoiceInstall({
     cancel,
     status: () => ({ ...state, busy, hasNvidia: hasNvidiaGpu({ readVramImpl }) }),
     dir: () => voiceInstallDir(env),
+    syncManaged: ({ destRoot, onSync } = {}) => syncManagedVoiceSources({
+      root,
+      destRoot: destRoot || voiceInstallDir(env),
+      version,
+      onSync,
+    }),
   };
 }
 
@@ -388,6 +428,7 @@ module.exports = {
   findPython311,
   isBlockedVoicePath,
   ensureVoiceSources,
+  syncManagedVoiceSources,
   runSetupPs1,
   createVoiceInstall,
 };

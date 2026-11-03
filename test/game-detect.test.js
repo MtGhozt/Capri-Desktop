@@ -50,6 +50,23 @@ test('Capri, Electron and recorders are never games', () => {
   }
 });
 
+test('Microsoft system apps and common desktop tools are never games', () => {
+  for (const exe of [
+    'C:\\Program Files\\WindowsApps\\Microsoft.ScreenSketch_1.0\\SnippingTool.exe',
+    'C:\\Program Files\\WindowsApps\\Microsoft.WindowsCalculator_1.0\\CalculatorApp.exe',
+    'C:\\Program Files\\WindowsApps\\Microsoft.Windows.Photos_1.0\\Photos.exe',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files\\OBS Studio\\bin\\64bit\\obs64.exe',
+    'C:\\Program Files\\Microsoft VS Code\\Code.exe',
+  ]) {
+    assert.equal(isGameExe(exe), false, exe);
+  }
+  assert.equal(isGameExe(
+    'C:\\Program Files\\WindowsApps\\Microsoft.SomeGame_1.0\\game.exe',
+    ['Microsoft.SomeGame_1.0'],
+  ), true);
+});
+
 test('gaming.apps matches by exe name or path fragment', () => {
   const apps = ['Dolphin.exe', 'D:\\Roms\\Emus'];
   assert.equal(isGameExe('C:\\emu\\Dolphin.exe', apps), true);

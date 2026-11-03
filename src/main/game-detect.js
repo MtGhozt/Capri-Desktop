@@ -20,7 +20,12 @@ const GAME_DIRS = [
   '\\itch\\apps\\',
 ];
 
-const NEVER_GAME_EXES = new Set(['capri.exe', 'electron.exe', 'recordly.exe']);
+const NEVER_GAME_EXES = new Set([
+  'capri.exe', 'electron.exe', 'recordly.exe',
+  'snippingtool.exe', 'obs.exe', 'obs64.exe',
+  'chrome.exe', 'msedge.exe', 'firefox.exe', 'opera.exe',
+  'code.exe', 'cursor.exe', 'devenv.exe', 'notepad.exe',
+]);
 
 function normalizePath(value) {
   return String(value ?? '').trim().replace(/\//g, '\\').toLowerCase();
@@ -71,6 +76,11 @@ function isGameExe(exePath, apps = []) {
   if (!exe) return false;
   if (NEVER_GAME_EXES.has(exe.split('\\').pop())) return false;
   if (isIgnoredExe(exe, apps)) return false;
+  if (exe.includes('\\windowsapps\\')) {
+    if (isAllowlistedExe(exe, apps)) return true;
+    if (exe.includes('\\windowsapps\\microsoft.')) return false;
+    return /\\windowsapps\\[^\\]*(?:game|games|gaming|xbox|minecraft)[^\\]*\\/i.test(exe);
+  }
   if (GAME_DIRS.some((dir) => exe.includes(dir))) return true;
   return isAllowlistedExe(exe, apps);
 }
