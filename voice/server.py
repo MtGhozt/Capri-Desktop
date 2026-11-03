@@ -1339,7 +1339,7 @@ class Engine:
             with self._tts_lock:
                 self._tts = kokoro
             log(f"tts engine=kokoro reason=omnivoice-failed:{err} vram_free={free} vram_usable={usable}")
-            self._announce_tts("kokoro", "fallback")
+            self._announce_tts("kokoro", "ready")
             return
         if not self._want_tts:
             omni.close()

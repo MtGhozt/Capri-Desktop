@@ -19,6 +19,7 @@ const DEFAULTS = {
   render: 'auto',    // her window: 'auto', 'gl' (OpenGL) or 'software' (no graphics card), for black screens
   llm: {
     provider: 'local',       // 'local' (LM Studio) or a cloud one: see chat-providers.js
+    brains: ['local'],       // ordered active fallback brains; provider remains the first for compatibility
     model: 'google/gemma-4-e2b', // the model of the provider in use
     localModel: 'google/gemma-4-e2b', // LM Studio's, kept apart so going to the cloud and back doesn't lose it
     models: {},

@@ -6,7 +6,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  PROVIDERS, BRAIN_GROUPS, FREE_KEY_LINKS, providerOptions, provider, isCloud, usesLms,
+  PROVIDERS, BRAIN_GROUPS, FREE_KEY_LINKS, providerOptions, provider, isCloud, usesLms, activeBrainIds,
   defaultBaseUrl, requestFor, explain, providerAfterKeyRemoved, supportsVision,
 } = require('../src/main/chat-providers');
 
@@ -52,6 +52,11 @@ test('vision flag: Gemini/OpenAI yes; agents and plain local Gemma no', () => {
   assert.equal(supportsVision('local', 'google/gemma-4-e2b'), false);
   assert.equal(supportsVision('local', 'llava-1.6'), true);
   assert.equal(PROVIDERS.gemini.vision, true);
+});
+
+test('active brains preserve order and fall back to the configured provider', () => {
+  assert.deepEqual(activeBrainIds({ brains: ['gemini', 'agent-cursor', 'local'] }), ['gemini', 'agent-cursor', 'local']);
+  assert.deepEqual(activeBrainIds({ provider: 'gemini' }), ['gemini']);
 });
 
 test('LM Studio is only booted and waited for when it is the one who answers', () => {

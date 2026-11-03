@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const {
-  PROVIDERS, BRAIN_GROUPS, isCloud, isAgent, requestFor, explain, provider,
+  PROVIDERS, BRAIN_GROUPS, isCloud, isAgent, requestFor, explain, provider, activeBrainIds,
 } = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
@@ -136,10 +136,16 @@ function createLlm({
 
   // The free ones (Gemini first) then the paid ones: a saved key answers before LM Studio is
   // booted, which takes minutes. No key, no turn.
-  function fallbackChain(from) {
-    const order = [...(BRAIN_GROUPS.free || []), ...(BRAIN_GROUPS.own || [])];
+  function fallbackChain(from, cfg, image = false) {
+    const order = [
+      ...activeBrainIds(cfg.llm),
+      ...(image ? [...(BRAIN_GROUPS.free || []), ...(BRAIN_GROUPS.own || [])] : []),
+      ...(!Array.isArray(cfg.llm.brains) ? [...(BRAIN_GROUPS.free || []), ...(BRAIN_GROUPS.own || [])] : []),
+      'local',
+    ];
     return order.filter((id, index) => order.indexOf(id) === index
-      && id !== from && !isAgent(id) && !deadProviders.has(id) && apiKey?.(id));
+      && id !== from && !deadProviders.has(id)
+      && (!isCloud(id) || apiKey?.(id) || id === 'local'));
   }
 
   function providerLabel(id) {
@@ -322,7 +328,7 @@ function createLlm({
     let start = isAgent(id) || cloud ? id : 'local';
     if (deadProviders.has(start) && start !== 'local') {
       // Its key already failed: answer with another saved one, never paying the same wait again.
-      const next = fallbackChain(start)[0];
+      const next = fallbackChain(start, cfg, Boolean(jpeg))[0];
       if (next) start = next;
       else {
         try {
@@ -353,7 +359,7 @@ function createLlm({
     // It gave up before a word (no network, a limit, a dead key): another saved key answers before
     // LM Studio is booted. Nothing streamed yet, or the two answers would mix.
     if (!streamed && start !== 'local') {
-      for (const target of fallbackChain(start)) {
+      for (const target of fallbackChain(start, cfg, Boolean(jpeg))) {
         try {
           const text = await attempt(target);
           onFallback?.(movedTo(start, target, error));

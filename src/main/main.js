@@ -16,7 +16,7 @@ const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
 const {
   PROVIDERS, providerOptions, isCloud, usesLms, isAgent, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS,
-  providerAfterKeyRemoved, supportsVision, provider,
+  providerAfterKeyRemoved, supportsVision, provider, activeBrainIds,
 } = require('./chat-providers');
 const {
   isLookCommand, consentNotice, captureScreenJpeg, createCaptureShield, shouldAutoLook, NO_VISION, AUTO_LOOK_MS,
@@ -1310,6 +1310,8 @@ async function runVoiceInstall(value = {}) {
   const check = checkVoiceDir(dir);
   if (!check.ok) return { ok: false, message: check.message || 'La voz no quedó usable.' };
   await voice?.stop();
+  ttsLoading = true;
+  lastTts = { engine: 'omnivoice', state: 'loading' };
   updateConfig({
     voice: {
       dir: check.dir,
@@ -1479,6 +1481,8 @@ async function saveVoiceRef(value = {}) {
   });
   if (!saved.ok) return saved;
   await voice?.stop();
+  ttsLoading = true;
+  lastTts = { engine: 'omnivoice', state: 'loading' };
   updateConfig({
     voice: {
       ttsRef: saved.ttsRef,
@@ -1633,22 +1637,25 @@ function updateConfig(patch) {
 function setChatProvider(id) {
   if (!PROVIDERS[id]) return { ok: false, message: 'Ese proveedor no existe.' };
   const cfg = config.load();
-  const from = String(cfg.llm?.provider || 'local');
-  if (id === from) {
-    if (!isAgent(id)) return { ok: true };
-    id = 'gemini';
-  }
-  const next = switchProvider(cfg.llm || {}, id, PROVIDERS);
-  const patch = { provider: next.provider, model: next.model, models: next.models };
-  if (id === 'local') patch.localModel = next.model;
+  const active = activeBrainIds(cfg.llm);
+  const enabled = active.includes(id);
+  const brains = enabled
+    ? active.filter((brain) => brain !== id)
+    : [...active, id];
+  if (!brains.length) brains.push('local');
+  const primary = brains[0];
+  const next = switchProvider(cfg.llm || {}, primary, PROVIDERS);
+  const patch = { provider: next.provider, brains, model: next.model, models: next.models };
+  if (primary === 'local') patch.localModel = next.model;
   // Picking a specific CLI sets the Automático primary for later.
-  const agentKind = PROVIDERS[id].agent;
+  const agentKind = PROVIDERS[primary].agent;
   if (agentKind && agentKind !== 'auto') patch.agentPreferred = agentKind;
-  if (PROVIDERS[id].local) {
+  if (PROVIDERS[primary].local) {
     const urls = { ...(cfg.llm?.baseUrls || {}) };
+    const from = String(cfg.llm?.provider || 'local');
     if (PROVIDERS[from]?.local && cfg.llm?.baseUrl) urls[from] = cfg.llm.baseUrl;
-    patch.baseUrl = urls[id] || defaultBaseUrl(id);
-    patch.baseUrls = { ...urls, [id]: patch.baseUrl };
+    patch.baseUrl = urls[primary] || defaultBaseUrl(primary);
+    patch.baseUrls = { ...urls, [primary]: patch.baseUrl };
   }
   updateConfig({ llm: patch });
   return { ok: true };
@@ -2137,6 +2144,11 @@ function menuState(extra = {}) {
       }
       return {
         provider: safe,
+        brains: activeBrainIds(cfg.llm),
+        brainChain: activeBrainIds(cfg.llm).map((brain) => ({
+          id: brain,
+          label: provider(brain).label,
+        })),
         providers: providerOptions(),
         groups: BRAIN_GROUPS,
         freeLinks: FREE_KEY_LINKS,

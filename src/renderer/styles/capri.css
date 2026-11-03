@@ -1710,9 +1710,17 @@ button.appmenu__row {
   cursor: default;
 }
 
-.appmenu__toggle-btn--small {
-  padding: 2px 6px;
-  font-size: 10px;
+.appmenu__agent-row {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(220px, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.appmenu__agent-row .appmenu__input {
+  user-select: text;
+  cursor: text;
 }
 
 .appmenu__voice-log {

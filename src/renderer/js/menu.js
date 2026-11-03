@@ -670,6 +670,7 @@ export class AppMenu {
       box.append(back, value, next);
       row.append(box);
       into.append(row);
+      if (placed.hint) into.append(build('div', 'appmenu__hint', placed.hint));
     };
 
     if (this.view === 'apps') {
@@ -763,7 +764,7 @@ export class AppMenu {
     });
     installBtns.append(installBtn, cancelBtn);
     if (installed && !installBusy) {
-      const reinstall = build('button', 'appmenu__toggle-btn appmenu__toggle-btn--small', 'Reinstalar');
+      const reinstall = build('button', 'appmenu__toggle-btn', 'Reinstalar');
       reinstall.type = 'button';
       reinstall.addEventListener('click', (e) => installBtn.click(e));
       installBtns.append(reinstall);
@@ -875,7 +876,8 @@ export class AppMenu {
     } else {
       const refRow = build('div', 'appmenu__voice-install-btns');
       const custom = String(voice.ttsRef || '').trim();
-      const useMine = build('button', `appmenu__toggle-btn${custom ? ' is-active' : ''}`, 'Usar mi propia voz…');
+      const useMine = build('button', `appmenu__toggle-btn${custom ? ' is-active' : ''}`,
+        custom ? `${voice.source || 'Tu voz'} ✓` : 'Usar mi propia voz…');
       useMine.type = 'button';
       useMine.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -888,7 +890,8 @@ export class AppMenu {
         this.render(this.lastState);
       });
       refRow.append(useMine);
-      const clear = build('button', `appmenu__toggle-btn${custom ? '' : ' is-active'}`, 'Voz por defecto');
+      const clear = build('button', `appmenu__toggle-btn${custom ? '' : ' is-active'}`,
+        custom ? 'Voz por defecto' : 'Voz por defecto ✓');
       clear.type = 'button';
       clear.dataset.state = custom ? 'off' : 'on';
       clear.addEventListener('click', async (e) => {
@@ -1143,9 +1146,9 @@ export class AppMenu {
     selector('Pantalla', {
       setting: 'bubble',
       options: [
-        { id: 'auto', label: 'AUTOMÁTICO' },
-        { id: 'gl', label: 'OPENGL' },
-        { id: 'software', label: 'SIN GPU' },
+        { id: 'auto', label: 'Automático (recomendado)', hint: 'Usa la configuración gráfica normal de Windows.' },
+        { id: 'gl', label: 'OpenGL', hint: 'Fuerza OpenGL si Capri se ve negra o falla con Automático.' },
+        { id: 'software', label: 'Sin GPU (lento)', hint: 'Dibuja por CPU; sirve como último recurso y consume más tiempo.' },
       ],
       current: cfg.render || 'auto',
       onChange: (id) => this.pickRender(id, state),
@@ -1157,7 +1160,7 @@ export class AppMenu {
       hint.dataset.setting = 'bubble';
       hint.textContent = this.confirmSoftware
         ? (state.softwareConfirm || 'Capri va a ir más lenta. ¿Seguro?')
-        : (hints[mode] || hints.auto || '');
+        : `Pantalla activa: ${mode === 'auto' ? 'Automático (recomendado)' : mode === 'gl' ? 'OpenGL' : 'Sin GPU (lento)'}. ${hints[mode] || hints.auto || ''}`;
       body.append(hint);
     }
     if (this.confirmSoftware) {
@@ -1601,6 +1604,13 @@ export class AppMenu {
     const freeLinks = model.freeLinks || {};
     const hasKeys = model.hasKeys || {};
     const active = model.provider || 'local';
+    const activeIds = new Set(model.brains || [active]);
+    const chain = (model.brainChain || [...activeIds].map((id) => ({ id, label: labelOf(id) })));
+    wrap.append(build(
+      'div',
+      'appmenu__hint appmenu__brain-chain',
+      chain.map((item, index) => `${index + 1}. ${item.label}`).join(' → '),
+    ));
 
     const card = (title, blurb) => {
       const el = build('div', 'appmenu__brain-card');
@@ -1613,9 +1623,9 @@ export class AppMenu {
       const row = build('div', 'appmenu__brain-picks');
       for (const id of ids) {
         const text = id === recommend ? `${labelOf(id)} · recomendado` : labelOf(id);
-        const btn = build('button', `appmenu__toggle-btn${active === id ? ' is-active' : ''}`, text);
+        const btn = build('button', `appmenu__toggle-btn${activeIds.has(id) ? ' is-active' : ''}`, text);
         btn.type = 'button';
-        if (active === id) btn.dataset.state = 'on';
+        if (activeIds.has(id)) btn.dataset.state = 'on';
         // Avoid focus scrolling the panel to the top on re-render.
         btn.addEventListener('mousedown', (e) => e.preventDefault());
         btn.addEventListener('click', (e) => {
@@ -1808,7 +1818,7 @@ export class AppMenu {
     agentCard.append(build(
       'div',
       'appmenu__hint',
-      'Es más lento que una API y puede gastar tu plan.',
+      'Se instalan desde cualquier ventana de PowerShell (no hace falta estar en la carpeta de Capri).',
     ));
     if (!installed.length) {
       agentCard.append(build('div', 'appmenu__hint', 'Ningún CLI en el PATH.'));
@@ -1816,11 +1826,23 @@ export class AppMenu {
     for (const id of agentIds.filter((item) => item !== 'agent-auto')) {
       const a = installed.find((item) => item.id === (id === 'agent-cursor' ? 'cursor-agent' : id.replace(/^agent-/, '')));
       const label = labelOf(id);
-      agentCard.append(build('div', 'appmenu__hint', `${label}: ${a?.ready ? 'instalado' : 'no instalado'}`));
-      if (a?.installHow) agentCard.append(build('div', 'appmenu__hint', `Instalalo desde cualquier ventana de PowerShell: ${a.installHow}`));
-      if (a?.note) agentCard.append(build('div', 'appmenu__hint', a.note));
+      const row = build('div', 'appmenu__agent-row');
+      const button = build('button', `appmenu__toggle-btn${activeIds.has(id) ? ' is-active' : ''}`,
+        `${label} · ${a?.ready ? 'instalado' : 'no instalado'}`);
+      button.type = 'button';
+      button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.act('model-provider', id);
+      });
+      const command = build('input', 'appmenu__input');
+      command.type = 'text';
+      command.value = a?.installHow || '';
+      command.readOnly = true;
+      command.title = 'Seleccioná y copiá el comando';
+      row.append(button, command);
+      agentCard.append(row);
     }
-    agentCard.append(pickRow(agentIds, (id) => this.act('model-provider', id)));
+    agentCard.append(pickRow(['agent-auto'], (id) => this.act('model-provider', id)));
     agentCard.append(probeBtn(() => ({
       provider: agentIds.includes(active) ? active : 'agent-auto',
     })));

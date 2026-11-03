@@ -49,7 +49,7 @@ test('voice picker supports wav and transcript multi-selection', () => {
 
 test('startup keeps the intro animation enabled by default', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
-  assert.match(source, /else if \(config\.fx\?\.intro !== false\) await capri\.intro/);
+  assert.match(source, /else await capri\.intro/);
 });
 
 test('overlay is shown when the renderer finishes loading, not only ready-to-show', () => {
@@ -72,6 +72,19 @@ test('agent rows include install guidance for every supported CLI', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(source, /for \(const id of agentIds\.filter/);
   assert.match(source, /PowerShell/);
+});
+
+test('render selector explains and marks the active mode', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(source, /Automático \(recomendado\)/);
+  assert.match(source, /OpenGL/);
+  assert.match(source, /Sin GPU \(lento\)/);
+  assert.match(source, /Pantalla activa/);
+});
+
+test('voice loading stays visible until a ready state', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  assert.match(source, /evt\.state === 'loading'/);
 });
 
 test('screen context includes visible windows for desktop screenshots', () => {

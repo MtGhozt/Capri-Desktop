@@ -61,6 +61,12 @@ function provider(id) {
   return PROVIDERS[id] || PROVIDERS[DEFAULT_PROVIDER];
 }
 
+function activeBrainIds(llm = {}) {
+  const raw = Array.isArray(llm.brains) ? llm.brains : [llm.provider || DEFAULT_PROVIDER];
+  const ids = raw.filter((id, index) => PROVIDERS[id] && raw.indexOf(id) === index);
+  return ids.length ? ids : [DEFAULT_PROVIDER];
+}
+
 // Her replies leave this PC only on a cloud provider.
 function isCloud(id) {
   return !provider(id).local;
@@ -139,6 +145,7 @@ module.exports = {
   DEFAULT_PROVIDER,
   LOCAL_VISION_RE,
   provider,
+  activeBrainIds,
   providerAfterKeyRemoved,
   isCloud,
   usesLms,
