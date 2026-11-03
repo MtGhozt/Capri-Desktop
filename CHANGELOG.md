@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Menú que dejaba de responder después de bloquear la PC (Win+L).
+
 ## 0.2.0
 
 - Instalar voz con progreso, estado final y detalles colapsables; voz OmniVoice por defecto y Usar mi propia voz con `.wav` + `.txt`.

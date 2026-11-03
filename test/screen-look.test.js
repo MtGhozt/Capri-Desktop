@@ -240,3 +240,14 @@ test('unlock/resume recover clears busy/drag via input-reset (regression)', () =
   );
   assert.equal(calls.filter((c) => Array.isArray(c) && c[0] === 'forceClose').length, 2);
 });
+
+test('unlock, resume, and display changes use the same overlay resync', () => {
+  const main = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
+    'utf8',
+  );
+  assert.match(main, /function resyncOverlay\(reason = 'resync'\)[\s\S]*?recoverAfterUnlock\(reason\)/);
+  assert.match(main, /display-metrics-changed', \(\) => \{\s*resyncOverlay\('display-metrics-changed'\)/);
+  assert.match(main, /powerMonitor\.on\('resume', \(\) => setTimeout\(\(\) => resyncOverlay\('resume'\)/);
+  assert.match(main, /powerMonitor\.on\('unlock-screen', \(\) => setTimeout\(\(\) => \{\s*resyncOverlay\('unlock'\)/);
+});

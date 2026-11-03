@@ -213,6 +213,12 @@ function recoverAfterUnlock(reason = 'unlock') {
   }
 }
 
+function resyncOverlay(reason = 'resync') {
+  if (!overlay || overlay.isDestroyed()) return;
+  logEvent(voiceLogPath(), `[capri] overlay resync after ${reason}`);
+  recoverAfterUnlock(reason);
+}
+
 // Back on top of everything, the taskbar included (it comes up over her when it's clicked). Twice:
 // the taskbar can come up again a moment later, as its menus and previews open.
 function raiseOverlay() {
@@ -2961,13 +2967,12 @@ function main() {
 
     // Unlock often reshuffles bounds/DPI; re-fit and reapply ignoreMouseEvents (show/hide desync).
     screen.on('display-metrics-changed', () => {
-      fitOverlay();
-      if (overlay && !overlay.isDestroyed()) setClickThrough(clickThrough);
+      resyncOverlay('display-metrics-changed');
     });
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });
     // after sleep or a locked screen, once Windows has settled
-    powerMonitor.on('resume', () => setTimeout(() => recoverAfterUnlock('resume'), 2000));
+    powerMonitor.on('resume', () => setTimeout(() => resyncOverlay('resume'), 2000));
     // a sidecar that slept with the audio devices open can leave Windows with no sound at all:
     // stop it as the PC goes down and start it fresh once Windows has its devices back
     powerMonitor.on('suspend', () => {
@@ -2982,7 +2987,7 @@ function main() {
       voice.start();
     }, 4000));
     powerMonitor.on('unlock-screen', () => setTimeout(() => {
-      recoverAfterUnlock('unlock');
+      resyncOverlay('unlock');
       // Greeting after the UI is free: never leave the overlay holding focus over Ajustes.
       Promise.resolve(greeting?.({ unlock: true })).catch((err) => {
         logEvent(voiceLogPath(), `[capri] greeting timer failed: ${err.message}`);
