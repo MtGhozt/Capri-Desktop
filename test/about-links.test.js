@@ -13,10 +13,10 @@ test('Acerca de community links include Discord invite and TikTok', () => {
   assert.ok(about.dev.some((l) => l.id === 'issues' && l.url === LINKS.issues));
 });
 
-test('donations stay hidden until the Ko-fi URL exists', () => {
+test('Acerca de shows the Ko-fi donation link', () => {
   const about = aboutInfo({ version: '0.1.4' });
-  assert.equal(KOFI_URL, '');
-  assert.deepEqual(about.donate, []);
+  assert.equal(KOFI_URL, 'https://ko-fi.com/mtghozt');
+  assert.deepEqual(about.donate, [{ id: 'kofi', label: 'Ko-fi', url: KOFI_URL }]);
   assert.equal(LINKS.kofi, KOFI_URL);
 });
 

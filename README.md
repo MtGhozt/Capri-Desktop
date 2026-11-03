@@ -4,6 +4,8 @@ Compañera de escritorio con el personaje **Capri** (*Cyberpunk: Edgerunners 2*)
 
 **Gratis para siempre.** No se vende. Donaciones (si las hubiera) no desbloquean nada.
 
+☕ [Apoyar en Ko-fi](https://ko-fi.com/mtghozt)
+
 > Fan art. **No** afiliado a CD PROJEKT RED. Licencia PolyForm Noncommercial — [LICENSE](LICENSE), [CREDITS.md](CREDITS.md).
 
 **Versión actual:** `0.1.2` (`Capri-Setup-0.1.2.exe`).

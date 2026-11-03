@@ -1,9 +1,8 @@
 'use strict';
 
-// Links and copy for Ajustes › Acerca de. Missing community/donate URLs stay hidden (TODO).
+// Links and copy for Ajustes › Acerca de.
 
-// TODO(donate): paste the real Ko-fi URL here. While empty, the "Donar" button stays hidden.
-const KOFI_URL = '';
+const KOFI_URL = 'https://ko-fi.com/mtghozt';
 
 const LINKS = {
   github: 'https://github.com/MtGhozt/Capri-Desktop',
