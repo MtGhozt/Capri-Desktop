@@ -826,8 +826,8 @@ export class AppMenu {
       if (this.voiceDetails) installRow.append(build('pre', 'appmenu__voice-log', install.lines.join('\n')));
     }
     body.append(installRow);
-    const voiceSource = voice.source
-      || (String(voice.ttsRef || '').trim() ? 'Tu voz (archivo)' : 'Voz por defecto');
+    const voiceSource = voice.source || voice.ttsSourceName
+      || (String(voice.ttsRef || '').trim() ? `Tu voz (${String(voice.ttsRef).split(/[\\/]/).pop()})` : 'Voz por defecto');
     body.append(build('div', 'appmenu__hint appmenu__voice-source', `Voz activa: ${voiceSource}`));
     if (this.voiceRefForm) {
       const form = build('div', 'appmenu__voice-ref');
@@ -888,6 +888,7 @@ export class AppMenu {
       const useMine = build('button', `appmenu__toggle-btn${custom ? ' is-active' : ''}`,
         custom ? `${voice.source || 'Tu voz'} ✓` : 'Usar mi propia voz…');
       useMine.type = 'button';
+      useMine.dataset.state = custom ? 'on' : 'off';
       useMine.addEventListener('click', async (e) => {
         e.stopPropagation();
         const res = await this.host.menuAction({ id: 'voice-ref-pick' }).catch(() => null);
@@ -1650,7 +1651,11 @@ export class AppMenu {
         const wrap = build('div', 'appmenu__brain');
         const providers = model.providers || [];
         const labelOf = (id) => providers.find((p) => p.id === id)?.label || id;
-        const cards = ['gemini', 'openai', 'anthropic', 'deepseek', 'nvidia', 'openrouter', 'xai', 'local'];
+        const cardGroups = [
+          ['Gratis', ['local', 'openrouter']],
+          ['Gratis con límite', ['gemini']],
+          ['De pago', ['openai', 'anthropic', 'deepseek', 'nvidia', 'xai']],
+        ];
         const active = new Set(model.brains || []);
         const links = { ...(model.freeLinks || {}), ...(model.ownLinks || {}) };
         const models = model.models || {};
@@ -1685,17 +1690,12 @@ export class AppMenu {
           priority.append(row);
         }
         wrap.append(priority);
-        for (const id of cards) {
+        for (const [group, ids] of cardGroups) {
+          wrap.append(build('div', 'appmenu__brain-group', group));
+          for (const id of ids) {
           const p = providers.find((item) => item.id === id) || { label: id };
           const card = build('div', 'appmenu__brain-card');
-          const title = build('div', 'appmenu__brain-card-title', p.label);
-          const toggle = build('button', `appmenu__toggle-btn${active.has(id) ? ' is-active' : ''}`,
-            active.has(id) ? 'Activo' : 'Apagado');
-          toggle.type = 'button';
-          toggle.setAttribute('aria-pressed', String(active.has(id)));
-          toggle.addEventListener('click', (e) => { e.stopPropagation(); this.act('model-provider', id); });
-          title.append(toggle);
-          card.append(title);
+          card.append(build('div', 'appmenu__brain-card-title', p.label));
           const key = !model.localIds?.includes(id) && !['local'].includes(id)
             ? field('Key', '', model.hasKeys?.[id] ? 'key guardada: pega otra para cambiarla' : 'Pega tu key', 'password')
             : null;
@@ -1711,7 +1711,7 @@ export class AppMenu {
           if (key) card.append(key.row);
           card.append(modelField.row);
           if (url) card.append(url.row);
-          const actions = build('div', 'appmenu__fix-actions');
+          const actions = build('div', 'appmenu__fix-actions appmenu__card-actions');
           const probe = build('button', 'appmenu__toggle-btn appmenu__fix-save is-active', 'Probar');
           probe.type = 'button';
           probe.addEventListener('click', async (e) => {
@@ -1730,8 +1730,15 @@ export class AppMenu {
             await this.refresh();
           });
           actions.append(probe);
+          const toggle = build('button', `appmenu__toggle-btn${active.has(id) ? ' is-active' : ''}`,
+            active.has(id) ? 'Activo' : 'Apagado');
+          toggle.type = 'button';
+          toggle.dataset.state = active.has(id) ? 'on' : 'off';
+          toggle.setAttribute('aria-pressed', String(active.has(id)));
+          toggle.addEventListener('click', (e) => { e.stopPropagation(); this.act('model-provider', id); });
+          actions.append(toggle);
           if (model.hasKeys?.[id]) {
-            const remove = build('button', 'appmenu__toggle-btn', 'Quitar key');
+            const remove = build('button', 'appmenu__toggle-btn appmenu__danger', 'Quitar key');
             remove.type = 'button';
             remove.addEventListener('click', async (e) => {
               e.stopPropagation();
@@ -1746,6 +1753,7 @@ export class AppMenu {
           }
           card.append(actions);
           wrap.append(card);
+          }
         }
         const agents = build('div', 'appmenu__brain-card');
         agents.append(build('div', 'appmenu__brain-card-title', 'Agentes instalados'));
@@ -1756,8 +1764,14 @@ export class AppMenu {
           const toggle = build('button', `appmenu__toggle-btn${active.has(brainId) ? ' is-active' : ''}`,
             `${item.label} · ${item.installed ? 'instalado' : 'no instalado'}`);
           toggle.type = 'button';
+          toggle.dataset.state = item.installed ? 'on' : 'off';
           toggle.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (!item.installed) {
+              this.probeNotes = { ...(this.probeNotes || {}), [brainId]: 'No encontrado, copiá el comando de al lado.' };
+              this.refresh();
+              return;
+            }
             this.act('model-provider', brainId);
           });
           const command = build('input', 'appmenu__input');
