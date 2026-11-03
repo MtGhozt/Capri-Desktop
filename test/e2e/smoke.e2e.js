@@ -65,6 +65,19 @@ test('smoke: launch, menu, caress/drag/chat, recovery, Salir→Sí exits', async
 
   await app.e2e(async () => { await window.__capriE2E.openChat(); });
   await win.waitForSelector('.bubble__field', { state: 'visible', timeout: 10_000 });
+  await win.mouse.move(5, 5);
+  await win.waitForTimeout(100);
+  assert.equal(
+    await app.e2e(() => window.__capriE2E.interactive()),
+    false,
+    'chat must stay click-through outside its bubble and Capri',
+  );
+  const bubblePoint = await win.locator('.bubble__field').evaluate((field) => {
+    const r = field.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await win.mouse.move(bubblePoint.x, bubblePoint.y);
+  await win.waitForTimeout(100);
   // First entry into message-box "window" mode after launch: tab/box must be interactive + draggable.
   const box = await app.e2e(async () => {
     const perched = await window.__capriE2E.perchOnBox();
