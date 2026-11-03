@@ -10,7 +10,8 @@ const DEFAULT_TTS_DESIGN = 'voz femenina joven, juguetona, español latino, clar
 const CUSTOM_REF_REL = path.join('ref', 'my_ref.wav');
 
 function activeVoiceLabel(voice) {
-  return String(voice?.ttsRef || '').trim() ? 'Tu voz (archivo)' : 'Voz por defecto';
+  const ref = String(voice?.ttsRef || '').trim();
+  return ref ? `Tu voz (${path.basename(ref)})` : 'Voz por defecto';
 }
 
 function usesCloneRef(voice) {

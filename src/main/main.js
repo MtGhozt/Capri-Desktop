@@ -1451,17 +1451,21 @@ async function pickVoiceRefWav() {
   const parent = (settingsWindow && !settingsWindow.isDestroyed()) ? settingsWindow : overlay;
   const res = await dialog.showOpenDialog(parent, {
     title: 'Tu voz (.wav o transcripción .txt)',
-    properties: ['openFile'],
+    properties: ['openFile', 'multiSelections'],
     filters: [{ name: 'Audio o transcripción', extensions: ['wav', 'txt'] }],
   });
-  const file = !res.canceled && res.filePaths?.[0];
+  const files = !res.canceled ? (res.filePaths || []) : [];
+  const file = files.find((item) => /\.wav$/i.test(item)) || files.find((item) => /\.txt$/i.test(item));
   if (!file) return { ok: false, message: '' };
   if (/\.txt$/i.test(file)) {
     const wav = file.replace(/\.txt$/i, '.wav');
     if (!fs.existsSync(wav)) return { ok: false, message: 'No encontré el .wav con el mismo nombre.' };
     return { ok: true, path: wav, transcriptPath: file };
   }
-  return { ok: true, path: file };
+  const selectedTxt = files.find((item) => /\.txt$/i.test(item)
+    && path.basename(item, path.extname(item)).toLowerCase() === path.basename(file, path.extname(file)).toLowerCase());
+  const sidecar = file.replace(/\.wav$/i, '.txt');
+  return { ok: true, path: file, transcriptPath: selectedTxt || (fs.existsSync(sidecar) ? sidecar : '') };
 }
 
 function saveVoiceRef(value = {}) {
@@ -2057,6 +2061,7 @@ function menuState(extra = {}) {
       wakeSensitivity: String(cfg.voice?.wakeSensitivity || 'normal'),
       voice: {
         dir: String(cfg.voice?.dir || ''),
+        installed: Boolean(checkVoiceDir(cfg.voice?.dir || '').ok),
         ttsRef: cfg.voice?.ttsRef || null,
         status: voiceStatus(cfg),
         source: activeVoiceLabel(cfg.voice),
@@ -2690,7 +2695,15 @@ function main() {
       screenContext: () => {
         const title = String(lastWindows?.fgTitle || '').trim();
         const exe = String(lastWindows?.fgExe || '').split(/[\\/]/).pop();
-        return [exe, title && `«${title}»`].filter(Boolean).join(' ');
+        const open = (lastWindows?.wins || [])
+          .map((w) => [w.exe || w.process, w.title].filter(Boolean).join(' — '))
+          .filter(Boolean)
+          .slice(0, 12);
+        return [
+          exe,
+          title && `«${title}»`,
+          open.length && `Apps/ventanas abiertas: ${open.join(' | ')}`,
+        ].filter(Boolean).join('\n');
       },
       onFallback: (line) => sendCommand('box-log', { kind: 'sistema', text: line }),
       ensureLocal: () => lms?.whenReady(),

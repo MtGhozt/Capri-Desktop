@@ -16,6 +16,7 @@ const {
   findPython311,
   isBlockedVoicePath,
   ensureVoiceSources,
+  syncManagedVoiceSources,
   createVoiceInstall,
 } = require('../src/main/voice-install');
 
@@ -106,6 +107,8 @@ test('syncManagedVoiceSources updates stale bundled files but preserves user voi
   assert.equal(fs.readFileSync(path.join(dest, 'ref.wav'), 'utf8'), 'user audio');
   assert.ok(lines.includes('server.py'));
   assert.ok(lines.includes('models/hey_capri.onnx'));
+  const second = syncManagedVoiceSources({ root, destRoot: dest, version: '0.2.0' });
+  assert.deepEqual(second.synced, []);
 });
 
 test('findPython311 reports the download page when py -3.11 is missing', () => {

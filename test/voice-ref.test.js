@@ -53,7 +53,7 @@ test('ttsRef null → default voice path, not tts off', () => {
 
 test('custom ttsRef is labeled as archivo', () => {
   assert.equal(usesCloneRef({ ttsRef: 'ref/my_ref.wav' }), true);
-  assert.equal(activeVoiceLabel({ ttsRef: 'ref/my_ref.wav' }), 'Tu voz (archivo)');
+  assert.equal(activeVoiceLabel({ ttsRef: 'ref/my_ref.wav' }), 'Tu voz (my_ref.wav)');
 });
 
 test('custom ref picker rejects an empty transcript', () => {

@@ -37,6 +37,26 @@ test('Hacer algo is a direct quick-menu action, not a submenu', () => {
   assert.match(source, /row\('Hacer algo', '', 'do-something', \(\) => this\.act\('do-something'\)\)/);
 });
 
+test('game submenu refreshes without closing the menu', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(source, /id === 'game-list'/);
+});
+
+test('voice picker supports wav and transcript multi-selection', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(source, /properties:\s*\['openFile',\s*'multiSelections'\]/);
+});
+
+test('startup keeps the intro animation enabled by default', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  assert.match(source, /else if \(config\.fx\?\.intro !== false\) await capri\.intro/);
+});
+
+test('screen context includes visible windows for desktop screenshots', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(source, /Apps\/ventanas abiertas/);
+});
+
 test('Acerca de lives only in Ajustes, not the overlay quick menu', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.doesNotMatch(source, /row\('Acerca de/);

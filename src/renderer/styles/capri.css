@@ -691,10 +691,26 @@ body {
 }
 
 .bubble__voice {
+  position: relative;
   font-size: 9px;
   color: color-mix(in srgb, var(--capri-violet) 70%, #fff);
   letter-spacing: 0.08em;
   animation: blink 1100ms steps(2, jump-none) infinite;
+}
+
+.bubble__voice::after {
+  content: ' ···';
+  animation: blink 900ms steps(2, jump-none) infinite;
+}
+
+.bubble__voice.has-progress::after {
+  content: '';
+  display: inline-block;
+  width: 42px;
+  height: 2px;
+  margin-left: 5px;
+  vertical-align: middle;
+  background: linear-gradient(to right, var(--capri-violet) var(--voice-progress, 0%), #25152e var(--voice-progress, 0%));
 }
 
 .bubble__meter {
@@ -1692,6 +1708,11 @@ button.appmenu__row {
 .appmenu__toggle-btn:disabled {
   opacity: 1;
   cursor: default;
+}
+
+.appmenu__toggle-btn--small {
+  padding: 2px 6px;
+  font-size: 10px;
 }
 
 .appmenu__voice-log {

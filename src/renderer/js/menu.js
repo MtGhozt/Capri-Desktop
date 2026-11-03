@@ -723,7 +723,8 @@ export class AppMenu {
     const omniChecked = this.voiceOmni == null ? hasNvidia : Boolean(this.voiceOmni);
     const installRow = build('div', 'appmenu__voice-install');
     const installBtns = build('div', 'appmenu__voice-install-btns');
-    const installBtn = build('button', `appmenu__toggle-btn is-active${installBusy ? ' is-busy' : ''}`, installBusy ? 'Instalando…' : 'Instalar voz');
+    const installed = Boolean(voice.installed || install.installed);
+    const installBtn = build('button', `appmenu__toggle-btn is-active${installBusy ? ' is-busy' : ''}`, installBusy ? 'Instalando…' : installed ? 'Voz ya instalada ✓' : 'Instalar voz');
     installBtn.type = 'button';
     installBtn.dataset.state = 'on';
     installBtn.disabled = installBusy;
@@ -759,6 +760,12 @@ export class AppMenu {
     });
     installBtns.append(installBtn, cancelBtn);
     installRow.append(installBtns);
+    if (installed && !installBusy) {
+      const reinstall = build('button', 'appmenu__toggle-btn appmenu__toggle-btn--small', 'Reinstalar');
+      reinstall.type = 'button';
+      reinstall.addEventListener('click', (e) => installBtn.click(e));
+      installRow.append(reinstall);
+    }
     if (!hasNvidia) {
       const omni = build('label', 'appmenu__voice-omni');
       const box = build('input', '');
@@ -820,6 +827,7 @@ export class AppMenu {
       transcript.value = this.pendingRefText || '';
       transcript.maxLength = 500;
       transcript.spellcheck = true;
+      transcript.hidden = Boolean(this.pendingRefTranscriptPath);
       transcript.addEventListener('input', () => { this.pendingRefText = transcript.value; });
       const saveRef = build('button', 'appmenu__toggle-btn is-active', 'GUARDAR VOZ');
       saveRef.type = 'button';
@@ -858,7 +866,8 @@ export class AppMenu {
       body.append(form);
     } else {
       const refRow = build('div', 'appmenu__voice-install-btns');
-      const useMine = build('button', 'appmenu__toggle-btn is-active', 'Usar mi propia voz…');
+      const custom = String(voice.ttsRef || '').trim();
+      const useMine = build('button', `appmenu__toggle-btn${custom ? ' is-active' : ''}`, 'Usar mi propia voz…');
       useMine.type = 'button';
       useMine.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -871,7 +880,6 @@ export class AppMenu {
         this.render(this.lastState);
       });
       refRow.append(useMine);
-      const custom = String(voice.ttsRef || '').trim();
       const clear = build('button', `appmenu__toggle-btn${custom ? '' : ' is-active'}`, 'Voz por defecto');
       clear.type = 'button';
       clear.dataset.state = custom ? 'off' : 'on';
@@ -2068,7 +2076,7 @@ export class AppMenu {
       || id === 'model-provider' || id === 'spotify-connect' || id === 'spotify-disconnect' || id === 'drag-lock' || id === 'theme'
       || id === 'startup' || id === 'gaming-mode' || id === 'drone-mode' || id === 'comments' || id === 'comments-range'
       || id === 'greetings' || id === 'unlock-greeting' || id === 'caresses' || id === 'music-dance'
-      || id === 'app-fx' || id === 'scanlines';
+      || id === 'app-fx' || id === 'scanlines' || id === 'game-list';
     await this.host.menuAction({ id, value });
     if (!keep) {
       this.hide();

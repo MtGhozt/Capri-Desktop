@@ -320,9 +320,16 @@ export class Bubble {
     if (!on && this.meterBar) this.meterBar.style.width = '0%';
   }
 
-  setVoiceLoading(on) {
+  setVoiceLoading(on, progress = null) {
     this.voiceLoading = Boolean(on);
-    if (this.voiceEl) this.voiceEl.hidden = !this.voiceLoading;
+    if (this.voiceEl) {
+      this.voiceEl.hidden = !this.voiceLoading;
+      this.voiceEl.textContent = this.voiceLoading && Number.isFinite(Number(progress))
+        ? `cargando voz… ${Math.round(Number(progress))}%`
+        : 'cargando voz…';
+      this.voiceEl.classList.toggle('has-progress', this.voiceLoading && Number.isFinite(Number(progress)));
+      this.voiceEl.style.setProperty('--voice-progress', `${Math.max(0, Math.min(100, Number(progress) || 0))}%`);
+    }
   }
 
   setLevel(rms) {

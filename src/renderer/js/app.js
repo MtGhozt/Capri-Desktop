@@ -687,7 +687,7 @@ async function boot() {
       return;
     }
     if (type === 'tts_state') {
-      bubble.setVoiceLoading(evt.state === 'loading');
+      bubble.setVoiceLoading(evt.state === 'loading', evt.progress);
       return;
     }
     if (type === 'notice') {
@@ -1193,7 +1193,7 @@ async function boot() {
   // entrance: she grabs the screen, says hi, then dives down to her spot
   // (put away last time: she starts in her biochip; fx.intro false: skip the grab)
   if (config.visible === false) capri.stowNow();
-  else if (config.fx?.intro !== false && intro) await capri.intro(entrance());
+  else if (config.fx?.intro !== false) await capri.intro(entrance());
   else await capri.materialize(entrance());
   bumpIdle();
   const hello = async () => {
