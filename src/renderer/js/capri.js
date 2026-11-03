@@ -1833,26 +1833,30 @@ export class Capri {
     p.collapse = 1;
     p.dissolve = 0.5;
     this.place();
-    const head = this.head(at, this.facing);
-    await this.fx.intro({
-      to: { x: head.x, y: head.y, size: 100 * this.scale },
-      label,
-      caption,
-      still,
-      onCue: (cue) => {
-        if (cue === 'open') this.voice.play('charge'); // the edges of the screen crackling
-        else if (cue === 'hand') this.voice.play('land'); // a hand on the edge
-        else if (cue === 'wave') this.voice.play('rise'); // a hand off it, to wave
-        else if (cue === 'grab') {
-          this.voice.play('land'); // she slams into it
-          this.voice.play('bolt');
-        } else if (cue === 'hi') this.voice.play('hello');
-        else if (cue === 'slip') this.voice.play('teleport-out');
-      },
-    });
-    await this.arrive(at, { face: this.facing, beam: false });
-    this.busy = false;
-    this.onTeleport?.('end');
+    try {
+      const head = this.head(at, this.facing);
+      await this.fx.intro({
+        to: { x: head.x, y: head.y, size: 100 * this.scale },
+        label,
+        caption,
+        still,
+        onCue: (cue) => {
+          if (cue === 'open') this.voice.play('charge'); // the edges of the screen crackling
+          else if (cue === 'hand') this.voice.play('land'); // a hand on the edge
+          else if (cue === 'wave') this.voice.play('rise'); // a hand off it, to wave
+          else if (cue === 'grab') {
+            this.voice.play('land'); // she slams into it
+            this.voice.play('bolt');
+          } else if (cue === 'hi') this.voice.play('hello');
+          else if (cue === 'slip') this.voice.play('teleport-out');
+        },
+      });
+      await this.arrive(at, { face: this.facing, beam: false });
+    } finally {
+      p.alpha = 1;
+      this.busy = false;
+      this.onTeleport?.('end');
+    }
   }
 
   // ---------- showing you things ----------

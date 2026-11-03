@@ -49,7 +49,10 @@ test('voice picker supports wav and transcript multi-selection', () => {
 
 test('startup keeps the intro animation enabled by default', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
-  assert.match(source, /else await capri\.intro/);
+  assert.match(source, /await capri\.intro\(entrance\(\)\)/);
+  assert.doesNotMatch(source, /if \(config\.visible === false\) capri\.stowNow\(\)/);
+  const capri = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'capri.js'), 'utf8');
+  assert.match(capri, /finally \{\s*p\.alpha = 1;/);
 });
 
 test('overlay is shown when the renderer finishes loading, not only ready-to-show', () => {
@@ -87,6 +90,15 @@ test('brain UI uses provider cards, priority controls, and per-card probe status
   assert.match(source, /Orden en que Capri prueba los cerebros/);
   assert.match(source, /model-reorder/);
   assert.match(source, /Listo, \$\{labelOf\(id\)\} contesta/);
+});
+
+test('brain cards expose pricing groups and stable action states', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(source, /Gratis con límite/);
+  assert.match(source, /De pago/);
+  assert.match(source, /appmenu__fix-save is-active.*Probar/);
+  assert.match(source, /appmenu__danger.*Quitar key/);
+  assert.match(source, /appmenu__card-actions/);
 });
 
 test('brain settings render keeps old-format configs visible', () => {

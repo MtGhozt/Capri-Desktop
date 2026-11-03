@@ -174,11 +174,16 @@ function reviveMigratedTts(voice) {
 
 function migrateBrainOrder(llm) {
   const value = { ...(llm || {}) };
-  if (Array.isArray(value.brains) && value.brains.length === 1 && value.brains[0] === 'local') {
-    value.brains = ['gemini', 'local'];
-    return { llm: value, changed: true };
+  if (value.brainOrderMigrated) return { llm: value, changed: false };
+  const brains = Array.isArray(value.brains) ? [...value.brains] : ['gemini', 'local'];
+  const local = brains.indexOf('local');
+  if (local >= 0) {
+    value.brains = ['gemini', ...brains.filter((id) => id !== 'gemini' && id !== 'local'), 'local'];
+  } else {
+    value.brains = brains;
   }
-  return { llm: value, changed: false };
+  value.brainOrderMigrated = true;
+  return { llm: value, changed: true };
 }
 
 function file() {

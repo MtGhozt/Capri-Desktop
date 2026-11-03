@@ -10,7 +10,8 @@ test('detectAgents marks PATH hits; all five CLIs are wired when present', () =>
   let calls = 0;
   const execFileSync = (cmd, [bin]) => {
     calls += 1;
-    if (bin === 'claude' || bin === 'opencode') return `C:\\bin\\${bin}.exe\n`;
+    if (cmd === 'where' && (bin === 'claude' || bin === 'opencode')) return `C:\\bin\\${bin}.exe\n`;
+    if ((cmd === 'C:\\bin\\claude.exe' || cmd === 'C:\\bin\\opencode.exe') && bin === '--version') return '1.0';
     throw new Error('not found');
   };
   const list = detectAgents({ execFileSync, platform: 'win32' });
@@ -23,20 +24,32 @@ test('detectAgents marks PATH hits; all five CLIs are wired when present', () =>
   assert.ok(by.codex.installHow);
   assert.ok(by.gemini.installHow);
   detectAgents({ execFileSync, platform: 'win32' }); // mocks never use the production cache
-  assert.equal(calls, 10); // 5 bins × 2 calls
+  assert.equal(calls, 14); // two scans × (5 PATH checks + 2 executable checks)
 });
 
 test('detectAgents only marks CLIs found by where on PATH', () => {
   const list = detectAgents({
     platform: 'win32',
     execFileSync: (cmd, [bin]) => {
-      assert.equal(cmd, 'where');
-      if (bin === 'claude') return 'C:\\tools\\claude.cmd\n';
+      if (cmd === 'where' && bin === 'claude') return 'C:\\tools\\claude.cmd\n';
+      if (cmd === 'C:\\tools\\claude.cmd' && bin === '--version') return 'claude 1.0';
       throw new Error('not found');
     },
   });
   assert.equal(list.find((a) => a.id === 'claude').installed, true);
   assert.equal(list.find((a) => a.id === 'opencode').installed, false);
+});
+
+test('detectAgents rejects a PATH result that cannot run', () => {
+  const list = detectAgents({
+    platform: 'win32',
+    execFileSync: (cmd, [bin]) => {
+      if (cmd === 'where' && bin === 'claude') return 'C:\\tools\\claude.cmd\n';
+      throw new Error('not runnable');
+    },
+  });
+  assert.equal(list.find((a) => a.id === 'claude').installed, false);
+  assert.equal(list.find((a) => a.id === 'claude').ready, false);
 });
 
 test('each CLI builds the right command (read-only flags where the CLI has them)', () => {

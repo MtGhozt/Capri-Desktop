@@ -62,6 +62,13 @@ test('a whisper wake already stripped is fine; one that still carries the wake w
   assert.equal(wakeTranscriptOk('y entonces capri dijo que se fuera'), false); // video speech, not an order
 });
 
+test('voice sidecar repairs wake resources and falls back with a friendly notice', () => {
+  const server = fs.readFileSync(path.join(__dirname, '..', 'voice', 'server.py'), 'utf8');
+  assert.match(server, /missing_resources/);
+  assert.match(server, /openWakeWord resources missing after download/);
+  assert.match(server, /El 'Hey Capri' no pudo arrancar; uso la detección por voz/);
+});
+
 test('her persona never greets with the date, and knows he is a man', () => {
   const read = (p) => fs.readFileSync(path.join(__dirname, '..', 'src', 'main', p), 'utf8');
   const persona = read('persona.md');

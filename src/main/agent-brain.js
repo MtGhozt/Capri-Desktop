@@ -66,6 +66,20 @@ function which(bin, { execFileSync = require('node:child_process').execFileSync,
   }
 }
 
+function runnable(file, { execFileSync = require('node:child_process').execFileSync, platform = process.platform } = {}) {
+  try {
+    execFileSync(file, ['--version'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 5000,
+      shell: platform === 'win32',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // `where`/`which` per CLI is slow on cold PATH; cache so menu:get does not stall the first paint.
 let agentsCache = null;
 let agentsCacheAt = 0;
@@ -79,13 +93,14 @@ function detectAgents(opts = {}) {
   }
   const list = AGENTS.map((a) => {
     const file = which(a.bin, opts);
+    const installed = Boolean(file) && runnable(file, opts);
     return {
       id: a.id,
       label: a.label,
       bin: a.bin,
-      installed: Boolean(file),
+      installed,
       path: file,
-      ready: a.ready && Boolean(file),
+      ready: a.ready && installed,
       installHow: a.installHow || '',
       note: a.note || (a.ready ? '' : 'Próximamente'),
     };

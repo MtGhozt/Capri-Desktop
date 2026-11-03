@@ -572,6 +572,12 @@ class Engine:
                 else "no wake word until that model exists"
             )
             log(f"wake model {name} not found in {MODELS}; openWakeWord off, {how}")
+            self.cfg["wakeMode"] = "whisper"
+            self.broadcast({
+                "type": "notice",
+                "level": "info",
+                "message": "El 'Hey Capri' no pudo arrancar; uso la detección por voz mientras tanto. Detalles en el log.",
+            })
             return False
         last_err = None
         for attempt in range(1, WAKE_ATTEMPTS + 1):
@@ -580,6 +586,16 @@ class Engine:
                 if attempt == 1:
                     # The installer normally seeds these; repair an incomplete venv once.
                     download_models()
+                    import openwakeword
+                    missing_resources = [
+                        name for name, info in openwakeword.FEATURE_MODELS.items()
+                        if not Path(info["model_path"]).exists()
+                        or not Path(info["model_path"]).with_suffix(".onnx").exists()
+                    ]
+                    if missing_resources:
+                        raise FileNotFoundError(
+                            f"openWakeWord resources missing after download: {', '.join(missing_resources)}"
+                        )
                 # a custom .onnx is already on disk; a built-in name is downloaded once
                 if not model.lower().endswith(".onnx"):
                     download_models(model_names=[model])

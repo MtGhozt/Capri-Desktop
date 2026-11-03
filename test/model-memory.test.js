@@ -49,6 +49,16 @@ test('modelForProvider never falls back to another provider current model', () =
 });
 
 test('legacy local-only brain order migrates to cloud first and local last', () => {
-  assert.deepEqual(migrateBrainOrder({ brains: ['local'] }).llm.brains, ['gemini', 'local']);
-  assert.deepEqual(migrateBrainOrder({ brains: ['local', 'openai'] }).llm.brains, ['local', 'openai']);
+  const migrated = migrateBrainOrder({ brains: ['local', 'openai'] });
+  assert.deepEqual(migrated.llm.brains, ['gemini', 'openai', 'local']);
+  assert.equal(migrated.llm.brainOrderMigrated, true);
+});
+
+test('brain order migration runs once and preserves a later user reorder', () => {
+  const migrated = migrateBrainOrder({ brains: ['local', 'gemini'] });
+  assert.deepEqual(migrated.llm.brains, ['gemini', 'local']);
+  assert.deepEqual(
+    migrateBrainOrder({ brains: ['local', 'gemini'], brainOrderMigrated: true }).llm.brains,
+    ['local', 'gemini'],
+  );
 });
