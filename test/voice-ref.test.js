@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { py, skip } = require('./voice-py');
 const { DEFAULTS } = require('../src/main/config');
 const {
   DEFAULT_TTS_DESIGN,
@@ -16,19 +16,7 @@ const {
   saveCustomRef,
 } = require('../src/main/voice-ref');
 
-function py(code) {
-  const voice = path.join(__dirname, '..', 'voice');
-  const venv = path.join(voice, '.venv', 'Scripts', 'python.exe');
-  const bin = fs.existsSync(venv) ? venv : 'py';
-  const args = bin === 'py' ? ['-3.11', '-c', code] : ['-c', code];
-  const result = spawnSync(bin, args, { encoding: 'utf8', cwd: voice, timeout: 60_000 });
-  if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || `exit ${result.status}`);
-  }
-  return String(result.stdout || '').trim();
-}
-
-test('ttsRef null → default voice path, not tts off', () => {
+test('ttsRef null → default voice path, not tts off', { skip: skip() }, () => {
   assert.equal(DEFAULTS.voice.ttsRef, null);
   assert.equal(DEFAULTS.voice.ttsDesign, DEFAULT_TTS_DESIGN);
   assert.ok(String(DEFAULTS.voice.ttsDesign).length > 0);
