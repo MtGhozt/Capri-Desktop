@@ -216,10 +216,11 @@ test('look/speak fault path restores clickable overlay (regression)', () => {
 test('unlock/resume recover clears busy/drag via input-reset (regression)', () => {
   // Mirrors recoverAfterUnlock in main.js: rearm alone left busy/dragging true after Win+L,
   // so refreshHit kept the fullscreen overlay interactive. Must also resetOverlayInput.
+  // reset before rearm so the false→true hook reinstall is not overwritten by a same-value reapply.
   const calls = [];
   const rearmOverlay = () => {
     calls.push('ignore-off');
-    calls.push(['setClickThrough', true]);
+    calls.push(['setClickThrough', true, 'rearm']);
     calls.push('rearmed');
   };
   const resetOverlayInput = (reason) => {
@@ -228,8 +229,8 @@ test('unlock/resume recover clears busy/drag via input-reset (regression)', () =
   };
   const recoverAfterUnlock = (reason = 'unlock') => {
     calls.push(['forceClose', reason]);
-    rearmOverlay();
     resetOverlayInput(reason);
+    rearmOverlay();
   };
   recoverAfterUnlock('unlock');
   recoverAfterUnlock('resume');
@@ -239,6 +240,9 @@ test('unlock/resume recover clears busy/drag via input-reset (regression)', () =
     [['input-reset', 'unlock'], ['input-reset', 'resume']],
   );
   assert.equal(calls.filter((c) => Array.isArray(c) && c[0] === 'forceClose').length, 2);
+  const unlockReset = calls.indexOf(calls.find((c) => Array.isArray(c) && c[0] === 'input-reset' && c[1] === 'unlock'));
+  const unlockRearm = calls.indexOf('rearmed');
+  assert.ok(unlockReset < unlockRearm);
 });
 
 test('unlock, resume, and display changes use the same overlay resync', () => {
@@ -248,6 +252,20 @@ test('unlock, resume, and display changes use the same overlay resync', () => {
   );
   assert.match(main, /function resyncOverlay\(reason = 'resync'\)[\s\S]*?recoverAfterUnlock\(reason\)/);
   assert.match(main, /display-metrics-changed', \(\) => \{\s*resyncOverlay\('display-metrics-changed'\)/);
-  assert.match(main, /powerMonitor\.on\('resume', \(\) => setTimeout\(\(\) => resyncOverlay\('resume'\)/);
-  assert.match(main, /powerMonitor\.on\('unlock-screen', \(\) => setTimeout\(\(\) => \{\s*resyncOverlay\('unlock'\)/);
+  assert.match(main, /const scheduleUnlockResync = \(reason, after = null\)/);
+  assert.match(main, /powerMonitor\.on\('resume', \(\) => scheduleUnlockResync\('resume'\)/);
+  assert.match(main, /powerMonitor\.on\('unlock-screen', \(\) => scheduleUnlockResync\('unlock'/);
+  assert.match(main, /}, 500\);/);
+  assert.match(main, /setIgnoreMouseEvents\(false\)[\s\S]*?setClickThrough\(true, 'rearm'\)/);
+  assert.match(main, /click-through \$\{through \? 'on' : 'off'\} reason=\$\{reason\}/);
+  assert.match(main, /quitSolid \|\| menuGuard\?\.menuOpen/);
+});
+
+test('menu opens with explicit mouse capture and restores click-through on close', () => {
+  const main = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
+    'utf8',
+  );
+  assert.match(main, /onMenu: \(open\) => \{[\s\S]*?setClickThrough\(false, 'menu-open'\)[\s\S]*?overlay\?\.focus\(\)/);
+  assert.match(main, /setClickThrough\(true, 'menu-close'\)/);
 });

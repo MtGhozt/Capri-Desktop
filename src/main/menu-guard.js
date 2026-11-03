@@ -43,10 +43,16 @@ function createMenuGuard({
     if (forcedAt) forcedAt = 0;
     menuChanged(Boolean(state.menu));
     if (state.shown && !state.menu) log('[capri] menu drawn while closed: hidden again');
+    // Menu must capture clicks even when Win+L killed hover-forwarding (interactive stays false).
+    if (menuOpen) {
+      if (clickThrough()) setClickThrough(false, 'menu-hold');
+      return;
+    }
+    if (typeof state.interactive !== 'boolean') return;
     const wantThrough = !state.interactive;
-    if (typeof state.interactive === 'boolean' && wantThrough !== clickThrough()) {
+    if (wantThrough !== clickThrough()) {
       log(`[capri] click-through was ${clickThrough() ? 'on' : 'off'}, she wants it ${wantThrough ? 'on' : 'off'} (menu=${Boolean(state.menu)} folding=${Boolean(state.folding)} dragging=${Boolean(state.dragging)})`);
-      setClickThrough(wantThrough);
+      setClickThrough(wantThrough, 'heartbeat');
     }
   }
 
@@ -54,8 +60,9 @@ function createMenuGuard({
     log(`[capri] menu force-closed (${reason})`);
     keyboardOff();
     sendCommand('menu-close', { force: true });
-    setClickThrough(true);
+    // Clear menuOpen before re-enabling click-through (setClickThrough gates on menuOpen).
     menuChanged(false);
+    setClickThrough(true, `force-close:${reason}`);
     forcedAt = now();
   }
 
@@ -64,7 +71,7 @@ function createMenuGuard({
     if (forcedAt && t - forcedAt >= FORCE_WAIT_MS) {
       forcedAt = 0;
       log('[capri] overlay did not answer the forced close: reloading it');
-      setClickThrough(true);
+      setClickThrough(true, 'force-reload');
       reload();
       return;
     }
@@ -76,8 +83,8 @@ function createMenuGuard({
       // must not reload her every few seconds.
       keyboardOff();
       sendCommand('menu-close', { force: true });
-      setClickThrough(true);
       menuChanged(false);
+      setClickThrough(true, 'silent');
     }
   }
 

@@ -82,3 +82,16 @@ test('Esc is only taken while the menu is open', () => {
   s.guard.menuChanged(false);
   assert.deepEqual(s.calls.filter((c) => c[0] === 'esc'), [['esc', true], ['esc', false]]);
 });
+
+test('open menu keeps capture even when hover interactive is false', () => {
+  // After Win+L the mouse hook dies: interactive stays false while the menu is open.
+  // Heartbeat must not flip click-through back on.
+  const s = setup();
+  s.guard.beat({ menu: true, interactive: false });
+  assert.equal(s.through(), false);
+  assert.equal(s.guard.menuOpen, true);
+  const before = s.calls.length;
+  s.guard.beat({ menu: true, interactive: false });
+  assert.equal(s.through(), false);
+  assert.equal(s.calls.length, before);
+});

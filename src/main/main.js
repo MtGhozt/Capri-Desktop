@@ -181,9 +181,12 @@ function fitOverlay() {
 function rearmOverlay() {
   if (!overlay || overlay.isDestroyed()) return;
   overlay.setIgnoreMouseEvents(false);
-  setClickThrough(true);
   overlay.setAlwaysOnTop(true, 'screen-saver');
   fitOverlay();
+  setTimeout(() => {
+    if (!overlay || overlay.isDestroyed() || menuGuard.menuOpen) return;
+    setClickThrough(true, 'rearm');
+  }, 0);
   sendCommand('rearmed'); // click-through again: she waits for the pointer to be on her
   console.log('[capri] mouse hook set up again');
 }
@@ -202,9 +205,9 @@ function recoverAfterUnlock(reason = 'unlock') {
     overlay.setFocusable(false);
     overlay.showInactive();
   }
-  rearmOverlay();
   // Clear busy/drag + reapply click-through (look/speak fault path). 'rearmed' alone leaves them.
   resetOverlayInput(reason);
+  rearmOverlay();
   // force Esc re-bind: Windows drops the accelerator on the lock screen while we still think it's ours
   takeEscape(false);
   raiseOverlay();
@@ -319,11 +322,12 @@ function createOverlay() {
 let clickThrough = true;
 let handedBackAt = 0; // when she last gave the keyboard back to the window before her
 let quitSolid = false; // ¿Salir? visible: ignoreMouseEvents stays off until clear + grace
-function setClickThrough(on) {
+function setClickThrough(on, reason = 'state') {
   clickThrough = Boolean(on);
   if (!overlay || overlay.isDestroyed()) return;
-  // While ¿Salir? is up, never re-enable ignoreMouseEvents (menu-guard / hover must not steal Sí).
-  const through = quitSolid ? false : clickThrough;
+  // ¿Salir? / open menu: never re-enable ignoreMouseEvents (hover can stay false after Win+L).
+  const through = (quitSolid || menuGuard?.menuOpen) ? false : clickThrough;
+  logEvent(voiceLogPath(), `[capri] click-through ${through ? 'on' : 'off'} reason=${reason}`);
   if (through) overlay.setIgnoreMouseEvents(true, { forward: true });
   else overlay.setIgnoreMouseEvents(false);
 }
@@ -360,7 +364,19 @@ const menuGuard = createMenuGuard({
     if (!overlay || overlay.isDestroyed()) return;
     overlay.webContents.reloadIgnoringCache();
   },
-  onMenu: (open) => takeEscape(open),
+  onMenu: (open) => {
+    takeEscape(open);
+    if (open) {
+      overlay?.setFocusable(true);
+      setClickThrough(false, 'menu-open');
+      try { overlay?.focus(); } catch { /* focus can fail during unlock */ }
+    } else {
+      if (!chatOpen && !menuKeyboard) {
+        overlay?.setFocusable(false);
+        setClickThrough(true, 'menu-close');
+      }
+    }
+  },
   log: (line) => logEvent(voiceLogPath(), line),
 });
 
@@ -2398,7 +2414,7 @@ function createTray() {
 }
 
 function registerIpc() {
-  ipcMain.on('overlay:interactive', (_e, on) => setClickThrough(!on));
+  ipcMain.on('overlay:interactive', (_e, on) => setClickThrough(!on, on ? 'hover-on' : 'hover-off'));
   ipcMain.on('renderer:log', (_e, payload = {}) => {
     const kind = String(payload.kind || 'error').slice(0, 30);
     const message = String(payload.message || '').slice(0, 2000);
@@ -2971,8 +2987,21 @@ function main() {
     });
     screen.on('display-added', () => { fitOverlay(); rebuildTray(); });
     screen.on('display-removed', () => { fitOverlay(); rebuildTray(); });
-    // after sleep or a locked screen, once Windows has settled
-    powerMonitor.on('resume', () => setTimeout(() => resyncOverlay('resume'), 2000));
+    // after sleep or a locked screen, once Windows has settled; Win+L emits both events.
+    let unlockResyncTimer = 0;
+    let unlockResyncAfter = null;
+    const scheduleUnlockResync = (reason, after = null) => {
+      if (after) unlockResyncAfter = after;
+      if (unlockResyncTimer) clearTimeout(unlockResyncTimer);
+      unlockResyncTimer = setTimeout(() => {
+        unlockResyncTimer = 0;
+        const done = unlockResyncAfter;
+        unlockResyncAfter = null;
+        resyncOverlay(reason);
+        done?.();
+      }, 500);
+    };
+    powerMonitor.on('resume', () => scheduleUnlockResync('resume'));
     // a sidecar that slept with the audio devices open can leave Windows with no sound at all:
     // stop it as the PC goes down and start it fresh once Windows has its devices back
     powerMonitor.on('suspend', () => {
@@ -2986,13 +3015,12 @@ function main() {
       voice.stop();
       voice.start();
     }, 4000));
-    powerMonitor.on('unlock-screen', () => setTimeout(() => {
-      resyncOverlay('unlock');
+    powerMonitor.on('unlock-screen', () => scheduleUnlockResync('unlock', () => {
       // Greeting after the UI is free: never leave the overlay holding focus over Ajustes.
       Promise.resolve(greeting?.({ unlock: true })).catch((err) => {
         logEvent(voiceLogPath(), `[capri] greeting timer failed: ${err.message}`);
       });
-    }, 1000));
+    }));
   });
 
   app.on('will-quit', () => {

@@ -2,7 +2,7 @@
 
 ## 0.2.1
 
-- Menú que dejaba de responder después de bloquear la PC (Win+L).
+- Win+L: rearmar el mouse hook (off→on), menú con captura explícita, resync dedupeado.
 
 ## 0.2.0
 
