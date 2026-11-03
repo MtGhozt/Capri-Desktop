@@ -255,6 +255,7 @@ function createOverlay() {
   overlay.setAlwaysOnTop(true, 'screen-saver');
   overlay.setIgnoreMouseEvents(true, { forward: true });
   overlay.loadURL('capri://app/src/renderer/index.html');
+  overlay.showInactive();
   // always shown: put away, she's still there as her biochip in the corner. Sized again first:
   // Windows keeps a new window inside the work area, and resting on the taskbar it covers it too.
   overlay.once('ready-to-show', () => {

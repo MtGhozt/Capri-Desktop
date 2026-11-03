@@ -1680,13 +1680,15 @@ export class AppMenu {
         for (const [index, id] of (model.brainChain || []).entries()) {
           const row = build('div', 'appmenu__row appmenu__row--sub');
           row.append(build('span', 'appmenu__label', `${index + 1}. ${id.label}`));
+          const arrowActions = build('div', 'appmenu__priority-actions');
           for (const [direction, glyph, disabled] of [['up', '↑', index === 0], ['down', '↓', index === model.brainChain.length - 1]]) {
             const btn = build('button', 'appmenu__arrow', glyph);
             btn.type = 'button';
             btn.disabled = disabled;
             btn.addEventListener('click', (e) => { e.stopPropagation(); move(id.id, direction); });
-            row.append(btn);
+            arrowActions.append(btn);
           }
+          row.append(arrowActions);
           priority.append(row);
         }
         wrap.append(priority);
@@ -1695,8 +1697,21 @@ export class AppMenu {
           for (const id of ids) {
           const p = providers.find((item) => item.id === id) || { label: id };
           const card = build('div', 'appmenu__brain-card');
-          card.append(build('div', 'appmenu__brain-card-title', p.label));
-          const key = !model.localIds?.includes(id) && !['local'].includes(id)
+          const needsKey = !model.localIds?.includes(id) && !['local'].includes(id);
+          const hasKey = Boolean(model.hasKeys?.[id]);
+          const header = build('div', 'appmenu__brain-card-header');
+          header.append(build('div', 'appmenu__brain-card-title', p.label));
+          const toggle = build('button', `appmenu__toggle-btn${active.has(id) ? ' is-active' : ''}`,
+            active.has(id) ? 'Activo' : 'Apagado');
+          toggle.type = 'button';
+          toggle.dataset.state = active.has(id) ? 'on' : 'off';
+          toggle.disabled = needsKey && !hasKey;
+          if (toggle.disabled) toggle.title = 'Pegá una key primero';
+          toggle.setAttribute('aria-pressed', String(active.has(id)));
+          toggle.addEventListener('click', (e) => { e.stopPropagation(); this.act('model-provider', id); });
+          header.append(toggle);
+          card.append(header);
+          const key = needsKey
             ? field('Key', '', model.hasKeys?.[id] ? 'key guardada: pega otra para cambiarla' : 'Pega tu key', 'password')
             : null;
           const modelField = field('Modelo', models[id], p.model || 'nombre exacto del modelo');
@@ -1730,14 +1745,7 @@ export class AppMenu {
             await this.refresh();
           });
           actions.append(probe);
-          const toggle = build('button', `appmenu__toggle-btn${active.has(id) ? ' is-active' : ''}`,
-            active.has(id) ? 'Activo' : 'Apagado');
-          toggle.type = 'button';
-          toggle.dataset.state = active.has(id) ? 'on' : 'off';
-          toggle.setAttribute('aria-pressed', String(active.has(id)));
-          toggle.addEventListener('click', (e) => { e.stopPropagation(); this.act('model-provider', id); });
-          actions.append(toggle);
-          if (model.hasKeys?.[id]) {
+          if (hasKey) {
             const remove = build('button', 'appmenu__toggle-btn appmenu__danger', 'Quitar key');
             remove.type = 'button';
             remove.addEventListener('click', async (e) => {
@@ -1762,9 +1770,9 @@ export class AppMenu {
           const brainId = `agent-${item.id === 'cursor-agent' ? 'cursor' : item.id}`;
           const row = build('div', 'appmenu__agent-row');
           const toggle = build('button', `appmenu__toggle-btn${active.has(brainId) ? ' is-active' : ''}`,
-            `${item.label} · ${item.installed ? 'instalado' : 'no instalado'}`);
+            item.installed ? (active.has(brainId) ? 'Activo' : 'Apagado') : 'No instalado');
           toggle.type = 'button';
-          toggle.dataset.state = item.installed ? 'on' : 'off';
+          toggle.dataset.state = item.installed && active.has(brainId) ? 'on' : 'off';
           toggle.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!item.installed) {
@@ -1774,11 +1782,17 @@ export class AppMenu {
             }
             this.act('model-provider', brainId);
           });
-          const command = build('input', 'appmenu__input');
-          command.value = item.installHow || '';
-          command.readOnly = true;
-          command.title = 'Seleccioná y copiá el comando';
-          row.append(toggle, command);
+          row.append(toggle);
+          if (!item.installed) {
+            const command = build('input', 'appmenu__input');
+            command.value = item.installHow || '';
+            command.readOnly = true;
+            command.title = 'Seleccioná y copiá el comando';
+            row.append(command);
+            if (item.id === 'cursor-agent') {
+              row.append(build('span', 'appmenu__hint', 'El editor Cursor solo no alcanza.'));
+            }
+          }
           agents.append(row);
         }
         wrap.append(agents);

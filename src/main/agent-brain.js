@@ -19,7 +19,7 @@ const AGENTS = [
   },
   {
     id: 'cursor-agent',
-    label: 'Cursor Agent',
+    label: 'Cursor Agent (CLI)',
     bin: 'cursor-agent',
     args: (prompt) => ['-p', '--mode=ask', '--output-format', 'text', prompt],
     installHow: 'curl https://cursor.com/install -fsS | bash',

@@ -58,6 +58,7 @@ test('startup keeps the intro animation enabled by default', () => {
 test('overlay is shown when the renderer finishes loading, not only ready-to-show', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
   assert.match(source, /did-finish-load[\s\S]{0,300}overlay\.showInactive\(\)/);
+  assert.match(source, /overlay\.loadURL\('capri:\/\/app\/src\/renderer\/index\.html'\);\s*overlay\.showInactive\(\)/);
 });
 
 test('render changes do not relaunch the development process', () => {
@@ -99,6 +100,21 @@ test('brain cards expose pricing groups and stable action states', () => {
   assert.match(source, /appmenu__fix-save is-active.*Probar/);
   assert.match(source, /appmenu__danger.*Quitar key/);
   assert.match(source, /appmenu__card-actions/);
+});
+
+test('brain priority uses fixed right-aligned square controls', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'styles', 'capri.css'), 'utf8');
+  assert.match(css, /\.appmenu__priority-actions/);
+  assert.match(css, /\.appmenu__arrow\s*\{[^}]*width:\s*22px;[^}]*height:\s*22px;/s);
+});
+
+test('provider and agent controls keep state in their headers and hide installed commands', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const agents = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'agent-brain.js'), 'utf8');
+  assert.match(source, /appmenu__brain-card-header/);
+  assert.match(source, /toggle\.disabled = needsKey && !hasKey/);
+  assert.match(source, /row\.append\(toggle\);\s*if \(!item\.installed\)/);
+  assert.match(agents, /Cursor Agent \(CLI\)/);
 });
 
 test('brain settings render keeps old-format configs visible', () => {
