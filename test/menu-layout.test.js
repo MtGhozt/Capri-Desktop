@@ -144,6 +144,17 @@ test('provider and agent controls keep state in their headers and hide installed
   assert.match(agents, /Cursor Agent \(CLI\)/);
 });
 
+test('agent install rows keep the command inside the panel and expose Copiar', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'styles', 'capri.css'), 'utf8');
+  assert.match(source, /appmenu__agent-cmd/);
+  assert.match(source, /build\('button', 'appmenu__toggle-btn', 'Copiar'\)/);
+  assert.match(source, /navigator\.clipboard\.writeText\(command\.value\)/);
+  assert.match(source, /copy\.textContent = 'Copiado'/);
+  assert.match(css, /\.appmenu__body\s*\{[^}]*overflow-x:\s*hidden;/s);
+  assert.match(css, /\.appmenu__agent-row \.appmenu__input\s*\{[^}]*min-width:\s*0;/s);
+});
+
 test('agent rows show a name, state, and actionable hint', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(source, /build\('span', 'appmenu__agent-name', item\.label\)/);

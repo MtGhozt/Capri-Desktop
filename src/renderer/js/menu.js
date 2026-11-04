@@ -1861,11 +1861,22 @@ export class AppMenu {
           });
           row.append(toggle);
           if (!item.installed) {
+            const cmdWrap = build('div', 'appmenu__agent-cmd');
             const command = build('input', 'appmenu__input');
             command.value = item.installHow || '';
             command.readOnly = true;
             command.title = 'Seleccioná y copiá el comando';
-            row.append(command);
+            const copy = build('button', 'appmenu__toggle-btn', 'Copiar');
+            copy.type = 'button';
+            copy.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              try {
+                await navigator.clipboard.writeText(command.value);
+                copy.textContent = 'Copiado';
+              } catch { /* no clipboard: the command is still on screen */ }
+            });
+            cmdWrap.append(command, copy);
+            row.append(cmdWrap);
           }
           const hint = item.installed
             ? 'Instalado · clic para activar/apagar'
