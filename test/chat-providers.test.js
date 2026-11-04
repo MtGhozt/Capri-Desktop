@@ -36,6 +36,7 @@ test('providers: two local, free NVIDIA/Gemini, own-key clouds, and agent CLIs',
   assert.ok(BRAIN_GROUPS.own.includes('anthropic'));
   assert.ok(BRAIN_GROUPS.own.includes('xai'));
   assert.ok(BRAIN_GROUPS.cards.includes('groq'));
+  assert.ok(BRAIN_GROUPS.cards.includes('mistral'));
   assert.deepEqual(BRAIN_GROUPS.agent, [
     'agent-auto', 'agent-claude', 'agent-cursor', 'agent-opencode', 'agent-codex', 'agent-gemini',
   ]);
@@ -62,10 +63,11 @@ test('active brains preserve order and fall back to the configured provider', ()
 });
 
 test('brain cards expose one key/model provider and the default order keeps LM Studio last', () => {
-  assert.deepEqual(BRAIN_GROUPS.cards, ['gemini', 'groq', 'nvidia', 'openai', 'anthropic', 'deepseek', 'openrouter', 'xai', 'local']);
+  assert.deepEqual(BRAIN_GROUPS.cards, ['gemini', 'groq', 'nvidia', 'openai', 'anthropic', 'deepseek', 'mistral', 'openrouter', 'xai', 'local']);
   assert.equal(FREE_KEY_LINKS.gemini.url, 'https://aistudio.google.com/apikey');
   assert.ok(FREE_KEY_LINKS.groq.url);
   assert.ok(OWN_KEY_LINKS.deepseek.url);
+  assert.ok(OWN_KEY_LINKS.mistral.url);
   assert.ok(OWN_KEY_LINKS.openrouter.url);
   assert.ok(OWN_KEY_LINKS.xai.url);
 });

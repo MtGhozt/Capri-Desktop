@@ -1729,7 +1729,7 @@ export class AppMenu {
         const cardGroups = [
           ['Gratis', ['local', 'openrouter']],
           ['Gratis con límite', ['gemini', 'groq']],
-          ['De pago', ['openai', 'anthropic', 'deepseek', 'nvidia', 'xai']],
+          ['De pago', ['openai', 'anthropic', 'deepseek', 'mistral', 'nvidia', 'xai']],
         ];
         const active = new Set(model.brains || []);
         const links = { ...(model.freeLinks || {}), ...(model.ownLinks || {}) };
