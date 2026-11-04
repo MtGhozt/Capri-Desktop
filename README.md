@@ -10,7 +10,7 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 > Fan art. **No** afiliado a CD PROJEKT RED. Licencia PolyForm Noncommercial — [LICENSE](LICENSE), [CREDITS.md](CREDITS.md).
 
-**Versión actual:** `0.1.2` (`Capri-Setup-0.1.2.exe`).
+**Versión actual:** `0.2.2` (`Capri-Setup-0.2.2.exe`).
 
 <img src="docs/media/capri-desktop.png" alt="Capri en el escritorio" width="100%">
 

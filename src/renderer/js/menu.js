@@ -427,7 +427,7 @@ export class AppMenu {
     this.el.replaceChildren(plate);
     if (this.quickOpen) {
       const menu = build('div', 'appmenu__submenu');
-      menu.append(build('div', 'appmenu__submenu-title', this.quickOptions.id.toUpperCase()));
+      menu.append(build('div', 'appmenu__submenu-title', this.quickOptions.id === 'game-list' ? 'NO MOLESTAR' : this.quickOptions.id.toUpperCase()));
       for (const option of this.quickOptions.options) {
         const button = build('button', 'appmenu__submenu-row', option.label);
         button.type = 'button';
