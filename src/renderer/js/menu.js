@@ -1297,7 +1297,7 @@ export class AppMenu {
 
     section('AÑADIR', 'apps-add');
     action('Buscar programa…', {
-      value: 'EXE / LNK',
+      value: 'PROGRAMA / ACCESO DIRECTO',
       onClick: async () => {
         const res = await this.host.menuAction({ id: 'apps-pick-program' }).catch(() => ({ ok: false, message: 'No se pudo.' }));
         this.appNote = res?.ok ? `AÑADIDA: ${res.name}` : res?.message || '';
@@ -1305,6 +1305,7 @@ export class AppMenu {
       },
     });
     action('Añadir enlace', {
+      value: 'LINK',
       chevron: 'link',
       onClick: () => {
         this.linkForm = !this.linkForm;

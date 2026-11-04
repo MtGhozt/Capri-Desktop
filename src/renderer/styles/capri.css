@@ -913,6 +913,11 @@ body {
   margin-top: 4px;
 }
 
+/* the app list ends flush (its rows carry no bottom padding), so the next header needs the gap */
+.appmenu__apps-list + .appmenu__section {
+  margin-top: 22px;
+}
+
 .appmenu__row {
   display: flex;
   align-items: center;
