@@ -35,6 +35,8 @@ export class Bubble {
     this.field = el.querySelector('.bubble__field');
     this.stateEl = el.querySelector('.bubble__state');
     this.voiceEl = el.querySelector('.bubble__voice');
+    this.voiceLabel = this.voiceEl?.querySelector('.bubble__voice-label');
+    this.voiceBar = this.voiceEl?.querySelector('.bubble__voice-fill');
     this.meterEl = el.querySelector('.bubble__meter');
     this.meterBar = this.meterEl?.querySelector('i');
     this.bodyEl = el.querySelector('.bubble__body');
@@ -322,16 +324,14 @@ export class Bubble {
 
   setVoiceLoading(on, progress = null) {
     this.voiceLoading = Boolean(on);
-    const hasProgress = this.voiceLoading && Number.isFinite(Number(progress))
-      && Number(progress) > 0 && Number(progress) <= 100;
-    if (this.voiceEl) {
-      this.voiceEl.hidden = !this.voiceLoading;
-      this.voiceEl.textContent = hasProgress
-        ? `cargando voz… ${Math.round(Number(progress))}%`
-        : 'cargando voz…';
-      this.voiceEl.classList.toggle('has-progress', hasProgress);
-      this.voiceEl.style.setProperty('--voice-progress', `${Math.max(0, Math.min(100, Number(progress) || 0))}%`);
-    }
+    if (!this.voiceEl) return;
+    const pct = Number(progress);
+    // the sidecar rarely reports a number: only then a real width, else the bar scans
+    const hasProgress = this.voiceLoading && Number.isFinite(pct) && pct > 0 && pct <= 100;
+    this.voiceEl.hidden = !this.voiceLoading;
+    this.voiceEl.classList.toggle('is-indeterminate', this.voiceLoading && !hasProgress);
+    if (this.voiceLabel) this.voiceLabel.textContent = hasProgress ? `Cargando voz ${Math.round(pct)}%` : 'Cargando voz';
+    if (this.voiceBar) this.voiceBar.style.width = hasProgress ? `${Math.min(100, pct)}%` : '';
   }
 
   setLevel(rms) {

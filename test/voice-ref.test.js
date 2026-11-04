@@ -86,6 +86,7 @@ test('custom ref picker loads a matching transcript file beside the wav', () => 
 
 test('voice loading only shows a percentage for real non-zero progress', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'bubble.js'), 'utf8');
-  assert.match(source, /Number\(progress\) > 0/);
-  assert.match(source, /cargando voz…/);
+  assert.match(source, /Number\.isFinite\(pct\) && pct > 0/);
+  assert.match(source, /Cargando voz/);
+  assert.match(source, /is-indeterminate/);
 });

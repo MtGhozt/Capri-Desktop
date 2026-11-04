@@ -691,26 +691,39 @@ body {
 }
 
 .bubble__voice {
-  position: relative;
+  /* the installer's thin bar (appmenu__voice-progress-bar), reused: its colours live on the menu plate */
+  --accent-on: var(--capri-violet);
+  --title: var(--capri-violet);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 9px;
   color: color-mix(in srgb, var(--capri-violet) 70%, #fff);
   letter-spacing: 0.08em;
-  animation: blink 1100ms steps(2, jump-none) infinite;
 }
 
-.bubble__voice::after {
-  content: ' ···';
-  animation: blink 900ms steps(2, jump-none) infinite;
+.bubble__voice[hidden] {
+  display: none;
 }
 
-.bubble__voice.has-progress::after {
-  content: '';
-  display: inline-block;
-  width: 42px;
-  height: 2px;
-  margin-left: 5px;
-  vertical-align: middle;
-  background: linear-gradient(to right, var(--capri-violet) var(--voice-progress, 0%), #25152e var(--voice-progress, 0%));
+.bubble__voice-label {
+  flex: none;
+  white-space: nowrap;
+}
+
+.bubble__voice .appmenu__voice-progress-bar {
+  flex: 1;
+}
+
+/* no real progress from the sidecar: a slice that scans the whole bar, never a made-up % */
+.bubble__voice.is-indeterminate .bubble__voice-fill {
+  width: 34%;
+  animation: bubble-voice-scan 1.1s var(--ease-out) infinite;
+}
+
+@keyframes bubble-voice-scan {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
 }
 
 .bubble__meter {
@@ -1563,7 +1576,7 @@ button.appmenu__row {
   .bubble[data-state='TALKING'] .bubble__badge,
   .bubble[data-state='LISTENING'] .bubble__badge,
   .bubble__cursor,
-  .bubble__voice,
+  .bubble__voice-fill,
   .dormant__label::after,
   .vhs {
     animation: none;
