@@ -59,11 +59,12 @@ test('help covers current install, talk, brain cards, apps, screen and #bugs', (
   assert.match(all, /Pausa antes de cortar/);
   assert.match(all, /VOZ/);
   assert.match(all, /BLIPS/);
-  assert.match(all, /Gratis con key/);
-  assert.match(all, /En mi PC/);
-  assert.match(all, /Mi propia key/);
-  assert.match(all, /Usar mi agente instalado/);
+  assert.match(all, /Gratis con límite/);
+  assert.match(all, /\bGratis\b/);
+  assert.match(all, /De pago/);
+  assert.match(all, /Agentes instalados/);
   assert.match(all, /Probar/);
+  assert.match(all, /Activo/);
   assert.match(all, /INSTALAR|QUITAR/);
   assert.match(all, /Buscar programa/);
   assert.match(all, /Añadir enlace/);

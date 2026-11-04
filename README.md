@@ -56,7 +56,7 @@ La primera vez, si no hay LM Studio/Ollama local ni clave en la nube, Capri pued
 
 ## 3. Su cerebro
 
-**Clic derecho → Ajustes… → Cerebro.** Tarjetas: **Gratis con key**, **En mi PC** (Ollama / LM Studio), **Mi propia key** y **Usar mi agente instalado**. Pegá la key si hace falta y tocá **Probar**. Las claves quedan cifradas en tu PC (`safeStorage`; no van al repo ni a los logs).
+**Clic derecho → Ajustes… → Cerebro.** Grupos: **Gratis** (LM Studio, OpenRouter), **Gratis con límite** (Gemini) y **De pago**; más abajo **Agentes instalados** si hay CLIs. Pegá la Key si hace falta, tocá **Probar** y pasá a **Activo**. Las claves quedan cifradas en tu PC (`safeStorage`; no van al repo ni a los logs).
 
 **Compartir pantalla / memoria con la nube** está **apagado** por defecto. Personalidad y memoria: **Ajustes → Memoria → Abrir personalidad / Abrir memoria**.
 

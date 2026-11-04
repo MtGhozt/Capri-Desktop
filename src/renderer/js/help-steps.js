@@ -114,12 +114,12 @@ export const HELP_STEPS = {
     section: 'model',
     note: 'Las keys se guardan cifradas en tu PC (no van a git ni a los logs).',
     steps: [
-      'En Ajustes › Cerebro están las tarjetas: «Gratis con key», «En mi PC» (Ollama / LM Studio), «Mi propia key» y «Usar mi agente instalado».',
-      'Elegí proveedor, pegá la key si hace falta (o la URL/modelo en local) y tocá «Probar».',
-      'Si Probar dice Listo, dejá ese cerebro activo. Sin key no podés activar un proveedor de nube.',
-      '«Usar mi agente instalado» usa el CLI de Claude / Cursor / OpenCode / Codex / Gemini si está en el PATH; Capri no guarda esas keys.',
+      'En Ajustes › Cerebro los grupos son «Gratis» (LM Studio, OpenRouter), «Gratis con límite» (Gemini) y «De pago» (OpenAI, Anthropic, DeepSeek, NVIDIA, Grok/xAI).',
+      'En cada tarjeta: pegá la Key si hace falta (o URL/Modelo en LM Studio), tocá «Probar» y, si dice Listo, pasá a «Activo».',
+      'Sin key un proveedor de nube queda en «Apagado» (no se puede activar). «Quitar key» borra la guardada.',
+      'Abajo, «Agentes instalados» (si aparece): activá el CLI de Claude / Cursor / OpenCode / Codex / Gemini que tengas en el PATH; Capri no guarda esas keys.',
       {
-        text: 'Si no contesta, revisá el cerebro activo y el log:',
+        text: 'Si no contesta, revisá Prioridad / Activo y el log:',
         command: '%APPDATA%\\capri-desktop\\logs\\voice.log',
       },
     ],
