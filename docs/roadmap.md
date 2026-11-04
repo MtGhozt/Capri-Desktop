@@ -22,6 +22,9 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - Copiar detalles de error con un clic (para reportes en #bugs) y botón "Abrir log".
 - Que el wake word no interfiera con audífonos Bluetooth.
 - Aviso de SmartScreen en el README/instalación; actualización con un clic.
+- **Entender varios comandos y comandos "parecidos" (próxima versión):** hoy "ve a dormir y minimiza todo" se va al cerebro y no hace nada (log 2026-11-04).
+  - Capa 1: partir la frase por "y / luego / después / comas" y ejecutar cada parte si es un comando directo (dormir siempre al final). Sin palabras reservadas nuevas.
+  - Capa 2: si no es comando directo, el cerebro recibe la lista cerrada de comandos de Capri y responde con la acción que más se parece (misma intención, palabras parecidas, mal transcrito o en otro tiempo verbal: "duérmete", "andate a dormir", "minimizá todo") o "ninguna"; Capri ejecuta solo acciones de la lista y, si no hay, sigue como charla. Funciona también para frases mezcladas (charla + comando).
 
 ### P2 — Que el chat haga cosas en la PC (idea de upstream `cb33e87`)
 
