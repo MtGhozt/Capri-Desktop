@@ -425,9 +425,12 @@ export class AppMenu {
     foot.append(build('span', 'appmenu__kbd', 'ESC'), build('span', 'appmenu__rail-text', 'CERRAR'), build('span', 'appmenu__rail-text', 'CAPRICORN'));
     plate.append(rail, body, foot);
     this.el.replaceChildren(plate);
-    if (this.quickOpen) {
+    // One popout at a time: the help panel takes the submenu's place while it is open.
+    if (this.quickOpen && !this.helpOpen) {
       const menu = build('div', 'appmenu__submenu');
-      menu.append(build('div', 'appmenu__submenu-title', this.quickOptions.id === 'game-list' ? 'NO MOLESTAR' : this.quickOptions.id.toUpperCase()));
+      const title = build('div', 'appmenu__submenu-title', this.quickOptions.id === 'game-list' ? 'NO MOLESTAR' : this.quickOptions.id.toUpperCase());
+      if (this.quickOptions.id === 'game-list') title.append(this.helpButton('gaming'));
+      menu.append(title);
       for (const option of this.quickOptions.options) {
         const button = build('button', 'appmenu__submenu-row', option.label);
         button.type = 'button';
@@ -441,6 +444,11 @@ export class AppMenu {
       }
       this.el.append(menu);
     }
+    if (this.helpOpen) {
+      const panel = this.helpPanel(this.helpOpen, build);
+      if (panel) this.el.append(panel);
+    }
+    requestAnimationFrame(() => this.placeSubmenu());
     if (this.open && this.at && !this.settingsMode) this.place();
   }
 
@@ -460,6 +468,36 @@ export class AppMenu {
     const y = Math.min(Math.max(8, anchorTop), innerHeight - h - 8);
     menu.style.left = `${Math.round(x - main.left)}px`;
     menu.style.top = `${Math.round(y - main.top)}px`;
+  }
+
+  // The "?" that opens a HELP_STEPS panel, in Ajustes and in the quick menu.
+  helpButton(helpId) {
+    // A span, not a button: some rows are buttons and a nested one is invalid HTML.
+    const btn = document.createElement('span');
+    btn.className = 'appmenu__help';
+    btn.textContent = '?';
+    btn.setAttribute('role', 'button');
+    btn.tabIndex = 0;
+    btn.dataset.help = helpId;
+    btn.title = 'Cómo se hace';
+    btn.setAttribute('aria-expanded', String(this.helpOpen === helpId));
+    const openHelp = () => {
+      this.helpAnchor = this.helpOpen === helpId ? null : btn.getBoundingClientRect();
+      this.helpOpen = toggleHelp(this.helpOpen, helpId);
+      if (this.lastState) this.render(this.lastState);
+      requestAnimationFrame(() => this.placeSubmenu());
+    };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openHelp();
+    });
+    btn.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      openHelp();
+    });
+    return btn;
   }
 
   // The numbered steps for one "?", beside the button that opened it.
@@ -567,42 +605,15 @@ export class AppMenu {
       const heading = build('div', 'appmenu__section');
       heading.dataset.section = id;
       heading.append(build('span', 'appmenu__section-title', title));
-      if (help) heading.append(helpButton(help));
+      if (help) heading.append(this.helpButton(help));
       body.append(heading);
-    };
-
-    const helpButton = (helpId) => {
-      // A span, not a button: some rows are buttons and a nested one is invalid HTML.
-      const btn = build('span', 'appmenu__help', '?');
-      btn.setAttribute('role', 'button');
-      btn.tabIndex = 0;
-      btn.dataset.help = helpId;
-      btn.title = 'Cómo se hace';
-      btn.setAttribute('aria-expanded', String(this.helpOpen === helpId));
-      const openHelp = () => {
-        this.helpAnchor = this.helpOpen === helpId ? null : btn.getBoundingClientRect();
-        this.helpOpen = toggleHelp(this.helpOpen, helpId);
-        if (this.lastState) this.render(this.lastState);
-        requestAnimationFrame(() => this.placeSubmenu());
-      };
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openHelp();
-      });
-      btn.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        e.preventDefault();
-        e.stopPropagation();
-        openHelp();
-      });
-      return btn;
     };
 
     // The "?" sits right next to its label, never taking the row's action.
     const labelNode = (text, help = '') => {
       if (!help) return build('span', 'appmenu__label', text);
       const wrap = build('span', 'appmenu__label appmenu__label--help');
-      wrap.append(build('span', '', text), helpButton(help));
+      wrap.append(build('span', '', text), this.helpButton(help));
       return wrap;
     };
 

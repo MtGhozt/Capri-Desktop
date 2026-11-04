@@ -1658,6 +1658,10 @@ button.appmenu__row {
 }
 
 .appmenu__submenu-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 5px 7px 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
   color: var(--title);
