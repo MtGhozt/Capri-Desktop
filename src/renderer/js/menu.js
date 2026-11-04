@@ -1085,6 +1085,16 @@ export class AppMenu {
     if (this.expanded === 'fixes') body.append(this.fixPanel(hearing, build));
     body.append(this.sensitivityRow(hearing, build));
     body.append(this.talkKeyRow(hearing, build, kbd));
+    selector('Pausa antes de cortar', {
+      options: [
+        { id: 'short', label: 'CORTA · 0.8 s' },
+        { id: 'normal', label: 'NORMAL · 1.4 s' },
+        { id: 'long', label: 'LARGA · 2.2 s' },
+      ],
+      current: String(hearing.pauseBeforeCut || 'normal'),
+      onChange: (id) => this.act('pause-before-cut', id),
+      help: 'hearing',
+    });
 
     // APPS: what "abre X" / "cierra X" reach, in a panel of its own
     section('APPS', 'apps');

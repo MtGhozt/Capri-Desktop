@@ -747,8 +747,11 @@ body {
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 5.6em;
-  overflow: hidden;
+  /* a whole transcript, wrapped: the old 5.6em box cut it at 4 lines; this scrolls, it never clips */
+  max-height: min(40vh, 220px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--capri-violet) transparent;
   font-size: 10px;
   line-height: 1.4;
   letter-spacing: 0.04em;

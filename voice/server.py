@@ -49,8 +49,10 @@ WHISPER_LOAD_S = 60.0
 WAKE_ATTEMPTS = 3
 PREFETCH = 2
 SHORT_PHRASE = 20
-MAX_SECONDS = 15
-SILENCE_MS = 700
+MAX_SECONDS = 30
+COMMAND_SILENCE_MS = 1400.0
+SHORT_SPEECH_MS = 1500.0
+SHORT_SILENCE_MS = 1000.0
 MIN_SPEECH_MS = 250
 WAKE_THRESHOLD = 0.2
 WAKE_WHILE_TALKING = 0.5
@@ -134,6 +136,21 @@ def idle_unload_seconds(value, default: float = DEFAULT_IDLE_UNLOAD_MIN) -> floa
     except (TypeError, ValueError):
         minutes = default
     return max(0.0, minutes) * 60.0
+
+
+def end_silence_ms(configured, speech_ms: float) -> float:
+    """Silence that closes a command listen (Ajustes › Oído: Corta / Normal / Larga).
+
+    A short utterance gets the shorter pause, so a clipped false start ends fast; a real
+    sentence lets you think for the configured pause.
+    """
+    try:
+        base = float(configured)
+    except (TypeError, ValueError):
+        base = COMMAND_SILENCE_MS
+    if not 300.0 <= base <= 4000.0:
+        base = COMMAND_SILENCE_MS
+    return min(base, SHORT_SILENCE_MS) if speech_ms < SHORT_SPEECH_MS else base
 
 
 def as_pcm16(frame: np.ndarray) -> np.ndarray:
@@ -380,6 +397,7 @@ class Engine:
             "wakeMinSpeechMs": WAKE_MIN_SPEECH_MS,
             "wakeEnergy": WAKE_ENERGY,
             "wakeModel": "hey_capri",
+            "commandSilenceMs": COMMAND_SILENCE_MS,
             "sttModel": "auto",
             "language": "es",
             "inputDevice": None,
@@ -803,7 +821,9 @@ class Engine:
         if self._follow_quiet(elapsed):
             asyncio.run_coroutine_threadsafe(self.finish(reason="follow-quiet"), self.loop)
             return
-        if elapsed < self._listen_limit():
+        # nobody spoke yet: give up. Once speech starts, MAX_SECONDS is the only cap, so a long
+        # sentence with thinking pauses is not cut at 10 s.
+        if elapsed < self._listen_limit() or self.speech_ms >= MIN_SPEECH_MS:
             return
         log(
             f"listen timeout after {self._listen_limit():.0f}s "
@@ -1755,15 +1775,15 @@ class Engine:
             max_s = MAX_SECONDS + (self.follow_s if self.follow else 0.0)
             should_cut = (
                 elapsed >= max_s
-                or (not self.hold and elapsed >= limit)
+                or (not self.hold and self.speech_ms < MIN_SPEECH_MS and elapsed >= limit)
                 or (
                     not self.hold
                     and self.speech_ms >= MIN_SPEECH_MS
-                    and self.silence_ms >= SILENCE_MS
+                    and self.silence_ms >= end_silence_ms(self.cfg.get("commandSilenceMs"), self.speech_ms)
                 )
             )
             if should_cut:
-                why = "max" if elapsed >= max_s else "timeout" if (not self.hold and elapsed >= limit) else "vad"
+                why = "max" if elapsed >= max_s else "timeout" if self.speech_ms < MIN_SPEECH_MS else "vad"
                 asyncio.run_coroutine_threadsafe(self.finish(reason=why), self.loop)
 
     async def finish(self, reason: str = "vad") -> None:
@@ -1780,7 +1800,9 @@ class Engine:
             self.buffer = np.zeros(0, dtype=np.float32)
         log(
             f"listen end reason={reason} speech_ms={speech_ms:.0f} "
-            f"silence_ms={silence_ms:.0f} samples={audio.size}"
+            f"silence_ms={silence_ms:.0f} "
+            f"end_ms={end_silence_ms(self.cfg.get('commandSilenceMs'), speech_ms):.0f} "
+            f"samples={audio.size}"
         )
         self.arm_wake()
         if reason == "follow-quiet":

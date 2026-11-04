@@ -5,6 +5,7 @@
 // TTS and typing keep working. `sleeping` lets it release TTS after a long DORMANT spell.
 
 const { isCloud } = require('./chat-providers');
+const { pauseBeforeCutMs } = require('./hearing');
 
 function micActive(cfg) {
   return cfg?.voice?.enabled !== false;
@@ -20,6 +21,8 @@ function sidecarConfig(cfg, state = {}) {
     // Fullscreen game: skip wake detection but keep the mic for push-to-talk.
     wakeMuted: Boolean(state.wakeMuted),
     llmBaseUrl: cfg?.llm?.baseUrl || 'http://localhost:1235/v1',
+    // The sidecar's VAD reads milliseconds; the Ajustes preset is the friendly name.
+    commandSilenceMs: pauseBeforeCutMs(cfg?.voice?.pauseBeforeCut),
     // With a cloud provider no local model is ever loaded, so the sidecar must not keep VRAM free
     // for Gemma: it was skipping OmniVoice (her real voice) and answering in Kokoro's instead.
     localLlm: !isCloud(cfg?.llm?.provider),

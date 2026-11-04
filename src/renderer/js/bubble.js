@@ -314,6 +314,7 @@ export class Bubble {
       li.append(tag, body);
       this.logEl.append(li);
     }
+    this.scrollLog();
   }
 
   setMeter(on) {

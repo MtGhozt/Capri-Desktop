@@ -37,6 +37,14 @@ function wakeSensitivity(level) {
   return WAKE_LEVELS[String(level || '').toLowerCase()] || WAKE_LEVELS.normal;
 }
 
+// Ajustes › OÍDO: how long a silence ends the command (the pause you take to think).
+// Normal is the default: the old 0.7 s cut a sentence at the first thinking pause.
+const PAUSE_LEVELS = { short: 800, normal: 1400, long: 2200 };
+
+function pauseBeforeCutMs(level) {
+  return PAUSE_LEVELS[String(level || '').toLowerCase()] || PAUSE_LEVELS.normal;
+}
+
 // Electron accelerators: modifiers, then one key.
 const MODS = [
   ['Ctrl', /^(?:ctrl|control|cmdorctrl|commandorcontrol)$/i],
@@ -116,5 +124,6 @@ const sameCombo = (a, b) => {
 module.exports = {
   SENS_MIN, SENS_MAX, SENS_STEP, DEFAULT_THRESHOLD,
   thresholdFromPct, pctFromThreshold, WAKE_LEVELS, wakeSensitivity,
+  PAUSE_LEVELS, pauseBeforeCutMs,
   normalizeAccelerator, acceleratorFromKey, sameCombo,
 };

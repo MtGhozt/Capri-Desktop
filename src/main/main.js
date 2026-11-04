@@ -1982,6 +1982,9 @@ function applyMenuAction(id, value) {
       // The preset sets every wake knob at once; the % slider above stays the fine knob.
       updateConfig({ voice: { wakeSensitivity: String(value || 'normal'), ...wakeSensitivity(value) } });
       break;
+    case 'pause-before-cut':
+      updateConfig({ voice: { pauseBeforeCut: ['short', 'normal', 'long'].includes(String(value)) ? String(value) : 'normal' } });
+      break;
     case 'talk-hotkey': return setTalkHotkey(value);
     case 'apps-pick-program': return pickProgram().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
     case 'apps-add-link': return addLink(value);
@@ -2207,6 +2210,7 @@ function menuState(extra = {}) {
       sensStep: SENS_STEP,
       talkHotkey: talkCombo || talkHotkey(cfg),
       talkActive: Boolean(talkCombo),
+      pauseBeforeCut: String(cfg.voice?.pauseBeforeCut || 'normal'),
       followUpSec: followUpSec(cfg),
       wakePhrase: wakePhraseLabel(
         cfg.voice?.wakeModel,

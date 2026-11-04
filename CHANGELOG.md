@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3
+
+- Oído: la escucha después de «Hey Capri» ya no corta en la primera pausa para pensar. El silencio que cierra la orden pasa de 0,7 s a 1,4 s por defecto, y a 1,0 s si apenas empezaste a hablar (arranque falso); el `listen end` del log ahora muestra el corte elegido en `end_ms=`.
+- Ajustes › Oído: nueva «Pausa antes de cortar» con Corta (0,8 s) / Normal (1,4 s) / Larga (2,2 s). Queda en `config.json` como `voice.pauseBeforeCut`; los configs viejos usan Normal.
+- Chat: la línea OÍDO de CAPRI.SYS // MENSAJE muestra la transcripción completa, en varias líneas y con scroll; antes el recuadro la recortaba al llegar a 4 líneas.
+- El tope de la escucha pasa a 30 s (antes 15 s) y el tiempo de espera de 10 s ahora solo corta si no llegaste a hablar: una orden larga no pierde el final y la escucha nunca queda colgada.
+
 ## 0.2.2
 
 - Voz: si falta Microsoft Visual C++ Redistributable (x64), Capri lo dice una vez en el chat y en Ajustes › Oído, con botón para bajar `vc_redist.x64.exe`; el instalador de voz también avisa antes y después.

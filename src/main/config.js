@@ -117,6 +117,7 @@ const DEFAULTS = {
     wakeMode: 'both',        // 'both' | 'oww' | 'whisper': openWakeWord, spoken "capri", or both
     wakeThreshold: 0.2,
     wakeSensitivity: 'normal', // 'low' | 'normal' | 'high': the preset that set the three wake knobs
+    pauseBeforeCut: 'normal', // 'short' | 'normal' | 'long': silence that ends a command (0.8 / 1.4 / 2.2 s)
     wakeModel: 'hey_capri',  // voice/models/hey_capri.onnx if it exists; otherwise hey_jarvis (see docs/wake-word.md)
     sttModel: 'auto',
     language: 'es',
