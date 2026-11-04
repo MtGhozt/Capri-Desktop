@@ -20,12 +20,12 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 Lo que viene; detalle y estado en [`docs/roadmap.md`](docs/roadmap.md):
 
-- Botón **“Instalar voz”** en Ajustes: sidecar, Whisper y TTS sin tocar la consola.
-- Capri responde **con su propia voz** desde el primer arranque (hoy el instalador público trae BLIPS).
-- Elegir la **carpeta de voz** desde Ajustes (hoy se configura a mano).
-- **Wake word** menos sensible al audio de fondo (música, videos, audífonos Bluetooth).
-- **Ver la pantalla** y **juegos** (Fase 6): mirar cuando se le pide, hablar en No molestar, detectar mandos.
-- Cerebro con **“Usar mi agente instalado” (Automático)**: aprovecha el Claude Code / OpenCode que ya tienes.
+- **Copiar detalles de error** con un clic y botón **“Abrir log”**, para reportar en #bugs sin buscar archivos.
+- **Wake word** que no interfiera con **audífonos Bluetooth**.
+- Aviso de **SmartScreen** al instalar y **actualización con un clic**.
+- Arreglo de **“Mirá mi pantalla”** cuando manda una captura vieja o el primer frame vacío.
+
+Después: que el chat haga cosas en la PC (volumen, timers, ordenar ventanas), sentir la PC y los juegos, y voz local gratis. Detalle y prioridad en [`docs/roadmap.md`](docs/roadmap.md).
 
 Nada de esto es de pago: las donaciones, si aparecen, no desbloquean nada.
 

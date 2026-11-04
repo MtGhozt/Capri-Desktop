@@ -1,107 +1,64 @@
-# Capri — Roadmap (actualizado 2026-10-31)
+# Capri — Roadmap (actualizado 2026-11-03)
 
 Upstream de referencia: mochiiwuff/capri-desktop v0.4.0 (`bde7b42`). Nunca push a upstream. Traer cosas por partes (port manual o cherry-pick), no merge completo.
 
-## Fase 3 — Voz y overlay ✅
-- [x] OmniVoice clon + Kokoro fallback, blips, wake "Hey Jarvis", sleep, persona Edgerunners.
-- [x] 3C menú por secciones estilo CP2077 + clips NVIDIA (Alt+F10).
-- [x] 3D liberar recursos: descargar OmniVoice/Whisper en reposo (`64a855b`).
-- [x] 3E temas del menú: CYBERPUNK / CAPRI (`f247883`).
-- [x] 3F traído de upstream: volver tras suspensión (`473d270`), barra de tareas (`68fbbb4`), intro nueva (`e731a39`), "Iniciar con Windows" en el menú (`2df9004`).
-- [x] 3G comandos directos más amplios para dormir y la voz, sin pasar por el modelo (`583e419`).
-- [x] 3H torch fijado, modo juego y un solo escritor para el log (`7c8d3bd`..`60c2bd2`).
-- [x] 3I menú con degradado del tema, saludo desde wav en caché, comentarios propios y contexto de la ventana activa.
-- [x] 3J–3M descanso en la barra de tareas: se queda donde la sueltas, pies sobre el borde visible, sube y baja con la barra, deambula libre y duerme en una esquina de abajo.
+## Hecho
 
-## Fase 4 — Acciones en la PC
-Inspirada en "Capri // Deck" de kamome513: solo ideas, nada de arte copiado.
+Resumen de lo cerrado (el detalle está en el historial de git y en el CHANGELOG):
 
-- [x] **4A Corrector de lo que escucha mal:** tabla "cuando oye X → leer como Y" (palabras completas), aplicada antes de los comandos y del LLM. Comando de voz "cuando digo X quiero decir Y". En el menú, "Corregir lo último" (lo último que oyó). Hecho (`b1a4059`).
-- [x] **4B Conversación sin wake word:** si su respuesta termina en pregunta, escucha ~8 s sin "Hey Jarvis". Slider de sensibilidad del wake word y atajo de teclado para hablar. Hecho (`76b7318`).
-- [x] **4C Motor de apps:** base upstream `5ecbae7` (`launch.js`, `apps.js`, `chat.js`), en español. Tabla nombre / también dice / tipo (programa, juego de Steam, link/URI) / ruta / procesos / al cerrar (forzar, como la X, preguntar). "Abre X", "cierra X", "abre X y Y"; "¿quisiste decir…?". Hecho (`51af817`).
-- [x] **4D Escaneo de la PC:** Steam (`libraryfolders.vdf`), Epic, GOG y accesos del menú Inicio. Lista en el menú con "volver a escanear". Hecho (`cc29810`).
-- [x] **4E Animaciones:** cerrar = teletransporte con imágenes residuales + rayo rojo a la ventana; abrir = gesto con chispas. Hecho (`9251317`).
-- [x] **4F Música:** Namida/Spotify con teclas multimedia. Spotify con Client ID propio (PKCE, token local fuera de git) para "pon X"; sin Premium abre la búsqueda. "Pon música" usa Namida. Hecho (`0d8d116, cc9e069`).
-- [x] **4G Energía:** "apaga la compu", "reinicia la compu", "suspende la compu" con confirmación en voz alta (solo un "sí" claro ejecuta). Secuencia glitch a pantalla completa antes de apagar/reiniciar (más corta al suspender), con textos propios en español. "Bloquea la PC", "minimiza todo" y "devuélvelas" van directos. Hecho (`3f98675..f276b22`).
-- [x] **4H Modo dron:** un ojo con fragmentos de su pelo girando (magenta/violeta/verde neón), dibujado en canvas, diseño propio. En modo juego aparece en vez de desaparecer; sin modo manual por ahora.
-- [x] **4H caja + poses:** caja `CAPRI.SYS // MENSAJE` (carpeta, logs, typewriter) y Capri recostada/de pie en el borde (`lying_A` / `lying_B`).
-- [x] **4I Extras:** modo compacto provisional, "Hacer algo" en el menú, saludo grande al desbloquear la PC.
-  - Saludo con voz al arrancar y al desbloquear, con cooldown y fallback local.
-  - Hora, momento del día y tiempo desde la última conversación en cada prompt.
-  - Comentarios espontáneos con privacidad de pantalla, reacción si se ignoran y escucha posterior.
-  - Caricias en la cabeza pasando el cursor; reacción visual y sonora.
-  - Bailar ocasionalmente cuando recibe estado de reproducción musical.
-  - "Hacer algo" y modo compacto provisional desde el menú.
-- [x] **Rediseño del menú + ventana de ajustes:** hecho, sin commit.
-- [ ] **4J Ver la pantalla:**
-  - Captura de pantalla enviada a un modelo con visión, solo con el interruptor de pantalla activado (apagado por defecto) y solo con proveedores en la nube o un modelo local con visión.
-  - Intervalo largo y limitado para no gastar.
-  - "Mira mi pantalla" bajo pedido.
-  - Corregir el interruptor actual, que solo manda el exe y el título de la ventana (nombre engañoso).
-  - Que los comentarios de 4I usen esto cuando esté activo.
-- [x] **4L Pulido para GitHub** (en curso, sin commit hasta probar): TTS off / blips por defecto, Gemini `gemini-flash-lite-latest`, first-run hint de clave, `persona.md`/`memory.md` en userData, CREDITS + PolyForm + README ES/EN, instalador 0.1.0. Queda: GIFs, Release, push.
-- [x] **4K Traído de upstream:** proveedores de chat en la nube (LM Studio, OpenRouter, Groq, Gemini, OpenAI, Mistral, DeepSeek) con clave cifrada y vuelta automática a Gemma, clic recuperado con el puntero encima, y opción "Pantalla" para PCs donde su ventana sale negra. Ver `docs/THIRD_PARTY.md`.
-- Quitar "módulo no conectado" de `persona.md` a medida que cada cosa funcione.
+- **Fase 3 — Voz y overlay:** OmniVoice con voz clonada y Kokoro de respaldo, blips, wake "Hey Capri", menú por secciones estilo CP2077, temas CYBERPUNK / CAPRI, clips NVIDIA (Alt+F10), liberar VRAM en reposo, descanso en la barra de tareas e "Iniciar con Windows".
+- **Fase 4 — Acciones en la PC:** corrector de lo que oye mal, conversación sin wake word, motor de apps ("abre / cierra X", "abre X y Y"), escaneo de Steam/Epic/GOG/Inicio, animaciones al abrir y cerrar, música con Namida y Spotify, energía con confirmación, modo dron, caja `CAPRI.SYS // MENSAJE`, caricias y saludos.
+- **Fase 5 — Cerebro fácil:** tarjetas de Cerebro (gratis con key, en tu PC, tu propia key), "Probar", keys solo locales y README reescrito para empezar sin código.
+- **Fase 6 — Hecho:** hooks de agentes (Claude Code, Codex, Antigravity, Cursor y OpenCode), "Usar mi agente instalado", ver la pantalla a pedido con consentimiento, detección de juegos con No molestar y proveedores con key.
 
-## Fase 5 - Cerebro fácil para cualquiera + README ✅
-Hecho (`d6c33ea..06dca0b`): tarjetas de Cerebro, defaults de modelo, espaciado y enlaces de keys.
+Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía corta por opción y leer el estado del juego.
 
-- [x] Primera ejecución (si no hay proveedor usable) y en Ajustes: sección "Cerebro" con 3 tarjetas a la vista (no dropdown): Gratis con key (NVIDIA + Gemini), En mi PC (Ollama / LM Studio), Mi propia key (OpenAI, DeepSeek, Gemini, OpenRouter, Groq, Mistral). Tabla de requisitos. "Probar" con pedido mínimo. Keys solo locales.
-- Claude/Anthropic: **no por ahora** (API no OpenAI-compatible; no queremos SDK nuevo). Anotar si algún día hay proxy compatible.
-- Reescribir README: inicio rápido sin código, cerebro, voz, cómo usarla, atajos, seguridad, qué datos salen, FAQ, créditos. Estructura inspirada en lachydotmcg y upstream (solo estructura, texto propio).
-- Sin claves de suscripción de Claude Code/Codex/Cursor como cerebro (va contra sus términos).
+## Próximo, por prioridad
 
-## Fase 6 - Cerebro conectado a lo que ya usás (agentes, pantalla y juegos)
+### P1 — Estabilidad (versiones chicas de fixes)
 
-### 6A Hooks de agentes
-- Un bridge local (`src/main/bridge.js`, `127.0.0.1:47823`) + un adaptador por agente. Avisar cuando termina o pide permiso.
-- Claude Code, Codex y Antigravity: hooks de upstream (`capri-hook.js`, `capri-codex-hook.js`, `capri-agy-hook.js`, `assistants.js`); portar lo que falte.
-- Nuevos: Cursor (hooks propios) y OpenCode (plugin).
-- Ajustes › Agentes: instalar / desinstalar / estado por agente. Nunca bloquear al agente (timeout corto, siempre salir 0, asíncrono) ni mandar contenido de archivos (solo evento, proyecto, herramienta y título).
+- 0.2.2: aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL (experimental), etiquetas de Mis apps.
+- "Mirá mi pantalla" a veces ve el fondo o "Activar Windows" (captura vieja / primer frame vacío).
+- Copiar detalles de error con un clic (para reportes en #bugs) y botón "Abrir log".
+- Que el wake word no interfiera con audífonos Bluetooth.
+- Aviso de SmartScreen en el README/instalación; actualización con un clic.
 
-### 6B Proveedores
-- Anthropic con API key propia en "Mi propia key" (console.anthropic.com). Mantener "usar mi Claude Code CLI" (6E). Nunca manejar tokens de suscripción.
-- Opcional: Grok (xAI) con key.
+### P2 — Que el chat haga cosas en la PC (idea de upstream `cb33e87`)
 
-### 6C Pantalla
-- [x] A demanda: "mirá mi pantalla" / "qué ves" → JPEG en memoria al cerebro con `vision` (Gemini flash-lite sí).
-- [x] Auto-look opt-in (≥10 min, usuario activo, nunca en modo juego / fullscreen).
-- [x] Consentimiento al activar el interruptor; sin visión → una línea en español, sin capturar.
-- [x] JPEG max ~1280 / q70; overlay se oculta al capturar si se puede; nada a disco.
+- Volumen de Windows ("poné 30", "silenciá"), abrir páginas de Configuración (Bluetooth, sonido, actualizaciones).
+- Preguntas rápidas: batería, espacio en disco, RAM, IP local.
+- Timers ("timer 10 minutos") y recordatorios que sobreviven reinicios (upstream 0.5.0).
+- Ordenar ventanas: "poné Discord a la izquierda y Chrome a la derecha", recortar pantalla, modo oscuro/claro.
+- Dos pedidos en una frase (`d6c8070`), buscar archivos por tipo y abrir la carpeta (`3cd5377`).
 
-### 6D Juegos
-- Detección por carpeta del launcher (Steam, Epic, GOG, Xbox, EA, Riot, Ubisoft, itch) + lista permitir/ignorar editable; reusar `game-detect.js` y `gaming.apps`.
-- Modo juego: comenta y se calla/esconde; silencia la wake word en pantalla completa.
-- Mandos: detectar y mapear (Xbox/PlayStation) para hablar sin teclado.
-- Leer el estado del juego (vida, mapa) queda para después.
+### P3 — Sentir la PC y juegos
 
-### 6E Nueva tarjeta en Cerebro: "Usar mi agente instalado" ✅
-- Capri detecta y corre la CLI que el usuario ya tiene, con su propia cuenta, sin manejar tokens.
-- Claude Code (`claude -p`), Cursor (`cursor-agent -p`), OpenCode (`opencode run`), Codex (`codex exec`), Gemini CLI (`gemini -p`).
-- Mostrar cuáles están instaladas; si no hay ninguna, link a cómo instalarla.
-- Nota visible: es más lento que una API y puede gastar el plan del usuario.
-- Automático: agente abierto → preferred → primero instalado; fallback a key en la nube y LM Studio.
+- Notar lo que conectás: teléfono, control, audífonos, cargador (`f167fd6`); CPU/batería/red (`2024660`).
+- Detección por launcher, apodos de juegos ("cs" = CS2), usar el juego ya abierto.
+- Mandos para hablar sin teclado.
+- Nuevo "Modo juego" real: Capri comenta lo que pasa en la partida (distinto de No molestar).
 
-### 6F Proveedores con key
-- Anthropic (console.anthropic.com) y Grok/xAI (console.x.ai) en "Mi propia key".
+### P4 — Cerebro y voz
 
-### 6G Guía corta por opción
-- Botón "¿Cómo lo saco?" dentro de Cerebro: despliega 3–4 pasos para Gemini, NVIDIA (pide teléfono), Ollama/LM Studio (requisitos y qué modelo bajar), cada key paga y cada CLI instalada (cómo instalar y loguearse).
-- Mismos textos reutilizables para la guía de Discord.
-
-## Fase 7 - Voz gratis para todos
-- Voz local gratis (p. ej. Kokoro) para quien no tiene voz clonada; voz por key opcional.
-
-## Más adelante
-- Proveedor de LLM con API key (modelo pago) además de LM Studio local. Referencia: upstream multi-proveedor (`affea9d`, `bde7b42`). Key guardada local, nunca en git.
-- Wake word propio "Hey Capri".
+- Fallback a modelos cloud gratis de Ollama (`3e6f529`).
+- Voz local gratis para todos (ex Fase 7), varias voces de referencia.
 - Retomar respuesta tras interrupción.
-- Refinar voz con más clips (ver docs/capri-personalidad.md).
-- Idiomas, solo si el repo se hace público.
-- Fijar versiones de torch/torchaudio en voice/setup (hoy torch 2.14.1+cu130 con torchaudio 2.11.0).
 
-## Ideas e inspiraciones (revisado 2026-10-30)
-- **Upstream mochiiwuff** (fork, se puede reutilizar código): mirar la pantalla cuando se le pide (e09878d); sentir la PC: CPU, batería, red, USB, juegos (2024660); notar lo que conectás: teléfono, control, audífonos, cargador (f167fd6); enojarse después de que la tiran o celos de otra IA (f7685d2); buscar archivos y abrir la carpeta (3cd5377, 7d6cc1b); chat con modelos cloud gratis de Ollama (3e6f529); abrir juegos de Roblox por nombre (135d6b8); dos pedidos en una frase (d6c8070).
-- **dark-anishi/capri-desktop-noir** (referencia): volumen de música sincronizado aparte del sistema (b959290); recuperar input del mouse y limpiar overlay de forma segura (8e6a699).
+### P5 — Personalidad y diversión
+
+- Tirarla y que rebote/se cuelgue de las ventanas, seguirte entre monitores (upstream 0.5.0).
+- Vínculo que crece con el tiempo y humor que sigue en el chat (enojada si la tirás).
+- Recostarse en el borde de vez en cuando, selector de estilo de ventanas, abrir Roblox por nombre.
+
+## Descartado
+
+- Celos que cierran páginas de otras IAs: cierra pestañas del usuario.
+
+## Ideas e inspiraciones (revisado 2026-11-03)
+
+- **Upstream mochiiwuff** (fork, se puede reutilizar código): mirar la pantalla cuando se le pide (`e09878d`); sentir la PC: CPU, batería, red, USB, juegos (`2024660`); notar lo que conectás: teléfono, control, audífonos, cargador (`f167fd6`); enojarse después de que la tiran o celos de otra IA (`f7685d2`); buscar archivos y abrir la carpeta (`3cd5377`, `7d6cc1b`); chat con modelos cloud gratis de Ollama (`3e6f529`); abrir juegos de Roblox por nombre (`135d6b8`); dos pedidos en una frase (`d6c8070`).
+- **dark-anishi/capri-desktop-noir** (referencia): volumen de música sincronizado aparte del sistema (`b959290`); recuperar input del mouse y limpiar overlay de forma segura (`8e6a699`).
 - **lachydotmcg** (PolyForm Noncommercial: solo ideas, nada de código): no repetirse en el chat de voz; apodos de juegos ("cs" = Counter-Strike 2); usar el juego ya abierto en vez de abrir otra copia; que el wake word no interfiera con audífonos Bluetooth; dejar YouTube sonando; tamaño configurable; GitHub Pages, aviso SmartScreen, copiar detalles de error, actualizaciones con un clic.
-- **Fase 5** no necesita API: hooks locales de Cursor y plugin/eventos de OpenCode avisando a Capri por el WebSocket local.
+- Los hooks locales de Cursor y el plugin/eventos de OpenCode no necesitan API: avisan a Capri por el WebSocket local.
+
+> **Licencia del upstream:** desde 0.4.4 mochiiwuff/capri-desktop está bajo **PolyForm Noncommercial 1.0.0**. Portar solo lo permitido, con el comentario de atribución en el código y la fila correspondiente en [`THIRD_PARTY.md`](THIRD_PARTY.md).
