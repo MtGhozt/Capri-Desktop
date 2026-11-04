@@ -114,7 +114,7 @@ export const HELP_STEPS = {
     section: 'model',
     note: 'Las keys se guardan cifradas en tu PC (no van a git ni a los logs).',
     steps: [
-      'En Ajustes › Cerebro los grupos son «Gratis» (LM Studio, OpenRouter), «Gratis con límite» (Gemini) y «De pago» (OpenAI, Anthropic, DeepSeek, NVIDIA, Grok/xAI).',
+      'En Ajustes › Cerebro los grupos son «Gratis» (LM Studio, OpenRouter), «Gratis con límite» (Gemini, Groq) y «De pago» (OpenAI, Anthropic, DeepSeek, NVIDIA, Grok/xAI).',
       'En cada tarjeta: pegá la Key si hace falta (o URL/Modelo en LM Studio), tocá «Probar» y, si dice Listo, pasá a «Activo».',
       'Sin key un proveedor de nube queda en «Apagado» (no se puede activar). «Quitar key» borra la guardada.',
       'Abajo, «Agentes instalados» (si aparece): activá el CLI de Claude / Cursor / OpenCode / Codex / Gemini que tengas en el PATH; Capri no guarda esas keys.',

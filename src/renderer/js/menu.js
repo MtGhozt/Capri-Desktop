@@ -1728,7 +1728,7 @@ export class AppMenu {
         const labelOf = (id) => providers.find((p) => p.id === id)?.label || id;
         const cardGroups = [
           ['Gratis', ['local', 'openrouter']],
-          ['Gratis con límite', ['gemini']],
+          ['Gratis con límite', ['gemini', 'groq']],
           ['De pago', ['openai', 'anthropic', 'deepseek', 'nvidia', 'xai']],
         ];
         const active = new Set(model.brains || []);

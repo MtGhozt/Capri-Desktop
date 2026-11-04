@@ -121,6 +121,7 @@ test('brain UI uses provider cards, priority controls, and per-card probe status
 test('brain cards expose pricing groups and stable action states', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(source, /Gratis con límite/);
+  assert.match(source, /\['Gratis con límite', \['gemini', 'groq'\]\]/);
   assert.match(source, /De pago/);
   assert.match(source, /appmenu__fix-save is-active.*Probar/);
   assert.match(source, /appmenu__danger.*Quitar key/);

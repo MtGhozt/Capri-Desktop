@@ -34,11 +34,12 @@ const BRAIN_GROUPS = {
   local: ['local', 'ollama'],
   own: ['openai', 'anthropic', 'xai', 'deepseek', 'gemini', 'openrouter', 'groq', 'mistral'],
   agent: ['agent-auto', 'agent-claude', 'agent-cursor', 'agent-opencode', 'agent-codex', 'agent-gemini'],
-  cards: ['gemini', 'nvidia', 'openai', 'anthropic', 'deepseek', 'openrouter', 'xai', 'local'],
+  cards: ['gemini', 'groq', 'nvidia', 'openai', 'anthropic', 'deepseek', 'openrouter', 'xai', 'local'],
 };
 
 const FREE_KEY_LINKS = {
   gemini: { label: 'Google AI Studio', url: 'https://aistudio.google.com/apikey', recommended: true },
+  groq: { label: 'console.groq.com', url: 'https://console.groq.com/keys' },
   nvidia: { label: 'NVIDIA', url: 'https://build.nvidia.com/' },
 };
 

@@ -60,6 +60,7 @@ test('help covers current install, talk, brain cards, apps, screen and #bugs', (
   assert.match(all, /VOZ/);
   assert.match(all, /BLIPS/);
   assert.match(all, /Gratis con límite/);
+  assert.match(all, /Gratis con límite» \(Gemini, Groq\)/);
   assert.match(all, /\bGratis\b/);
   assert.match(all, /De pago/);
   assert.match(all, /Agentes instalados/);
