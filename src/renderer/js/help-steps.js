@@ -74,6 +74,20 @@ export const HELP_STEPS = {
       'Adentro están config.json y la carpeta logs\\ (voice.log). En Discord, canal #errores-bugs, pegá el final de voice.log y qué estabas haciendo. Invitación: https://discord.gg/wmVfYdjpdA',
     ],
   },
+  wake: {
+    title: 'El “Hey Capri” no arranca / no te entiende',
+    section: 'hearing',
+    note: 'Si el log dice “DLL load failed” o “Could not find module … .dll”, a la voz le falta el runtime de Microsoft Visual C++.',
+    steps: [
+      'Cerrá Capri.',
+      {
+        text: 'Descargá e instalá Microsoft Visual C++ Redistributable (x64):',
+        command: 'https://aka.ms/vs/17/release/vc_redist.x64.exe',
+      },
+      'Reiniciá la PC y abrí Capri de nuevo. Probá “Hey Capri” o el atajo para hablar.',
+      'Si sigue sin arrancar, en Ajustes → AUDIO mirá el estado de la voz y pegá el final de logs\\voice.log en Discord #errores-bugs (https://discord.gg/wmVfYdjpdA).',
+    ],
+  },
   voice: {
     title: 'Respuesta con voz',
     section: 'hearing',

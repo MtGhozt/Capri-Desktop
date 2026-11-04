@@ -31,6 +31,7 @@ const { parseRenderMode, renderSwitches, HINTS: RENDER_HINTS, SOFTWARE_CONFIRM }
 const { createLms } = require('./lms');
 const { createVoice, checkVoiceDir, resolveVoiceDir } = require('./voice');
 const { createVoiceInstall, PYTHON_URL, voiceInstallDir } = require('./voice-install');
+const { VC_URL, VC_MESSAGE, missingVcRuntime } = require('./vc-runtime');
 const { activeVoiceLabel, saveCustomRef } = require('./voice-ref');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
@@ -1346,7 +1347,12 @@ async function runVoiceInstall(value = {}) {
     },
   });
   voice?.start({ force: true });
-  return { ok: true, message: 'Voz instalada', dir: check.dir };
+  return {
+    ok: true,
+    needVc: Boolean(result.needVc),
+    message: result.needVc ? VC_MESSAGE : 'Voz instalada',
+    dir: check.dir,
+  };
 }
 
 // After look/speak/hide: never leave the overlay eating the desktop or stuck click-through.
@@ -1835,6 +1841,9 @@ function applyMenuAction(id, value) {
     case 'open-python':
       shell.openExternal(PYTHON_URL);
       return { ok: true };
+    case 'open-vc':
+      shell.openExternal(VC_URL);
+      return { ok: true };
     case 'music-player':
       updateConfig({ music: { player: ['namida', 'spotify', 'none'].includes(value) ? value : 'namida' } });
       break;
@@ -2280,6 +2289,8 @@ function menuState(extra = {}) {
     ],
     micDevices: voice?.devices() || [],
     voiceInstall: voiceInstall?.status?.() || null,
+    vcMissing: missingVcRuntime(),
+    vcMessage: VC_MESSAGE,
     displays: displays.map((d, i) => ({
       id: d.id,
       label: `${i + 1} — ${d.size.width}×${d.size.height}`,
@@ -2850,7 +2861,9 @@ function main() {
             ? { type: 'notice', level: 'info', message: t.voiceMissing }
             : event?.type === 'voice-failed'
               ? { type: 'notice', level: 'error', message: t.voiceFailed }
-              : event;
+              : event?.type === 'vc-missing'
+                ? { type: 'notice', level: 'error', badge: 'VC++', message: VC_MESSAGE, url: VC_URL }
+                : event;
         if (payload?.missed) return; // background audio said "Capri", she was not called
         if (payload?.type === 'transcript') {
           if (payload.followUp) comments?.heard();

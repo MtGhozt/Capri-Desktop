@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2
+
+- Voz: si falta Microsoft Visual C++ Redistributable (x64), Capri lo dice una vez en el chat y en Ajustes › Oído, con botón para bajar `vc_redist.x64.exe`; el instalador de voz también avisa antes y después.
+- Wake word: un error de DLL (`onnxruntime_pybind11_state`) ya no se reintenta 3 veces; una línea `native runtime missing: <módulo>` y sigue con Whisper.
+- STT: si `ctranslate2.dll` no carga, queda marcado como no disponible con el motivo, sin “Future exception was never retrieved” ni un `stt failed` por cada frase.
+- Descargas del sidecar (silero VAD): usan `certifi` si está en el venv y, ante `CERTIFICATE_VERIFY_FAILED`, avisan de un posible antivirus inspeccionando HTTPS (nunca se desactiva la verificación).
+- Ayuda: nuevo «?» “El Hey Capri no arranca / no te entiende” con los pasos del VC++ x64.
+
 ## 0.2.1
 
 - Win+L: rearmar el mouse hook (off→on), menú con captura explícita, resync dedupeado.

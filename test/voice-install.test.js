@@ -7,6 +7,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { EventEmitter } = require('node:events');
+const { VC_MESSAGE } = require('../src/main/vc-runtime');
 const {
   PYTHON_URL,
   VOICE_FILES,
@@ -147,4 +149,38 @@ test('createVoiceInstall cancel is a no-op until setup.ps1 is running', async (t
   const res = await installer.start({ omniVoice: false });
   assert.equal(res.ok, false);
   assert.match(res.error || '', /descargar|network/i);
+});
+
+test('installer warns about the missing VC++ runtime before and after installing', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-vc-install-src-'));
+  const local = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-vc-install-local-'));
+  t.after(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(local, { recursive: true, force: true });
+  });
+  const voice = path.join(root, 'voice');
+  fs.mkdirSync(path.join(voice, 'models'), { recursive: true });
+  for (const rel of VOICE_FILES) fs.writeFileSync(path.join(voice, rel), `# ${rel}\n`);
+
+  const installer = createVoiceInstall({
+    root,
+    version: '0.2.2',
+    env: { LOCALAPPDATA: local },
+    readVramImpl: () => null,
+    missingVcImpl: () => true,
+    spawnSyncImpl: () => ({ status: 0, stdout: 'C:\\Python311\\python.exe\n' }),
+    spawnImpl: () => {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.pid = 1;
+      setImmediate(() => child.emit('close', 0));
+      return child;
+    },
+  });
+
+  const res = await installer.start({ omniVoice: false });
+  assert.equal(res.ok, true);
+  assert.equal(res.needVc, true);
+  assert.ok(res.lines.includes(VC_MESSAGE), 'the hint is in the install log');
 });

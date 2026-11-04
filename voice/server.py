@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import re
+import ssl
 import subprocess
 import sys
 import threading
@@ -273,9 +274,39 @@ def download(url: str, dest: Path) -> None:
     log(f"downloading {dest.name}")
     tmp = dest.with_suffix(dest.suffix + ".part")
     req = urllib.request.Request(url, headers={"User-Agent": "capri-desktop"})
-    with urllib.request.urlopen(req) as res, open(tmp, "wb") as out:
-        out.write(res.read())
+    try:
+        with urllib.request.urlopen(req, context=ssl_context()) as res, open(tmp, "wb") as out:
+            out.write(res.read())
+    except ssl.SSLCertVerificationError as err:
+        # old root store or an antivirus MITM: never disable verification, say where to look
+        log(f"download {dest.name} certificate failed: {err} (posible antivirus inspeccionando HTTPS)")
+        raise
     tmp.replace(dest)
+
+
+def ssl_context() -> ssl.SSLContext:
+    """The venv's certifi bundle when it is there: Python's own store can be too old."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
+def native_runtime_module(err) -> str | None:
+    """The DLL/module whose native runtime is missing (VC++ x64), or None.
+
+    onnxruntime: "DLL load failed while importing onnxruntime_pybind11_state: ..."
+    ctranslate2: "Could not find module '...\\ctranslate2.dll' (or one of its dependencies)"
+    """
+    text = str(err)
+    if "DLL load failed" in text:
+        match = re.search(r"importing (\w+)", text)
+        return match.group(1) if match else "native"
+    if "Could not find module" in text and ".dll" in text.lower():
+        match = re.search(r"module '([^']+)'", text)
+        return Path(match.group(1)).name if match else "native"
+    return None
 
 
 class EnergyVAD:
@@ -397,6 +428,8 @@ class Engine:
         self._whisper = None
         self._wake = None
         self._vad = None
+        self._stt_error = ""
+        self._runtime_reported = False
         self._lock = threading.Lock()
         self._stt_lock = threading.Lock()
         self._models_lock = threading.Lock()
@@ -541,8 +574,27 @@ class Engine:
                     self._vad = EnergyVAD(self.wake_energy())
             if self._wake is None and self.cfg.get("wakeWord") and self.wake_mode() != "whisper":
                 self._wake = self._load_wake()
-            if self._whisper is None:
-                self._whisper = self._load_whisper()
+            if self._whisper is None and not self._stt_error:
+                try:
+                    self._whisper = self._load_whisper()
+                except Exception as err:
+                    # keep the reason here: an exception escaping this executor was reported
+                    # once as "Future exception was never retrieved" and every utterance
+                    # failed again. One line, then STT stays unavailable.
+                    self._stt_error = str(err)
+                    module = native_runtime_module(err)
+                    if module:
+                        self._report_runtime_missing(module)
+                    else:
+                        log(f"stt unavailable: {err}")
+                    self.broadcast({"type": "stt", "available": False, "reason": self._stt_error})
+
+    def _report_runtime_missing(self, module: str) -> None:
+        if self._runtime_reported:
+            return
+        self._runtime_reported = True
+        log(f"native runtime missing: {module}")
+        self.broadcast({"type": "runtime_missing", "module": module})
 
     def ensure_models(self) -> None:
         self.ensure_stt()
@@ -580,6 +632,7 @@ class Engine:
             })
             return False
         last_err = None
+        runtime = None
         for attempt in range(1, WAKE_ATTEMPTS + 1):
             try:
                 Model, download_models = load_openwakeword()
@@ -607,15 +660,21 @@ class Engine:
                 return wake
             except Exception as err:
                 last_err = err
+                runtime = native_runtime_module(err)
+                if runtime:
+                    # no VC++ runtime: the next attempt fails the same way
+                    self._report_runtime_missing(runtime)
+                    break
                 log(f"wake word failed attempt={attempt}/{WAKE_ATTEMPTS}: {err}")
                 time.sleep(0.4 * attempt)
-        log(f"wake word unavailable: {last_err}")
+        if not runtime:
+            log(f"wake word unavailable: {last_err}")
+            self.broadcast({
+                "type": "notice",
+                "level": "info",
+                "message": "El 'Hey Capri' no pudo arrancar; uso la detección por voz mientras tanto. Detalles en el log.",
+            })
         self.cfg["wakeMode"] = "whisper"
-        self.broadcast({
-            "type": "notice",
-            "level": "info",
-            "message": "El 'Hey Capri' no pudo arrancar; uso la detección por voz mientras tanto. Detalles en el log.",
-        })
         return False
 
     def _load_whisper(self):
@@ -1617,6 +1676,9 @@ class Engine:
         self.begin_capture(hold=False, follow=WAKE_FOLLOW_S, wake=1.0)
 
     def _wake_transcribe(self, audio: np.ndarray) -> None:
+        if self._stt_error:
+            self._wake_stt = False
+            return
         try:
             text = self.transcribe(audio)
         except Exception as err:
@@ -1729,6 +1791,9 @@ class Engine:
         if audio.size < SAMPLE_RATE * 0.2:
             log(f"listen drop too-short samples={audio.size} reason={reason}")
             return
+        if self._stt_error:
+            # already explained once (voice.log + Ajustes): don't fail on every utterance
+            return
         if self.cfg.get("debugSave"):
             self._debug_wav(audio)
         try:
@@ -1756,7 +1821,7 @@ class Engine:
         self.ensure_stt()
         whisper = self._whisper
         if whisper is None:
-            raise RuntimeError("whisper model unavailable")
+            raise RuntimeError(self._stt_error or "whisper model unavailable")
         segments, _info = whisper.transcribe(
             audio,
             language="es",

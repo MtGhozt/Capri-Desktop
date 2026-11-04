@@ -710,13 +710,26 @@ async function boot() {
       const line = evt.message || 'Voice sidecar is offline. Chat still works.';
       const kind = evt.level === 'info' ? 'info' : 'error';
       bubble.note('sistema', line);
+      const prevAction = panel.onAction;
       panel.say({
         kind,
-        badge: 'VOICE',
+        badge: evt.badge || 'VOICE',
         line,
-        hold: 10000,
+        hold: evt.url ? null : 10000,
+        actions: evt.url ? [{ id: 'open-url', label: 'Descargar e instalar', primary: true }] : undefined,
         ...(kind === 'info' ? { face: 'calm' } : {}),
       });
+      if (evt.url) {
+        panel.onAction = (id) => {
+          if (id === 'open-url') {
+            host.menuAction({ id: 'open-vc' }).catch(() => {});
+            panel.onAction = prevAction;
+            panel.hide();
+            return;
+          }
+          prevAction?.(id);
+        };
+      }
     }
   });
 

@@ -9,6 +9,7 @@ const crypto = require('node:crypto');
 const { spawn, spawnSync } = require('node:child_process');
 const { REPO, fetchLatest } = require('./updates');
 const { readVram } = require('./vram');
+const { VC_MESSAGE, missingVcRuntime } = require('./vc-runtime');
 
 const PYTHON_URL = 'https://www.python.org/downloads/release/python-3119/';
 const VOICE_FILES = [
@@ -263,6 +264,7 @@ function createVoiceInstall({
   spawnSyncImpl = spawnSync,
   readVramImpl = readVram,
   env = process.env,
+  missingVcImpl = missingVcRuntime,
   onProgress,
 } = {}) {
   let setup = null;
@@ -278,6 +280,7 @@ function createVoiceInstall({
       error: '',
       needPython: false,
       pythonUrl: PYTHON_URL,
+      needVc: missingVcImpl(),
       hasNvidia: hasNvidiaGpu({ readVramImpl }),
       dir: voiceInstallDir(env),
       ok: false,
@@ -313,6 +316,7 @@ function createVoiceInstall({
       hasNvidia: nvidia,
       omniVoice: useOmni,
     });
+    if (missingVcImpl()) pushLine(VC_MESSAGE);
 
     const py = findPython311({ spawnSyncImpl });
     if (!py.ok) {
@@ -386,12 +390,15 @@ function createVoiceInstall({
       });
     }
     pushLine('Listo.');
+    const needVc = missingVcImpl();
+    if (needVc) pushLine(VC_MESSAGE);
     return emit({
       busy: false,
       phase: 'done',
       label: 'Listo',
       error: '',
       ok: true,
+      needVc,
       dir: dest,
       omniVoice: useOmni,
     });
@@ -406,7 +413,7 @@ function createVoiceInstall({
   return {
     start,
     cancel,
-    status: () => ({ ...state, busy, hasNvidia: hasNvidiaGpu({ readVramImpl }) }),
+    status: () => ({ ...state, busy, needVc: missingVcImpl(), hasNvidia: hasNvidiaGpu({ readVramImpl }) }),
     dir: () => voiceInstallDir(env),
     syncManaged: ({ destRoot, onSync } = {}) => syncManagedVoiceSources({
       root,

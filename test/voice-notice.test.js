@@ -12,7 +12,7 @@ const path = require('node:path');
 const Module = require('node:module');
 const { TRAY } = require('../src/main/labels');
 
-function setup(t, cfg, spawn = () => { throw new Error('spawn failed'); }) {
+function setup(t, cfg, spawn = () => { throw new Error('spawn failed'); }, options = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-notice-'));
   const load = Module._load;
   Module._load = function stub(request, ...rest) {
@@ -34,6 +34,7 @@ function setup(t, cfg, spawn = () => { throw new Error('spawn failed'); }) {
     loadConfig: () => cfg,
     onEvent: (evt) => events.push(evt),
     markNoticeShown: () => { marks += 1; },
+    ...options,
   });
   return { voice, events, marks: () => marks, home };
 }
@@ -84,4 +85,26 @@ test('voice.dir exists but the sidecar fails: a separate friendly error', (t) =>
   assert.match(TRAY.es.voiceFailed, /Discord/);
   const log = fs.readFileSync(path.join(logHome, 'logs', 'voice.log'), 'utf8');
   assert.match(log, /spawn failed/);
+});
+
+// Missing VC++ x64: onnxruntime and ctranslate2 never load, so one line per session, not one
+// per start / wake retry.
+test('missing VC++ runtime says it once per session', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-vc-'));
+  const dir = path.join(home, 'voice');
+  fs.mkdirSync(path.join(dir, '.venv', 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.venv', 'bin', 'python'), '');
+  fs.writeFileSync(path.join(dir, 'server.py'), '');
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+
+  const cfg = { lang: 'es', voice: { enabled: true, dir } };
+  const { voice, events } = setup(t, cfg, () => { throw new Error('spawn failed'); }, {
+    missingVc: () => true,
+  });
+
+  voice.start();
+  voice.start();
+  voice.applyConfig();
+
+  assert.equal(events.filter((e) => e.type === 'vc-missing').length, 1);
 });

@@ -713,6 +713,7 @@ export class AppMenu {
       ],
       current: String(cfg.wakeSensitivity || 'normal'),
       onChange: (id) => this.act('wake-level', id),
+      help: 'wake',
     });
     selector('Respuesta', {
       options: REPLY_OPTIONS,
@@ -792,6 +793,17 @@ export class AppMenu {
       installRow.append(omni);
     } else {
       installRow.append(build('div', 'appmenu__hint', 'GPU NVIDIA detectada: se instala OmniVoice.'));
+    }
+    if (state.vcMissing || install.needVc) {
+      const vcRow = build('div', 'appmenu__voice-install-btns');
+      const vcBtn = build('button', 'appmenu__toggle-btn is-active', 'Instalar VC++ x64');
+      vcBtn.type = 'button';
+      vcBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.host.menuAction({ id: 'open-vc' }).catch(() => {});
+      });
+      vcRow.append(vcBtn);
+      installRow.append(build('div', 'appmenu__hint', state.vcMessage || 'Falta Microsoft Visual C++ Redistributable (x64).'), vcRow);
     }
     if (install.needPython || (install.phase === 'error' && /Python 3\.11/i.test(String(install.error || this.voiceNote || '')))) {
       const pyRow = build('div', 'appmenu__voice-install-btns');

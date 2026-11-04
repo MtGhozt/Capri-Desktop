@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const { HELP_STEPS, toggleHelp, splitHelpText } = require('../src/renderer/js/help-steps.js');
 
 test('each help id has a title and steps', () => {
-  assert.deepEqual(Object.keys(HELP_STEPS).sort(), ['brain', 'hearing', 'spotify', 'voice']);
+  assert.deepEqual(Object.keys(HELP_STEPS).sort(), ['brain', 'hearing', 'spotify', 'voice', 'wake']);
   for (const [id, help] of Object.entries(HELP_STEPS)) {
     assert.ok(help.title, id);
     assert.ok(help.section, id); // which Ajustes tab shows it
@@ -56,4 +56,6 @@ test('manual help covers voice install, clone, config path, Spotify and Gemini',
   assert.match(all, /developer\.spotify\.com/);
   assert.match(all, /127\.0\.0\.1:47835\/callback/);
   assert.match(all, /aistudio\.google\.com/);
+  assert.match(all, /Microsoft Visual C\+\+ Redistributable \(x64\)/);
+  assert.match(all, /vc_redist\.x64\.exe/);
 });

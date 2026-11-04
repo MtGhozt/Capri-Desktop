@@ -7,6 +7,7 @@ const path = require('node:path');
 const { app } = require('electron');
 const { sidecarConfig } = require('./voice-config');
 const { logLines, voiceLogPath } = require('./log');
+const { missingVcRuntime } = require('./vc-runtime');
 
 const PORT = 47824;
 const RESTART_MS = 3000;
@@ -45,7 +46,7 @@ function checkVoiceDir(raw) {
   return { ok: true, dir };
 }
 
-function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
+function createVoice({ root, loadConfig, onEvent, markNoticeShown, missingVc = missingVcRuntime }) {
   let child = null;
   let ws = null;
   let token = null;
@@ -62,6 +63,7 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
   let restartTimer = null;
   let stopping = null;
   let missing = false; // one bubble line per session, not one per Ctrl+Alt+V
+  let vcShown = false; // one "install VC++" line per session, not one per wake retry
   const logFile = voiceLogPath();
 
   function emit(payload) {
@@ -87,6 +89,14 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
     if (loadConfig()?.voice?.noticeShown) return;
     markNoticeShown?.();
     emit({ type: 'voice-missing' });
+  }
+
+  // No VC++ x64: onnxruntime and ctranslate2 cannot load, so neither the wake word nor STT
+  // will work. Say it once per session; the sidecar reports the same thing from its DLL errors.
+  function vcMissing() {
+    if (vcShown) return;
+    vcShown = true;
+    emit({ type: 'vc-missing' });
   }
 
   function speakCfg() {
@@ -140,6 +150,12 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
       let msg;
       try { msg = JSON.parse(String(ev.data || '')); } catch { return; }
       if (!msg || typeof msg !== 'object') return;
+      if (msg.type === 'runtime_missing') {
+        // the sidecar found the same thing from onnxruntime/ctranslate2: one message, not two
+        logLines(logFile, `[capri] native runtime missing: ${msg.module || 'unknown'}`);
+        vcMissing();
+        return;
+      }
       emit(msg);
       if (msg.type === 'ready') {
         send({ type: 'config', ...speakCfg() });
@@ -215,6 +231,7 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown }) {
     }
     token = crypto.randomBytes(24).toString('hex');
     retries = 0;
+    if (missingVc()) vcMissing();
     try {
       child = spawn(py, ['-u', script], {
         cwd: dir,
