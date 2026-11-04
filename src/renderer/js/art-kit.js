@@ -179,7 +179,7 @@ export async function runArtKit({
   dormant.hide();
   drone.show();
   ensureDroneLoop();
-  await beat('drone', 'Dron modo juego', { frames: 5, ms: HOLD });
+  await beat('drone', 'Dron No molestar', { frames: 5, ms: HOLD });
   drone.hide();
 
   // --- dancing ---

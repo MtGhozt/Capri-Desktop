@@ -115,6 +115,16 @@ export const HELP_STEPS = {
       'Si la voz no carga: mirá logs\\voice.log. Si dice VRAM baja u omnivoice skipped, cerrá juegos/Chrome pesado o usá Kokoro / Blips. Para pedir ayuda: Discord #errores-bugs (https://discord.gg/wmVfYdjpdA) con el final del log.',
     ],
   },
+  gaming: {
+    title: 'No molestar',
+    section: 'behavior',
+    note: 'Mientras una app en pantalla completa (juegos, películas, presentaciones) esté abierta, Capri no se despierta con “Hey Capri” ni habla sola.',
+    steps: [
+      '«Silenciar en esta app»: Capri se queda callada con esta app aunque no esté en pantalla completa (ej. Netflix, Slack).',
+      '«No silenciar nunca»: Capri sigue activa con esta app aunque esté en pantalla completa.',
+      '«Sacar de la lista»: vuelve a la detección automática.',
+    ],
+  },
   brain: {
     title: 'Cerebro',
     section: 'model',

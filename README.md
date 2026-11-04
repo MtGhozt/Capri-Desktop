@@ -24,7 +24,7 @@ Lo que viene; detalle y estado en [`docs/roadmap.md`](docs/roadmap.md):
 - Capri responde **con su propia voz** desde el primer arranque (hoy el instalador público trae BLIPS).
 - Elegir la **carpeta de voz** desde Ajustes (hoy se configura a mano).
 - **Wake word** menos sensible al audio de fondo (música, videos, audífonos Bluetooth).
-- **Ver la pantalla** y **juegos** (Fase 6): mirar cuando se le pide, hablar en modo juego, detectar mandos.
+- **Ver la pantalla** y **juegos** (Fase 6): mirar cuando se le pide, hablar en No molestar, detectar mandos.
 - Cerebro con **“Usar mi agente instalado” (Automático)**: aprovecha el Claude Code / OpenCode que ya tienes.
 
 Nada de esto es de pago: las donaciones, si aparecen, no desbloquean nada.
@@ -98,11 +98,11 @@ Guía de montaje local: [`docs/voz.md`](docs/voz.md).
 - **Abrir / cerrar** apps, juegos y sitios que tengas en su lista **APPS** (“abre Discord”, etc.).
 - **Música** (player por defecto **Namida**; **Spotify** opcional): play, pausa, siguiente, “pon \<tema\>”, “pon tu canción”, volumen / mute **solo de la música** (nunca el volumen master del PC).
 - **Energía del PC** con confirmación: apagar / reiniciar / suspender.
-- **Modo juego:** ante un juego a pantalla completa puede soltar GPU pesada y mostrar un **dron** ligero.
+- **No molestar:** ante un juego a pantalla completa puede soltar GPU pesada y mostrar un **dron** ligero.
 - **Formas:** DORMANT, máscara dormida, biochip, teleports, poses; **agarrar y soltar**; **caricias** en la cabeza (se pueden apagar en comportamiento).
 - Comentarios ocasionales, saludo al arrancar / al desbloquear (configurables).
 
-<img src="docs/media/capri-drone.png" alt="Dron en modo juego" width="480">
+<img src="docs/media/capri-drone.png" alt="Dron en No molestar" width="480">
 <img src="docs/media/capri-star.png" alt="Momento estrella" width="480">
 
 ---

@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const { HELP_STEPS, toggleHelp, splitHelpText } = require('../src/renderer/js/help-steps.js');
 
 test('each help id has a title and steps', () => {
-  assert.deepEqual(Object.keys(HELP_STEPS).sort(), ['brain', 'hearing', 'spotify', 'voice', 'wake']);
+  assert.deepEqual(Object.keys(HELP_STEPS).sort(), ['brain', 'gaming', 'hearing', 'spotify', 'voice', 'wake']);
   for (const [id, help] of Object.entries(HELP_STEPS)) {
     assert.ok(help.title, id);
     assert.ok(help.section, id); // which Ajustes tab shows it

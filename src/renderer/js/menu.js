@@ -405,13 +405,13 @@ export class AppMenu {
     row('Hacer algo', '', 'do-something', () => this.act('do-something'));
     row('Comportamiento', cfg.locked ? 'FIJO' : 'NORMAL', 'behavior',
       (anchor) => openSubmenu('behavior', [{ id: 'normal', label: 'NORMAL' }, { id: 'locked', label: 'FIJO' }], cfg.locked ? 'locked' : 'normal', 'drag-lock', anchor));
-    row('Dron en modo juego', cfg.gaming?.drone === false ? 'NO' : 'SÍ', 'drone-mode',
+    row('Dron en No molestar', cfg.gaming?.drone === false ? 'NO' : 'SÍ', 'drone-mode',
       (anchor) => openSubmenu('drone-mode', [{ id: false, label: 'NO' }, { id: true, label: 'SÍ' }],
         cfg.gaming?.drone !== false, 'drone-mode', anchor));
-    row('Juego', cfg.gaming?.fgKey || 'SIN APP ACTIVA', 'game-list',
+    row('No molestar', cfg.gaming?.fgKey || 'SIN APP ACTIVA', 'game-list',
       (anchor) => openSubmenu('game-list', [
-        { id: 'allow', label: 'TRATAR COMO JUEGO' },
-        { id: 'ignore', label: 'IGNORAR' },
+        { id: 'allow', label: 'SILENCIAR EN ESTA APP' },
+        { id: 'ignore', label: 'NO SILENCIAR NUNCA' },
         { id: 'remove', label: 'SACAR DE LA LISTA' },
       ], null, 'game-list', anchor));
     if (this.gameNote) body.append(build('div', 'appmenu__hint', this.gameNote));
@@ -1140,7 +1140,8 @@ export class AppMenu {
       labels: ['NO', 'SÍ'],
       onChange: (on) => this.act('music-dance', on),
     });
-    toggle('Dron en modo juego', {
+    section('NO MOLESTAR', 'behavior', 'gaming');
+    toggle('Dron en No molestar', {
       setting: 'behavior',
       on: cfg.gaming?.drone !== false,
       labels: ['NO', 'SÍ'],
@@ -1167,7 +1168,7 @@ export class AppMenu {
     });
     const renderOptions = [
       { id: 'auto', label: 'Automático (recomendado)', hint: 'Usa la configuración gráfica normal de Windows.' },
-      { id: 'gl', label: 'OpenGL', hint: 'Fuerza OpenGL si Capri se ve negra o falla con Automático.' },
+      { id: 'gl', label: 'OpenGL (experimental)', hint: 'Si Capri se vuelve invisible o transparente, volvé a Automático.' },
       { id: 'software', label: 'Sin GPU (lento)', hint: 'Dibuja por CPU; sirve como último recurso.' },
     ];
     const renderRow = build('div', 'appmenu__radio-group');
@@ -1179,7 +1180,10 @@ export class AppMenu {
       input.name = 'capri-render';
       input.checked = (cfg.render || 'auto') === option.id;
       input.addEventListener('change', () => this.pickRender(option.id, state));
-      label.append(input, build('span', 'appmenu__label', option.label), build('span', 'appmenu__hint', option.hint));
+      label.append(input, build('span', 'appmenu__label', option.label));
+      // OpenGL's warning only shows while it is the chosen one
+      const hint = option.id === 'gl' && !input.checked ? '' : option.hint;
+      if (hint) label.append(build('span', 'appmenu__hint', hint));
       renderRow.append(label);
     }
     body.append(renderRow);

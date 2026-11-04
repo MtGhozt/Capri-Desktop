@@ -7,6 +7,9 @@
 - STT: si `ctranslate2.dll` no carga, queda marcado como no disponible con el motivo, sin “Future exception was never retrieved” ni un `stt failed` por cada frase.
 - Descargas del sidecar (silero VAD): usan `certifi` si está en el venv y, ante `CERTIFICATE_VERIFY_FAILED`, avisan de un posible antivirus inspeccionando HTTPS (nunca se desactiva la verificación).
 - Ayuda: nuevo «?» “El Hey Capri no arranca / no te entiende” con los pasos del VC++ x64.
+- «Modo juego» pasa a llamarse «No molestar» en toda la interfaz (menú, Ajustes, ayuda y README); las claves de config y los ids internos no cambian, así que las listas existentes siguen funcionando. Opciones: «Silenciar en esta app», «No silenciar nunca» y «Sacar de la lista».
+- Ayuda: nuevo «?» en No molestar (Ajustes › Comportamiento) que explica la pantalla completa y qué hace cada opción.
+- Pantalla: OpenGL ahora dice «OpenGL (experimental)» y, al elegirlo, avisa «Si Capri se vuelve invisible o transparente, volvé a Automático.»
 
 ## 0.2.1
 
