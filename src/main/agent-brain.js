@@ -6,6 +6,7 @@
 const { spawn } = require('node:child_process');
 
 const AGENT_TIMEOUT_MS = 45_000;
+const VERSION_TIMEOUT_MS = 15_000;
 
 const AGENTS = [
   {
@@ -21,8 +22,9 @@ const AGENTS = [
     id: 'cursor-agent',
     label: 'Cursor Agent (CLI)',
     bin: 'cursor-agent',
+    bins: ['cursor-agent', 'agent'],
     args: (prompt) => ['-p', '--mode=ask', '--output-format', 'text', prompt],
-    installHow: 'curl https://cursor.com/install -fsS | bash',
+    installHow: "irm 'https://cursor.com/install?win32=true' | iex",
     note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri.',
     ready: true,
   },
@@ -31,7 +33,7 @@ const AGENTS = [
     label: 'OpenCode',
     bin: 'opencode',
     args: (prompt) => ['run', prompt],
-    installHow: 'npm install -g @opencode/cli',
+    installHow: 'npm install -g opencode-ai',
     note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri.',
     ready: true,
   },
@@ -66,18 +68,34 @@ function which(bin, { execFileSync = require('node:child_process').execFileSync,
   }
 }
 
-function runnable(file, { execFileSync = require('node:child_process').execFileSync, platform = process.platform } = {}) {
+function versionStatus(file, { execFileSync = require('node:child_process').execFileSync, platform = process.platform } = {}) {
   try {
     execFileSync(file, ['--version'], {
       encoding: 'utf8',
       windowsHide: true,
-      timeout: 5000,
+      timeout: VERSION_TIMEOUT_MS,
       shell: platform === 'win32',
     });
-    return true;
-  } catch {
-    return false;
+    return 'ok';
+  } catch (err) {
+    if (err?.killed || err?.code === 'ETIMEDOUT') return 'timeout';
+    return 'error';
   }
+}
+
+function runnable(file, opts = {}) {
+  return versionStatus(file, opts) === 'ok';
+}
+
+function logDetect(msg, log) {
+  if (typeof log === 'function') {
+    log(msg);
+    return;
+  }
+  try {
+    const { logEvent, voiceLogPath } = require('./log');
+    logEvent(voiceLogPath(), msg);
+  } catch { /* tests / electron not ready */ }
 }
 
 // `where`/`which` per CLI is slow on cold PATH; cache so menu:get does not stall the first paint.
@@ -92,8 +110,28 @@ function detectAgents(opts = {}) {
     return agentsCache;
   }
   const list = AGENTS.map((a) => {
-    const file = which(a.bin, opts);
-    const installed = Boolean(file) && runnable(file, opts);
+    const bins = a.bins || [a.bin];
+    let file = null;
+    let reportBin = bins[0];
+    let reportPath = null;
+    let reportVer = 'none';
+    for (const bin of bins) {
+      const found = which(bin, opts);
+      if (!found) continue;
+      const status = versionStatus(found, opts);
+      reportBin = bin;
+      reportPath = found;
+      reportVer = status;
+      if (status === 'ok') {
+        file = found;
+        break;
+      }
+    }
+    logDetect(
+      `agent detect ${a.id} bin=${reportBin} path=${reportPath || 'none'} version=${reportVer}`,
+      opts.log,
+    );
+    const installed = Boolean(file);
     return {
       id: a.id,
       label: a.label,
@@ -179,5 +217,6 @@ function runAgent({
 }
 
 module.exports = {
-  AGENTS, AGENT_TIMEOUT_MS, which, detectAgents, pickAuto, openAgentIds, wrapPrompt, runAgent,
+  AGENTS, AGENT_TIMEOUT_MS, VERSION_TIMEOUT_MS, which, runnable, versionStatus,
+  detectAgents, pickAuto, openAgentIds, wrapPrompt, runAgent,
 };

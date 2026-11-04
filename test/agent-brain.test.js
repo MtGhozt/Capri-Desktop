@@ -3,28 +3,54 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  AGENTS, detectAgents, pickAuto, openAgentIds, runAgent, wrapPrompt,
+  AGENTS, VERSION_TIMEOUT_MS, detectAgents, pickAuto, openAgentIds, runAgent, wrapPrompt,
 } = require('../src/main/agent-brain');
 
 test('detectAgents marks PATH hits; all five CLIs are wired when present', () => {
   let calls = 0;
+  const logs = [];
   const execFileSync = (cmd, [bin]) => {
     calls += 1;
     if (cmd === 'where' && (bin === 'claude' || bin === 'opencode')) return `C:\\bin\\${bin}.exe\n`;
     if ((cmd === 'C:\\bin\\claude.exe' || cmd === 'C:\\bin\\opencode.exe') && bin === '--version') return '1.0';
     throw new Error('not found');
   };
-  const list = detectAgents({ execFileSync, platform: 'win32' });
+  const list = detectAgents({ execFileSync, platform: 'win32', log: (m) => logs.push(m) });
   const by = Object.fromEntries(list.map((a) => [a.id, a]));
   assert.equal(by.claude.installed, true);
   assert.equal(by.claude.ready, true);
   assert.equal(by.opencode.ready, true);
   assert.equal(by.codex.installed, false);
   assert.equal(by['cursor-agent'].ready, false);
+  assert.equal(by['cursor-agent'].installHow, "irm 'https://cursor.com/install?win32=true' | iex");
+  assert.equal(by.opencode.installHow, 'npm install -g opencode-ai');
   assert.ok(by.codex.installHow);
   assert.ok(by.gemini.installHow);
-  detectAgents({ execFileSync, platform: 'win32' }); // mocks never use the production cache
-  assert.equal(calls, 14); // two scans × (5 PATH checks + 2 executable checks)
+  assert.equal(VERSION_TIMEOUT_MS, 15_000);
+  assert.match(logs.find((l) => l.includes('claude')) || '', /bin=claude path=C:\\bin\\claude\.exe version=ok/);
+  assert.match(logs.find((l) => l.includes('cursor-agent')) || '', /path=none version=none/);
+  detectAgents({ execFileSync, platform: 'win32', log() {} }); // mocks never use the production cache
+  // two scans × (6 PATH checks: cursor-agent+agent fallback + 4 others, + 2 --version)
+  assert.equal(calls, 16);
+});
+
+test('cursor-agent falls back to the agent binary on PATH', () => {
+  const logs = [];
+  const list = detectAgents({
+    platform: 'win32',
+    log: (m) => logs.push(m),
+    execFileSync: (cmd, [bin]) => {
+      if (cmd === 'where' && bin === 'cursor-agent') throw new Error('not found');
+      if (cmd === 'where' && bin === 'agent') return 'C:\\bin\\agent.exe\n';
+      if (cmd === 'C:\\bin\\agent.exe' && bin === '--version') return '0.1';
+      throw new Error('not found');
+    },
+  });
+  const cursor = list.find((a) => a.id === 'cursor-agent');
+  assert.equal(cursor.installed, true);
+  assert.equal(cursor.ready, true);
+  assert.equal(cursor.path, 'C:\\bin\\agent.exe');
+  assert.match(logs.find((l) => l.includes('cursor-agent')) || '', /bin=agent path=C:\\bin\\agent\.exe version=ok/);
 });
 
 test('detectAgents only marks CLIs found by where on PATH', () => {
