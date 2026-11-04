@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
-const { QUICK_MENU_ITEMS, SETTINGS_TABS, unionRects } = require('../src/renderer/js/menu.js');
+const { QUICK_MENU_ITEMS, SETTINGS_TABS, unionRects, placeHelpPanel } = require('../src/renderer/js/menu.js');
 
 test('quick menu contains only compact controls and settings entry', () => {
   assert.deepEqual(QUICK_MENU_ITEMS.map((item) => item.id), [
@@ -24,6 +24,31 @@ test('menu hit rect includes an open floating submenu', () => {
     { left: 100, top: 100, right: 400, bottom: 500 },
     { left: 410, top: 140, right: 630, bottom: 300 },
   ), { left: 100, top: 100, right: 630, bottom: 500 });
+});
+
+test('help panel stays inside the settings host (no clip under the tabs)', () => {
+  const main = { left: 205, top: 38, right: 900, bottom: 700 };
+  // "?" on the left of a row: prefer the right side, still inside main.
+  const beside = placeHelpPanel({
+    main,
+    anchor: { left: 230, top: 520, right: 248, bottom: 538 },
+    width: 360,
+    height: 280,
+  });
+  assert.ok(beside.left >= 0);
+  assert.ok(beside.left + 360 <= main.right - main.left);
+  assert.ok(beside.top >= 0);
+  assert.ok(beside.top + 280 <= main.bottom - main.top);
+
+  // Narrow host: clamp instead of parking at viewport x=8 (which was negative vs main).
+  const tight = placeHelpPanel({
+    main: { left: 205, top: 38, right: 500, bottom: 400 },
+    anchor: { left: 220, top: 200, right: 238, bottom: 218 },
+    width: 360,
+    height: 280,
+  });
+  assert.equal(tight.left, 8);
+  assert.ok(tight.top >= 0);
 });
 
 test('Capri sits above the message box without blocking its input', () => {

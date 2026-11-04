@@ -20,6 +20,22 @@ export function unionRects(a, b) {
   };
 }
 
+// Keep the "?" panel inside its host (.appmenu). Settings uses overflow:hidden on the
+// content pane — viewport-relative left flips used to park half the panel under the tabs.
+export function placeHelpPanel({ main, anchor, width, height, pad = 8, gap = 8 } = {}) {
+  const w = Number(width) || 0;
+  const h = Number(height) || 0;
+  let x = anchor.right + gap;
+  if (x + w > main.right - pad) x = anchor.left - gap - w;
+  if (x < main.left + pad) x = main.left + pad;
+  if (x + w > main.right - pad) x = Math.max(main.left + pad, main.right - pad - w);
+
+  let y = anchor.top;
+  if (y + h > main.bottom - pad) y = Math.max(main.top + pad, main.bottom - pad - h);
+  if (y < main.top + pad) y = main.top + pad;
+  return { left: x - main.left, top: y - main.top };
+}
+
 // One Esc press peels one layer; never leave a blank plate in settings.
 export function menuEscapeStep({ capturing, helpOpen, quickOpen, expanded, view, settingsMode } = {}) {
   if (capturing) return 'cancel-capture';
@@ -455,19 +471,31 @@ export class AppMenu {
   placeSubmenu() {
     const menu = this.el.querySelector('.appmenu__submenu');
     if (!menu) return;
-    const main = (this.el.querySelector('.appmenu__quick-plate') || this.el.querySelector('.appmenu__plate'))?.getBoundingClientRect();
-    if (!main) return;
+    const host = this.el.getBoundingClientRect();
+    if (!host.width) return;
     const w = menu.offsetWidth;
     const h = menu.offsetHeight;
-    // A help panel pops out right beside its "?"; a selector beside the plate, as it always did.
-    const anchor = this.helpAnchor || this.quickAnchor;
-    const right = (this.helpAnchor ? anchor.right : main.right) + 8;
-    const left = (this.helpAnchor ? anchor.left : main.left) - w - 8;
-    const x = right + w <= innerWidth - 8 ? right : Math.max(8, left);
-    const anchorTop = anchor?.top ?? main.top;
-    const y = Math.min(Math.max(8, anchorTop), innerHeight - h - 8);
-    menu.style.left = `${Math.round(x - main.left)}px`;
-    menu.style.top = `${Math.round(y - main.top)}px`;
+    // After re-render the old rect is stale (scroll restore); prefer the live "?".
+    const live = this.helpOpen
+      && this.el.querySelector(`.appmenu__help[data-help="${this.helpOpen}"]`);
+    if (live) this.helpAnchor = live.getBoundingClientRect();
+    if (this.helpOpen && this.helpAnchor) {
+      const { left, top } = placeHelpPanel({
+        main: host, anchor: this.helpAnchor, width: w, height: h,
+      });
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.top = `${Math.round(top)}px`;
+      return;
+    }
+    // Quick-menu selector: park beside the plate (same as before).
+    const main = (this.el.querySelector('.appmenu__quick-plate') || this.el.querySelector('.appmenu__plate'))?.getBoundingClientRect() || host;
+    const anchor = this.quickAnchor || main;
+    const right = main.right + 8;
+    const leftSide = main.left - w - 8;
+    const x = right + w <= innerWidth - 8 ? right : Math.max(8, leftSide);
+    const y = Math.min(Math.max(8, anchor.top ?? main.top), innerHeight - h - 8);
+    menu.style.left = `${Math.round(x - host.left)}px`;
+    menu.style.top = `${Math.round(y - host.top)}px`;
   }
 
   // The "?" that opens a HELP_STEPS panel, in Ajustes and in the quick menu.
@@ -482,10 +510,10 @@ export class AppMenu {
     btn.title = 'Cómo se hace';
     btn.setAttribute('aria-expanded', String(this.helpOpen === helpId));
     const openHelp = () => {
-      this.helpAnchor = this.helpOpen === helpId ? null : btn.getBoundingClientRect();
       this.helpOpen = toggleHelp(this.helpOpen, helpId);
+      this.helpAnchor = null; // placeSubmenu reads the live "?" after render
       if (this.lastState) this.render(this.lastState);
-      requestAnimationFrame(() => this.placeSubmenu());
+      else requestAnimationFrame(() => this.placeSubmenu());
     };
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1265,7 +1293,10 @@ export class AppMenu {
     const scroller = this.el.querySelector('.appmenu__body');
     if (!scroller) return;
     scroller.scrollTop = top;
-    requestAnimationFrame(() => { scroller.scrollTop = top; });
+    requestAnimationFrame(() => {
+      scroller.scrollTop = top;
+      if (this.helpOpen) this.placeSubmenu();
+    });
   }
 
   filterSettingsBody(body) {
