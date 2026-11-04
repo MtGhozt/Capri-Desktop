@@ -7,11 +7,14 @@ const assert = require('node:assert/strict');
 const { HELP_STEPS, toggleHelp, splitHelpText } = require('../src/renderer/js/help-steps.js');
 
 test('each help id has a title and steps', () => {
-  assert.deepEqual(Object.keys(HELP_STEPS).sort(), ['brain', 'gaming', 'hearing', 'spotify', 'voice', 'wake']);
+  assert.deepEqual(Object.keys(HELP_STEPS).sort(), [
+    'agents', 'apps', 'brain', 'gaming', 'hearing', 'screen', 'spotify', 'talk', 'voice', 'wake',
+  ]);
   for (const [id, help] of Object.entries(HELP_STEPS)) {
     assert.ok(help.title, id);
     assert.ok(help.section, id); // which Ajustes tab shows it
     assert.ok(Array.isArray(help.steps) && help.steps.length > 0, id);
+    assert.ok(help.steps.length <= 5, `${id} should stay at 3–5 steps`);
     for (const step of help.steps) {
       assert.ok(typeof step === 'string' || (step.text && step.command), id);
     }
@@ -39,23 +42,39 @@ test('splitHelpText turns http(s) into url parts (clickable in the panel)', () =
   );
 });
 
-test('manual help covers voice install, clone, config path, Spotify and Gemini', () => {
+test('help covers current install, talk, brain cards, apps, screen and #bugs', () => {
   const all = Object.values(HELP_STEPS).flatMap((h) => [
     h.note || '',
     ...h.steps.map((s) => (typeof s === 'string' ? s : `${s.text}\n${s.command}`)),
   ]).join('\n');
   assert.match(all, /python\.org\/downloads\/release\/python-3119/);
-  assert.match(all, /Add python\.exe to PATH|Add to PATH/i);
-  assert.match(all, /powershell/i);
-  assert.match(all, /setup\.ps1 -OmniVoice/);
-  assert.match(all, /cargando voz/);
-  assert.match(all, /Usar mi propia voz/);
-  assert.match(all, /ttsMoods/);
-  assert.match(all, /%APPDATA%\\capri-desktop/);
-  assert.match(all, /#errores-bugs/);
+  assert.match(all, /Add python\.exe to PATH/i);
+  assert.match(all, /Instalar voz/);
+  assert.match(all, /Ver detalles/);
+  assert.doesNotMatch(all, /setup\.ps1/);
+  assert.doesNotMatch(all, /PowerShell corré|Fallback manual|escribí powershell/i);
+  assert.match(all, /Hey Capri/);
+  assert.match(all, /Tecla para hablar/);
+  assert.match(all, /Ctrl\+Alt\+T/);
+  assert.match(all, /Pausa antes de cortar/);
+  assert.match(all, /VOZ/);
+  assert.match(all, /BLIPS/);
+  assert.match(all, /Gratis con key/);
+  assert.match(all, /En mi PC/);
+  assert.match(all, /Mi propia key/);
+  assert.match(all, /Usar mi agente instalado/);
+  assert.match(all, /Probar/);
+  assert.match(all, /INSTALAR|QUITAR/);
+  assert.match(all, /Buscar programa/);
+  assert.match(all, /Añadir enlace/);
+  assert.match(all, /No molestar/);
+  assert.match(all, /Silenciar en esta app/);
+  assert.match(all, /Automático \(recomendado\)/);
+  assert.match(all, /OpenGL \(experimental\)/);
+  assert.match(all, /%APPDATA%\\capri-desktop\\logs\\voice\.log/);
+  assert.match(all, /#bugs/);
   assert.match(all, /developer\.spotify\.com/);
   assert.match(all, /127\.0\.0\.1:47835\/callback/);
-  assert.match(all, /aistudio\.google\.com/);
   assert.match(all, /Microsoft Visual C\+\+ Redistributable \(x64\)/);
   assert.match(all, /vc_redist\.x64\.exe/);
 });

@@ -5,6 +5,7 @@
 > [!IMPORTANT]
 > **Usuarios de Antigravity:** esta versión corrige un bug crítico en la instalación de hooks. Si ya instalaste los hooks antes, desinstalalos y volvé a instalarlos desde Ajustes › Agentes, o ejecutá Capri una vez (se repara solo al arrancar).
 
+- Ayudas "?" actualizadas a la versión actual.
 - **Hooks Antigravity (crítico):** el comando instalado en `hooks.json` ya no lleva comillas internas alrededor de la ruta. Antigravity no pasa el comando por shell, por lo que las comillas llegaban a node literalmente y causaban `MODULE_NOT_FOUND`; como era `PreToolUse`, cancelaba *todas* las llamadas a herramientas. Se corrige en la instalación nueva y se repara la entrada vieja al arrancar Capri.
 - **Hooks Antigravity — solo eventos de notificación:** Capri ya no instala `PreToolUse` ni `PreInvocation` en Antigravity. Solo instala `SessionStart`, `PostToolUse`, `PostInvocation` y `Stop` (todos asíncronos), así Capri nunca puede bloquear las herramientas del agente.
 - **Hooks Antigravity — ruta con espacios:** si el directorio de instalación tiene espacios en el nombre de usuario, Capri intenta obtener la ruta corta 8.3 de Windows. Si no es posible, muestra un mensaje claro en vez de instalar un hook roto.

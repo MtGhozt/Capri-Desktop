@@ -56,39 +56,22 @@ La primera vez, si no hay LM Studio/Ollama local ni clave en la nube, Capri pued
 
 ## 3. Su cerebro
 
-Elige el proveedor en **clic derecho → Ajustes… → Cerebro** (o el atajo de proveedor en el menú rápido).
+**Clic derecho → Ajustes… → Cerebro.** Tarjetas: **Gratis con key**, **En mi PC** (Ollama / LM Studio), **Mi propia key** y **Usar mi agente instalado**. Pegá la key si hace falta y tocá **Probar**. Las claves quedan cifradas en tu PC (`safeStorage`; no van al repo ni a los logs).
 
-| Proveedor | Notas |
-| --- | --- |
-| **LM Studio** (local) | Por defecto. Servidor OpenAI-compatible (en muchas PCs `http://localhost:1235/v1`). Modelo típico de desarrollo: `google/gemma-4-e2b`. |
-| **Gemini** | Modelo por defecto `gemini-flash-lite-latest`. Clave gratis: [Google AI Studio](https://aistudio.google.com/apikey). |
-| **OpenRouter** | Pegas el id exacto del modelo (p. ej. variantes `:free` o `openrouter/free`). |
-| **Groq / OpenAI / Mistral / DeepSeek** | Misma pantalla: eliges proveedor, modelo y clave. |
-
-Las claves se guardan en tu usuario Windows con `safeStorage` (no van al repo ni a los logs).  
-**Compartir pantalla / memoria con la nube** está **apagado** por defecto (`shareScreen` / `shareMemory`).
-
-Personalidad y memoria: **Ajustes → Memoria → Abrir personalidad / Abrir memoria** (`persona.md` / `memory.md` en tu carpeta de datos).
+**Compartir pantalla / memoria con la nube** está **apagado** por defecto. Personalidad y memoria: **Ajustes → Memoria → Abrir personalidad / Abrir memoria**.
 
 ---
 
 ## 4. Voz (opcional)
 
-El instalador público **no** incluye el sidecar Python (`voice/`), modelos Whisper/OmniVoice ni el audio de referencia clonado.
+El instalador público **no** trae Python ni los modelos. Flujo actual:
 
-| Sin sidecar | Con sidecar local (`voice.dir` + `setup.ps1`) |
-| --- | --- |
-| Chat por texto y **BLIPS** (beeps al escribir) o **SILENCIO** | Wake word, STT, y **VOZ** si activas TTS |
-| `Ctrl+Alt+V` no tiene micrófono detrás | `Ctrl+Alt+V` escucha / deja de escuchar |
+1. Instalá **Python 3.11** ([python.org 3.11.9](https://www.python.org/downloads/release/python-3119/), marcá **Add python.exe to PATH**).
+2. En Capri: **Ajustes → Oído → Instalar voz** (barra de progreso + **Ver detalles**). No hace falta PowerShell a mano.
+3. **OmniVoice** solo con GPU NVIDIA. **Respuesta:** `VOZ` / `BLIPS` / `SILENCIO`.
+4. Hablar: **«Hey Capri»**, **Tecla para hablar** (Ajustes → Oído; por defecto `Ctrl+Alt+V`), chat con `Ctrl+Alt+T`. Si «Hey Capri» no arranca por DLL: **Instalar VC++ x64**.
 
-Con sidecar montado:
-
-- **Wake:** “Hey Capri” (modelo `hey_capri`, si falta cae a `hey_jarvis`) y/o decir **“Capri”** (Whisper).
-- **STT:** faster-whisper en **CPU** (deja la GPU al TTS si lo usas).
-- **Modos de respuesta** (menú → Modo de respuesta): `VOZ` / `BLIPS` / `SILENCIO`. Por defecto en el build público: **BLIPS**, TTS **off**.
-- **Ánimos** (burla, emoción, aburrida, seria): wavs de referencia en `voice/ref/`. **Ese audio clonado no viaja en el Setup.** Sin refs / sin OmniVoice: mientras carga o si TTS está off → **blips**; si OmniVoice falla de verdad → **Kokoro** (voz genérica), no la de Capri.
-
-Guía de montaje local: [`docs/voz.md`](docs/voz.md).
+Log: `%APPDATA%\capri-desktop\logs\voice.log` — reportá en Discord **#bugs**. Detalle de desarrollo: [`docs/voz.md`](docs/voz.md).
 
 ---
 
@@ -98,7 +81,7 @@ Guía de montaje local: [`docs/voz.md`](docs/voz.md).
 - **Abrir / cerrar** apps, juegos y sitios que tengas en su lista **APPS** (“abre Discord”, etc.).
 - **Música** (player por defecto **Namida**; **Spotify** opcional): play, pausa, siguiente, “pon \<tema\>”, “pon tu canción”, volumen / mute **solo de la música** (nunca el volumen master del PC).
 - **Energía del PC** con confirmación: apagar / reiniciar / suspender.
-- **No molestar:** ante un juego a pantalla completa puede soltar GPU pesada y mostrar un **dron** ligero.
+- **No molestar:** ante pantalla completa (o apps en la lista) no se despierta sola; opciones **Silenciar en esta app** / **No silenciar nunca** / **Sacar de la lista**; puede mostrar el **dron** ligero.
 - **Formas:** DORMANT, máscara dormida, biochip, teleports, poses; **agarrar y soltar**; **caricias** en la cabeza (se pueden apagar en comportamiento).
 - Comentarios ocasionales, saludo al arrancar / al desbloquear (configurables).
 
@@ -157,12 +140,13 @@ Código en este repo; el instalador se genera con `pnpm dist`.
 
 | Problema | Qué probar |
 | --- | --- |
-| **No detecta el mic** | Menú → Micrófono **ACTIVO**; elige dispositivo. Sin sidecar de voz no hay lista de mics útiles. |
-| **Wake word flojo** | Sube sensibilidad en OÍDO; di “Capri” claro; revisa `voice.log`. |
-| **Aviso de VRAM** | Normal si LM Studio + TTS pelean por la GPU: baja el modelo local, o usa Gemini/clave cloud, o deja respuesta en **BLIPS**. |
+| **No detecta el mic** | Ajustes → Oído → Micrófono **ACTIVO**; elige dispositivo. Sin «Instalar voz» no hay lista útil. |
+| **«Hey Capri» no arranca** | Ajustes → Oído → **Instalar VC++ x64**; reiniciá. Log: `voice.log` → Discord **#bugs**. |
+| **Wake word flojo** | Sensibilidad de la palabra en Oído; «Pausa antes de cortar»; revisá `voice.log`. |
+| **Aviso de VRAM** | LM Studio + OmniVoice pelean GPU: bajá el modelo local, usá key en la nube, o **BLIPS**. |
 | **No cierra / overlay trabado** | `Ctrl+Alt+Shift+Q`, o **Salir** dos veces en la bandeja. Menú pegado: bandeja → Cerrar menú. |
-| **Pantalla negra detrás** | Menú → render OpenGL o software. |
-| **¿Habla en voz alta?** | Por defecto **no** (BLIPS). VOZ solo con sidecar + TTS; sin audio clonado no suena “como Capri”. |
+| **Invisible / transparente** | Ajustes → Apariencia → Pantalla: volvé a **Automático (recomendado)** (evitar **OpenGL (experimental)** si falla). |
+| **¿Habla en voz alta?** | Por defecto **BLIPS**. **VOZ** con «Instalar voz» + GPU NVIDIA (OmniVoice). |
 | **¿Mac / Linux?** | Sin instalador aún (Windows x64 primero). |
 
 ---

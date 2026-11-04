@@ -1019,7 +1019,7 @@ export class AppMenu {
     body.append(privacy);
 
     // AGENTES: who can tell her what they're doing (Phase 6A)
-    section('AGENTES', 'agents');
+    section('AGENTES', 'agents', 'agents');
     const agents = state.agents || [];
     for (const agent of agents) {
       const stateLabel = !agent.found ? 'NO ENCONTRADO' : agent.installed ? 'INSTALADO' : 'NO INSTALADO';
@@ -1093,11 +1093,11 @@ export class AppMenu {
       ],
       current: String(hearing.pauseBeforeCut || 'normal'),
       onChange: (id) => this.act('pause-before-cut', id),
-      help: 'hearing',
+      help: 'talk',
     });
 
     // APPS: what "abre X" / "cierra X" reach, in a panel of its own
-    section('APPS', 'apps');
+    section('APPS', 'apps', 'apps');
     action('Mis apps', {
       value: `${(state.apps || []).length} APPS`,
       chevron: 'apps',
@@ -1192,6 +1192,10 @@ export class AppMenu {
       { id: 'gl', label: 'OpenGL (experimental)', hint: 'Si Capri se vuelve invisible o transparente, volvé a Automático.' },
       { id: 'software', label: 'Sin GPU (lento)', hint: 'Dibuja por CPU; sirve como último recurso.' },
     ];
+    const screenLabel = build('div', 'appmenu__row');
+    screenLabel.dataset.setting = 'bubble';
+    screenLabel.append(labelNode('Pantalla', 'screen'));
+    body.append(screenLabel);
     const renderRow = build('div', 'appmenu__radio-group');
     renderRow.dataset.setting = 'bubble';
     for (const option of renderOptions) {
@@ -1623,7 +1627,9 @@ export class AppMenu {
     const wrap = build('div', 'appmenu__talkkey');
     const row = build('button', 'appmenu__row appmenu__row--action');
     row.type = 'button';
-    row.append(build('span', 'appmenu__label', 'Tecla para hablar'));
+    const talkLabel = build('span', 'appmenu__label appmenu__label--help');
+    talkLabel.append(build('span', '', 'Tecla para hablar'), this.helpButton('talk'));
+    row.append(talkLabel);
     if (this.capturing) row.append(build('span', 'appmenu__meta appmenu__capture', 'PULSA LA COMBINACIÓN…'));
     else if (hearing.talkHotkey) row.append(kbd(hearing.talkHotkey));
     row.append(build('span', 'appmenu__meta', this.capturing ? 'ESC' : 'CAMBIAR'));
