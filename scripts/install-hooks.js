@@ -56,6 +56,28 @@ function commandFor(scriptName, args = '') {
   return `node "${script}"${suffix}`;
 }
 
+// Return a quote-free form of a file path so it can be used in a hook command without a shell.
+// If the path has no spaces it is returned as-is (forward slashes). If it does, we ask Windows
+// for the 8.3 short path of the containing folder (which must already exist) and append the
+// filename. Returns null if the short path cannot be obtained (caller must refuse to install).
+function toShortPath(filepath) {
+  const fwd = filepath.replace(/\\/g, '/');
+  if (!/[ "']/.test(fwd)) return fwd;
+  // Need 8.3: ask powershell for the folder's ShortPath, then append the (always-short) filename.
+  const dir = path.dirname(filepath);
+  const base = path.basename(filepath);
+  try {
+    const script = `(New-Object -ComObject Scripting.FileSystemObject).GetFolder('${dir.replace(/'/g, "''")}').ShortPath`;
+    const r = spawnSync('powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', script],
+      { windowsHide: true, timeout: 5000, encoding: 'utf8' });
+    if (r.status === 0 && r.stdout.trim()) {
+      return r.stdout.trim().replace(/\\/g, '/') + '/' + base;
+    }
+  } catch { /* fall through */ }
+  return null; // caller shows error
+}
+
 function hookCommand() {
   return commandFor('capri-hook.js');
 }
@@ -138,7 +160,7 @@ function status({ home } = {}) {
   }
 }
 
-module.exports = { install, uninstall, status, EVENTS, commandFor, hookCommand, settingsPath };
+module.exports = { install, uninstall, status, EVENTS, commandFor, hookCommand, settingsPath, toShortPath };
 
 if (require.main === module) {
   const arg = process.argv[2];

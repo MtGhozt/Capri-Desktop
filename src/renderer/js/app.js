@@ -357,7 +357,11 @@ async function boot() {
   panel.onTalk = (talking) => talking && capri.perform('talk');
   bubble.onTalk = (talking) => talking && capri.perform('talk');
   bubble.onBlip = () => voice.typeBlip();
+  // main keeps one truth for the chat toggle: every open/close is reported, with who did it
+  let chatSource = 'overlay';
   bubble.onOpenChange = (open) => {
+    window.host.chatVisible?.(open, chatSource);
+    chatSource = 'overlay'; // a close after this has no opener to blame
     if (open) {
       panel.hide();
       // First entry after launch: enable hit-testing before any mousemove (tab drag).
@@ -412,7 +416,10 @@ async function boot() {
     foldingAt = performance.now();
     appMenu.hide();
     panel.hide();
-    if (bubble.open) bubble.hide();
+    if (bubble.open) {
+      chatSource = 'fold'; // idle/sleep hides it: the toggle must know it is gone
+      bubble.hide();
+    }
     // off to a bottom corner first (FIJO: she stays put), so she wakes up there
     if (!capri.dormant && !capri.busy && !capri.hidden) {
       await capri.goToBed();
@@ -444,7 +451,8 @@ async function boot() {
     folding = false;
     refreshHit();
   };
-  const unfold = async ({ chat = false } = {}) => {
+  const unfold = async ({ chat = false, source = 'overlay' } = {}) => {
+    if (chat) chatSource = source;
     if (capri.stowed) {
       host.setConfig({ visible: true });
       await capri.unstow();
@@ -490,7 +498,7 @@ async function boot() {
     refreshHit();
     if (chat && !bubble.open) bubble.show();
   };
-  dormant.onWake = () => unfold({ chat: true });
+  dormant.onWake = () => unfold({ chat: true, source: 'widget' });
   machine.onChange((state) => {
     dormant.setLabel(state, machine.pct);
     clearInterval(talkGlitch);
@@ -641,7 +649,7 @@ async function boot() {
     if (type === 'listening') {
       bubble.abortForListen();
       bumpIdle();
-      await unfold({ chat: true });
+      await unfold({ chat: true, source: 'wake' });
       machine.set('LISTENING');
       bubble.setMeter(true);
       if (evt.wake || evt.score != null) {
@@ -663,7 +671,7 @@ async function boot() {
     }
     if (type === 'transcript') {
       bumpIdle();
-      await unfold({ chat: true });
+      await unfold({ chat: true, source: 'wake' });
       bubble.submitFromVoice(evt.text, evt.command);
       return;
     }

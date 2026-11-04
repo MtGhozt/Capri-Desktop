@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('host', {
   sendChat: (text) => ipcRenderer.invoke('chat:send', text),
   cancelChat: () => ipcRenderer.send('chat:cancel'),
   closeChat: () => ipcRenderer.send('chat:close'),
+  chatVisible: (open, source) => ipcRenderer.send('chat:visible', { open: Boolean(open), source: String(source || 'overlay') }),
   onChatToken: on('chat:token'),
   onChatDone: on('chat:done'),
   onChatError: on('chat:error'),

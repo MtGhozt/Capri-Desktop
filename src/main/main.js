@@ -57,6 +57,7 @@ const { createComments } = require('./comments');
 const { createGameMode } = require('./game-mode');
 const { vramText } = require('./vram');
 const { logEvent, voiceLogPath } = require('./log');
+const { createChatVisible } = require('./chat-visible');
 const { saveClip, openClipsFolder, clipFolderLabel } = require('./clips');
 const { micActive, voiceStatus: ttsStatus } = require('./voice-config');
 const { createFollowUp } = require('./follow-up');
@@ -85,6 +86,9 @@ const { needsModelSetup, probeLocalLlm, SETUP_HINT } = require('./setup');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const assistants = createAssistants({ root: ROOT });
+// Silently rewrite any old Capri Antigravity hooks.json that still has the quoted command form.
+// Must run before any agent-install IPC so the user never sees the broken form again.
+assistants.repairOnStartup();
 const DEV = process.argv.includes('--dev');
 const E2E = process.env.CAPRI_E2E === '1' || process.env.CAPRI_E2E === 'true';
 const PORT = Number(process.env.CAPRI_PORT) || 47823;
@@ -122,7 +126,7 @@ let voiceListening = false;
 let voiceMic = { open: true, needed: true, message: '' };
 let llmBusy = false;
 let voiceQueue = [];
-let chatOpen = false;
+const chatVisible = createChatVisible({ log: (line) => logEvent(voiceLogPath(), `[capri] ${line}`) });
 let previousForeground = null;
 let menuKeyboard = false; // her menu has a text field open (Corregir lo último): it needs the keyboard
 let lastHeard = '';       // the last thing Whisper wrote, before her fixes (Corregir lo último)
@@ -201,7 +205,7 @@ function recoverAfterUnlock(reason = 'unlock') {
   logEvent(voiceLogPath(), `[capri] recover after ${reason}`);
   menuGuard.forceClose(reason);
   menuKeyboardOn(false);
-  if (chatOpen) closeChat();
+  if (chatVisible.get()) closeChat('unlock');
   else {
     overlay.setFocusable(false);
     overlay.showInactive();
@@ -372,7 +376,7 @@ const menuGuard = createMenuGuard({
       setClickThrough(false, 'menu-open');
       try { overlay?.focus(); } catch { /* focus can fail during unlock */ }
     } else {
-      if (!chatOpen && !menuKeyboard) {
+      if (!chatVisible.get() && !menuKeyboard) {
         overlay?.setFocusable(false);
         setClickThrough(true, 'menu-close');
       }
@@ -434,10 +438,10 @@ function captureForeground() {
   return previousForeground;
 }
 
-function openChat() {
+function openChat(source = 'overlay') {
   if (!overlay) return;
-  if (!chatOpen) previousForeground = captureForeground();
-  chatOpen = true;
+  if (!chatVisible.get()) previousForeground = captureForeground();
+  chatVisible.set(true, source);
   overlay.setFocusable(true);
   overlay.show();
   overlay.focus();
@@ -445,9 +449,9 @@ function openChat() {
   sendCommand('chat', { on: true });
 }
 
-function closeChat() {
-  const wasOpen = chatOpen;
-  chatOpen = false;
+function closeChat(source = 'overlay') {
+  const wasOpen = chatVisible.get();
+  chatVisible.set(false, source);
   llm?.cancel();
   if (wasOpen) sendCommand('chat', { on: false });
   const target = previousForeground;
@@ -464,7 +468,7 @@ function closeChat() {
 function menuKeyboardOn(on) {
   if (!overlay) return;
   if (on) {
-    if (!menuKeyboard && !chatOpen) previousForeground = captureForeground();
+    if (!menuKeyboard && !chatVisible.get()) previousForeground = captureForeground();
     menuKeyboard = true;
     overlay.setFocusable(true);
     overlay.show();
@@ -474,7 +478,7 @@ function menuKeyboardOn(on) {
   }
   if (!menuKeyboard) return;
   menuKeyboard = false;
-  if (chatOpen) return; // the chat still has it
+  if (chatVisible.get()) return; // the chat still has it
   const target = previousForeground;
   previousForeground = null;
   handedBackAt = Date.now();
@@ -485,13 +489,13 @@ function menuKeyboardOn(on) {
 }
 
 function toggleChat() {
-  if (chatOpen) closeChat();
-  else openChat();
+  if (chatVisible.get()) closeChat('shortcut');
+  else openChat('shortcut');
 }
 
 function toggleVisible(force) {
   const visible = typeof force === 'boolean' ? force : !config.load().visible;
-  if (!visible && chatOpen) closeChat();
+  if (!visible && chatVisible.get()) closeChat('stow');
   config.save({ visible });
   sendCommand('stow', { on: !visible });
   rebuildTray();
@@ -872,7 +876,7 @@ function setQuitSolid(on) {
     quitSolidTimer = 0;
     quitSolid = false;
     if (!overlay || overlay.isDestroyed()) return;
-    if (!chatOpen && !menuKeyboard) overlay.setFocusable(false);
+    if (!chatVisible.get() && !menuKeyboard) overlay.setFocusable(false);
     setClickThrough(clickThrough);
   }, 300);
 }
@@ -1429,7 +1433,7 @@ async function snapScreenForLook() {
 function sayWithoutLlm(text) {
   const line = String(text || '').trim();
   if (!line || !overlay) return;
-  openChat();
+  openChat('say');
   const speakId = ttsOn() ? speakQueue?.start() : 0;
   if (!speakId) speakQueue?.stop();
   overlay.webContents.send('chat:token', line);
@@ -1469,12 +1473,12 @@ async function maybeAutoLook() {
   const id = String(cfg.llm?.provider || 'local');
   const model = String(cfg.llm?.model || provider(id).model || '');
   if (!supportsVision(id, model) && !isAgent(id)) return;
-  if (llmBusy || overlayFolded || chatOpen || voiceTalking) return;
+  if (llmBusy || overlayFolded || chatVisible.get() || voiceTalking) return;
   const image = await snapScreenForLook();
   if (!image) return;
   lastAutoLookAt = Date.now();
   const line = 'Mirá mi pantalla un segundo y comentá algo breve de lo que ves.';
-  openChat();
+  openChat('look');
   const speakId = ttsOn() ? speakQueue?.start() : 0;
   if (!speakId) speakQueue?.stop();
   llmBusy = true;
@@ -2672,6 +2676,12 @@ function registerIpc() {
   ipcMain.on('voice:ptt-start', () => { voice?.pttStart(); });
   ipcMain.on('voice:ptt-stop', () => { voice?.pttStop(); });
   ipcMain.on('chat:close', () => closeChat());
+  // The bubble is the source of truth: every auto-open (wake, agent, greeting) and every hide
+  // (idle fold, Esc, click away) lands here, so Ctrl+Alt+T always flips what is on screen.
+  ipcMain.on('chat:visible', (_e, payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    chatVisible.set(payload.open, String(payload.source || 'overlay'));
+  });
   ipcMain.handle('sounds:list', () => {
     try {
       return fs.readdirSync(userSoundsDir())
@@ -2893,7 +2903,7 @@ function main() {
         }
         if (payload?.type === 'listening') {
           voiceListening = true;
-          openChat();
+          openChat('wake');
         }
         if (payload?.type === 'stopped') voiceListening = false;
         if (payload?.type === 'mic') {
@@ -2922,7 +2932,7 @@ function main() {
       canSpeak: () => Boolean(
         overlay
         && !overlayFolded
-        && !chatOpen
+        && !chatVisible.get()
         && !ttsLoading
         && ttsOn()
         && !voiceTalking

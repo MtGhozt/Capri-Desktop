@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createAssistants } = require('../src/main/assistants');
+const { createAssistants, hasQuotedAgyHook, repairAgyCommand } = require('../src/main/assistants');
 const { codexMap } = require('../hooks/capri-codex-hook');
 const { antigravityMap } = require('../hooks/capri-antigravity-hook');
 const { cursorMap } = require('../hooks/capri-cursor-hook');
@@ -155,4 +155,59 @@ test('every adapter says who it is', () => {
   const source = fs.readFileSync(path.join(__dirname, '../hooks/capri-hook.js'), 'utf8');
   assert.match(source, /origin: 'claude'/);
   assert.match(fs.readFileSync(path.join(__dirname, '../hooks/capri-forward.js'), 'utf8'), /'origin'/);
+});
+
+test('antigravity: installed command has no inner quotes (no-space path)', (t) => {
+  const home = tempHome(t);
+  const file = path.join(home, '.gemini', 'config', 'hooks.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const assistants = createAssistants({ root: ROOT, home });
+  const result = assistants.install('antigravity');
+  assert.equal(result.ok, true, result.message);
+  const text = fs.readFileSync(file, 'utf8');
+  const data = JSON.parse(text);
+  // Traverse every command string in the capri-desktop block and confirm no inner quotes.
+  function collectCommands(val) {
+    if (!val || typeof val !== 'object') return [];
+    if (typeof val.command === 'string') return [val.command];
+    return Object.values(val).flatMap(collectCommands);
+  }
+  const capriBlock = data['capri-desktop'] || data['capri-desktop-hooks'] || {};
+  for (const cmd of collectCommands(capriBlock)) {
+    // The command may be `node /path/file.js Event` — no quotes around the path.
+    if (cmd.includes('capri-antigravity-hook')) {
+      assert.ok(!/"/.test(cmd), `Command must not contain quotes: ${cmd}`);
+    }
+  }
+});
+
+test('antigravity: repairOnStartup rewrites old quoted entries, keeps foreign hooks', (t) => {
+  const home = tempHome(t);
+  const file = path.join(home, '.gemini', 'config', 'hooks.json');
+  const oldCmd = 'node "C:/Users/Matias/AppData/Local/Programs/capri-desktop/resources/app.asar.unpacked/hooks/capri-antigravity-hook.js" PostToolUse';
+  const before = {
+    'foreign-tool': { Stop: [{ type: 'command', command: 'my-tool' }] },
+    'capri-desktop': {
+      PostToolUse: [{ type: 'command', command: oldCmd, timeout: 10, async: true }],
+    },
+  };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(before, null, 2) + '\n');
+  const assistants = createAssistants({ root: ROOT, home });
+  assistants.repairOnStartup();
+  const after = JSON.parse(fs.readFileSync(file, 'utf8'));
+  // Foreign hook must be untouched.
+  assert.equal(after['foreign-tool'].Stop[0].command, 'my-tool');
+  // Capri's command must no longer have quotes.
+  const capriCmd = after['capri-desktop'].PostToolUse[0].command;
+  assert.ok(!/"/.test(capriCmd), `Repaired command must not contain quotes: ${capriCmd}`);
+  assert.ok(capriCmd.includes('capri-antigravity-hook'), 'Must still reference the hook script');
+});
+
+test('hasQuotedAgyHook and repairAgyCommand work correctly', () => {
+  const quoted = 'node "C:/Users/Matias/apps/capri/hooks/capri-antigravity-hook.js" PostToolUse';
+  const clean = 'node C:/Users/Matias/apps/capri/hooks/capri-antigravity-hook.js PostToolUse';
+  assert.ok(hasQuotedAgyHook(quoted));
+  assert.ok(!hasQuotedAgyHook(clean));
+  assert.equal(repairAgyCommand(quoted), clean);
 });

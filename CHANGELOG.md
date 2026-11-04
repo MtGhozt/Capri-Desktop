@@ -2,6 +2,13 @@
 
 ## 0.2.3
 
+> [!IMPORTANT]
+> **Usuarios de Antigravity:** esta versión corrige un bug crítico en la instalación de hooks. Si ya instalaste los hooks antes, desinstalalos y volvé a instalarlos desde Ajustes › Agentes, o ejecutá Capri una vez (se repara solo al arrancar).
+
+- **Hooks Antigravity (crítico):** el comando instalado en `hooks.json` ya no lleva comillas internas alrededor de la ruta. Antigravity no pasa el comando por shell, por lo que las comillas llegaban a node literalmente y causaban `MODULE_NOT_FOUND`; como era `PreToolUse`, cancelaba *todas* las llamadas a herramientas. Se corrige en la instalación nueva y se repara la entrada vieja al arrancar Capri.
+- **Hooks Antigravity — solo eventos de notificación:** Capri ya no instala `PreToolUse` ni `PreInvocation` en Antigravity. Solo instala `SessionStart`, `PostToolUse`, `PostInvocation` y `Stop` (todos asíncronos), así Capri nunca puede bloquear las herramientas del agente.
+- **Hooks Antigravity — ruta con espacios:** si el directorio de instalación tiene espacios en el nombre de usuario, Capri intenta obtener la ruta corta 8.3 de Windows. Si no es posible, muestra un mensaje claro en vez de instalar un hook roto.
+- **Chat toggle (Ctrl+Alt+T):** ya no requiere dos pulsaciones cuando el chat se abre solo (wake word, evento de agente, saludo, auto-look). La burbuja reporta su visibilidad real al proceso principal; el toggle siempre da vuelta lo que se ve en pantalla. Se registra `chat toggle visible=<antes>-><después> source=<origen>` en el log de voz.
 - Oído: la escucha después de «Hey Capri» ya no corta en la primera pausa para pensar. El silencio que cierra la orden pasa de 0,7 s a 1,4 s por defecto, y a 1,0 s si apenas empezaste a hablar (arranque falso); el `listen end` del log ahora muestra el corte elegido en `end_ms=`.
 - Ajustes › Oído: nueva «Pausa antes de cortar» con Corta (0,8 s) / Normal (1,4 s) / Larga (2,2 s). Queda en `config.json` como `voice.pauseBeforeCut`; los configs viejos usan Normal.
 - Chat: la línea OÍDO de CAPRI.SYS // MENSAJE muestra la transcripción completa, en varias líneas y con scroll; antes el recuadro la recortaba al llegar a 4 líneas.

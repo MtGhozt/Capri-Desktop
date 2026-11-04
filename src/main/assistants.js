@@ -10,6 +10,23 @@ const os = require('node:os');
 const path = require('node:path');
 const claude = require('../../scripts/install-hooks');
 
+// Antigravity does not invoke hook commands through a shell, so inner quotes in the command
+// reach node literally and cause MODULE_NOT_FOUND. We only install notification-only events
+// (PostToolUse, PostInvocation, Stop, SessionStart) so Capri can never block an agent's tool calls.
+const AGY_EVENTS = ['SessionStart', 'PostToolUse', 'PostInvocation', 'Stop'];
+
+// Old installs may have the quoted form `node "path" Event`. Detect and rewrite to `node path Event`.
+function hasQuotedAgyHook(value) {
+  if (!value || typeof value !== 'string') return false;
+  // matches: node "..." Event  or  ELECTRON_RUN_AS_NODE=1 "..." "..." Event
+  return /capri-antigravity-hook\.js/.test(value) && /"/.test(value);
+}
+
+function repairAgyCommand(cmd) {
+  // Strip surrounding quotes from each token that is a path: `node "C:/foo" x` -> `node C:/foo x`
+  return cmd.replace(/"([^"]+)"/g, '$1');
+}
+
 const MARKER = {
   claude: 'capri-hook.js',
   codex: 'capri-codex-hook.js',
@@ -179,33 +196,45 @@ function installCursor(root, file) {
 }
 
 function installAntigravity(root, file) {
+  // Build a quote-free script path: Antigravity calls hook commands directly (no shell),
+  // so literal quotes break node's module resolver.
+  const scriptPath = path.resolve(root, 'hooks', 'capri-antigravity-hook.js')
+    .replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+  const quoteFree = claude.toShortPath(scriptPath);
+  if (!quoteFree) {
+    throw new Error(
+      'El directorio de Capri contiene espacios y no se pudo obtener la ruta corta (8.3) de Windows. ' +
+      'Los hooks de Antigravity no se pueden instalar. Mové la app a una ruta sin espacios (p.ej. C:\\\\Programs\\\\capri-desktop).'
+    );
+  }
   const original = readJson(file);
-  const data = strip(clone(original || {}), MARKER.antigravity);
+  const data = repairAgy(strip(clone(original || {}), MARKER.antigravity));
   let key = 'capri-desktop';
   if (data[key] != null && (typeof data[key] !== 'object' || Array.isArray(data[key]))) {
     key = 'capri-desktop-hooks';
   }
   const entry = data[key] && typeof data[key] === 'object' ? data[key] : {};
   data[key] = entry;
-  const command = claude.commandFor('capri-antigravity-hook.js');
-  const direct = (event) => {
+  // Only non-blocking events: Capri must never be able to block an agent's tool calls.
+  for (const event of AGY_EVENTS) {
     const hooks = Array.isArray(entry[event]) ? entry[event] : [];
-    hooks.push({ type: 'command', command: `${command} ${event}`, timeout: 10 });
+    hooks.push({ type: 'command', command: `node ${quoteFree} ${event}`, timeout: 10, async: true });
     entry[event] = hooks;
-  };
-  const group = (event) => {
-    const hooks = Array.isArray(entry[event]) ? entry[event] : [];
-    hooks.push({ matcher: '*', hooks: [{ type: 'command', command: `${command} ${event}`, timeout: 10 }] });
-    entry[event] = hooks;
-  };
-  direct('SessionStart');
-  group('PreToolUse');
-  group('PostToolUse');
-  direct('PreInvocation');
-  direct('PostInvocation');
-  direct('Stop');
+  }
   writeJson(file, original, data);
   return { file };
+}
+
+// Walk the hooks.json tree and rewrite any old Capri Antigravity command that still has quotes.
+function repairAgy(value) {
+  if (Array.isArray(value)) return value.map(repairAgy);
+  if (value && typeof value === 'object') {
+    if (typeof value.command === 'string' && hasQuotedAgyHook(value.command)) {
+      value = { ...value, command: repairAgyCommand(value.command) };
+    }
+    for (const k of Object.keys(value)) value[k] = repairAgy(value[k]);
+  }
+  return value;
 }
 
 function installOpencode(root, file) {
@@ -327,6 +356,19 @@ function createAssistants({ root, home = os.homedir() } = {}) {
         return { ok: false, message: err.message, agent: statusOf(entry) };
       }
     },
+    // On startup, silently rewrite any old Capri Antigravity hooks.json that still has the
+    // quoted command form (`node "path" Event`). Keeps every other user hook untouched.
+    repairOnStartup() {
+      const agy = byId.get('antigravity');
+      if (!agy) return;
+      const file = agy.file;
+      try {
+        const original = readJson(file);
+        if (!original) return;
+        const repaired = repairAgy(clone(original));
+        writeJson(file, original, repaired);
+      } catch { /* non-fatal: bad JSON stays untouched */ }
+    },
   };
 }
 
@@ -335,9 +377,12 @@ module.exports = {
   MARKER,
   CODEX_EVENTS,
   CURSOR_EVENTS,
+  AGY_EVENTS,
   readJson,
   statusJson,
   strip,
   prune,
   hasMarker,
+  hasQuotedAgyHook,
+  repairAgyCommand,
 };

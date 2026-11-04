@@ -2,12 +2,13 @@
 'use strict';
 
 // Antigravity hook -> Capri. Antigravity's payload has no hook_event_name, so the installer
-// passes the event as the first argument. Antigravity always expects valid JSON on stdout:
-// PreToolUse and Stop get an explicit "allow", everything else an empty object.
+// passes the event as the first argument. We only install notification-only events
+// (PostToolUse, PostInvocation, Stop, SessionStart) so this hook can NEVER block tool calls.
+// Always exits 0 — even on bad input or a missing bridge.
 
 const { run } = require('./capri-forward');
 
-const EVENTS = ['SessionStart', 'PreToolUse', 'PostToolUse', 'PreInvocation', 'PostInvocation', 'Stop'];
+const EVENTS = ['SessionStart', 'PostToolUse', 'PostInvocation', 'Stop'];
 
 function base(evt) {
   return {
@@ -56,8 +57,8 @@ function antigravityMap(evt, name = process.argv[2]) {
 if (require.main === module) {
   const name = process.argv[2] || '';
   run((evt) => antigravityMap(evt, name), () => {
-    const out = name === 'PreToolUse' || name === 'Stop' ? { decision: 'allow' } : {};
-    process.stdout.write(JSON.stringify(out) + '\n');
+    // Always emit valid JSON and exit 0: Capri never blocks Antigravity's tool calls.
+    process.stdout.write(JSON.stringify({}) + '\n');
     process.exit(0);
   });
 }
