@@ -999,6 +999,11 @@ button.appmenu__row {
   transform: rotate(90deg);
 }
 
+/* a row with both a value and a chevron: the value rides with the chevron, right-aligned */
+.appmenu__row .appmenu__meta:has(+ .appmenu__chevron) {
+  margin-left: auto;
+}
+
 .appmenu__kbd {
   display: inline-block;
   flex: none;
