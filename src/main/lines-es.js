@@ -116,6 +116,19 @@ const POOLS = {
     'Jajaja. Todavía me necesitás.',
     'Cancelado. Me quedo, obvio.',
   ],
+  // {nombre} is what you asked her to call you
+  nombre: [
+    'Listo, {nombre}. Suena a alguien que me va a dar problemas. Me gusta.',
+    'Anotado: {nombre}. Tengo memoria de sobra, no lo voy a olvidar.',
+    'Bueno, {nombre}. Igual te voy a decir humanito de vez en cuando, ¿eh?',
+    'Hecho, {nombre}. Ya sos alguien, no un «usuario» cualquiera.',
+    '{nombre}. Me gusta cómo suena. Casi tan bien como Capri.',
+  ],
+  sinNovedades: [
+    'Esta versión no trae nada nuevo: sigo igual de perfecta.',
+    'Novedades… ninguna que valga la pena contarte. Sigo siendo yo.',
+    'Nada nuevo por acá. Actualizaron mi código, no mi personalidad.',
+  ],
 
   // Paso 4A: what she hears wrong. {heard} and {meant} are filled in (fillLine).
   corregir: [

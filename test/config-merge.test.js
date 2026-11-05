@@ -96,6 +96,15 @@ test('an unreadable config.json is kept as .bak instead of vanishing', (t) => {
   assert.equal(readConfig(dir).wander, true);
 });
 
+test('the name she calls him is empty by default and survives a restart', (t) => {
+  const dir = profile(t);
+  const config = freshConfig(dir);
+  assert.equal(config.load().userName, '');
+  assert.equal(config.load().lastSeenVersion, '');
+  config.save({ userName: 'Mati' });
+  assert.equal(freshConfig(dir).load().userName, 'Mati');
+});
+
 test('a key file that cannot be decrypted is reported, not treated as empty', (t) => {
   const dir = profile(t);
   fs.writeFileSync(keysFile(dir), 'not-a-token-file');

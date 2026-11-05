@@ -266,6 +266,15 @@ test('rolling history keeps about the last 10 turns on every request', async () 
   assert.equal(turns.at(-1).content, 'turno 11');
 });
 
+test('she is told the name to use only when there is one', async () => {
+  const named = harness({ cfg: { ...cfgOf({ provider: 'local' }), userName: 'Matías' } });
+  await named.say();
+  assert.match(named.calls[0].body.messages[0].content, /El usuario se llama Matías; llamalo así de vez en cuando, sin abusar/);
+  const unnamed = harness({ cfg: cfgOf({ provider: 'local' }) });
+  await unnamed.say();
+  assert.ok(!/El usuario se llama/.test(unnamed.calls[0].body.messages[0].content));
+});
+
 test('screen exe/title is not stuffed into every system prompt anymore', async () => {
   // Phase 6C: looking sends a JPEG on the user turn; shareScreen no longer leaks fg text each chat.
   const on = harness({ cfg: cfgOf({ provider: 'openai', shareScreen: true }), screen: 'chrome.exe «GitHub»' });

@@ -1148,6 +1148,13 @@ export class AppMenu {
 
     // COMPORTAMIENTO
     section('COMPORTAMIENTO', 'behavior');
+    const nameRow = build('div', 'appmenu__row appmenu__name-row');
+    nameRow.dataset.setting = 'behavior';
+    nameRow.append(build('span', 'appmenu__label', 'Tu nombre'));
+    const nameInput = this.textInput(build, cfg.userName || '', 'cómo te llamo', 24);
+    nameInput.addEventListener('change', () => this.act('user-name', nameInput.value.trim()));
+    nameRow.append(nameInput);
+    body.append(nameRow);
     toggle('Comentarios', {
       setting: 'behavior',
       on: cfg.comments?.enabled !== false,

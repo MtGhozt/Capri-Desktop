@@ -41,6 +41,8 @@ const { createGoodnight } = require('./goodnight');
 const { isClipCommand } = require('./clip-command');
 const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
+const { parseNameCommand, cleanName } = require('./name-command');
+const { notesFor, bootNotes, isWhatsNewCommand } = require('./whats-new');
 const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
 const { createSystemFlow, runSystem } = require('./system-command');
@@ -137,6 +139,7 @@ let gameHadLlm = false;
 let lastGreetingAt = 0;
 let bootGreetingDone = false;
 let greeting = null;
+let whatsNewLines = null; // this boot's "what's new" lines, once only
 let userFiles = null;
 const GREETING_COOLDOWN_MS = 10 * 60_000;
 
@@ -563,6 +566,7 @@ function rendererConfig() {
     langSetting: cfg.lang,
     dev: DEV,
     e2e: E2E,
+    whatsNew: whatsNewLines,
     floorGap: overlayArea().gap,
   };
 }
@@ -928,6 +932,23 @@ function goForgetReply({ chat = true } = {}) {
   llm.reset();
   commandReply('olvidar', { chat, badge: 'MEM' });
   return { ok: true };
+}
+
+// "llamame Mati" / the name field in Ajustes › Comportamiento
+function goNameReply(name, { chat = true } = {}) {
+  updateConfig({ userName: name });
+  return { ok: true, line: announce(fillLine(pickLine('nombre'), { nombre: name }), { chat, badge: 'NOMBRE' }) };
+}
+
+// "¿qué hay de nuevo?": the current version's lines, no model
+function goWhatsNewReply({ chat = true } = {}) {
+  const lines = notesFor(app.getVersion());
+  return {
+    ok: true,
+    line: lines
+      ? announce(lines.join(' '), { chat, badge: 'NUEVO' })
+      : commandReply('sinNovedades', { chat, badge: 'NUEVO' }),
+  };
 }
 
 function goMicReply(on, { chat = true } = {}) {
@@ -1948,6 +1969,12 @@ function applyMenuAction(id, value) {
     case 'mic': goMicReply(Boolean(value), { chat: false }); break;
     case 'mic-device': updateConfig({ voice: { inputDevice: value } }); break;
     case 'forget': goForgetReply({ chat: false }); break;
+    case 'user-name': {
+      const name = cleanName(value);
+      if (!name) return { ok: false, message: 'Ese nombre no me sirve.' };
+      updateConfig({ userName: name });
+      return { ok: true, message: `Te voy a llamar ${name}.` };
+    }
     case 'gaming-mode': updateConfig({ gaming: { mode: value === 'off' ? 'off' : 'auto' } }); break;
     case 'drone-mode': updateConfig({ gaming: { drone: Boolean(value) } }); break;
     case 'game-list':
@@ -2247,6 +2274,7 @@ function menuState(extra = {}) {
         source: activeVoiceLabel(cfg.voice),
       },
       locked: Boolean(cfg.position?.locked),
+      userName: String(cfg.userName || ''),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
       gaming: {
         mode: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
@@ -2647,6 +2675,9 @@ function registerIpc() {
       const done = goFixReply(fixOrder);
       if (done.line) return done; // said something; a fix that can't be saved (too long) goes to the model
     }
+    const newName = parseNameCommand(line);
+    if (newName) return goNameReply(newName);
+    if (isWhatsNewCommand(line)) return goWhatsNewReply();
     const powerOrder = await systemFlow.command(line);
     if (powerOrder) return { ok: true };
     const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
@@ -2885,6 +2916,9 @@ function main() {
     restoreSpotifyToken();
     serveProtocol();
     registerIpc();
+    // "what's new" once, only after an update: computed before lastSeenVersion moves on
+    whatsNewLines = bootNotes({ version: app.getVersion(), lastSeenVersion: config.load().lastSeenVersion });
+    if (config.load().lastSeenVersion !== app.getVersion()) config.save({ lastSeenVersion: app.getVersion() });
     userFiles = ensureUserFiles({ userData: app.getPath('userData'), root: ROOT });
     llm = createLlm({
       loadConfig: () => config.load(),

@@ -105,6 +105,8 @@ function createLlm({
     const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. ${temporalContext({ now: now(), lastTalkAt })} Si pregunta la hora o la fecha, usa esos datos.`];
     const notes = memoryText();
     if (notes) parts.push(`Notas fijas sobre el usuario (memory.md):\n${notes}`);
+    const name = String(cfg.userName || '').trim();
+    if (name) parts.push(`El usuario se llama ${name}; llamalo así de vez en cuando, sin abusar.`);
     // her answer is shown in a terminal box and read out loud: markers would be spelled out
     if (cloud) parts.push('Responde en texto plano, sin Markdown, sin asteriscos ni listas; frases cortas para ser leídas en voz alta. Nada de etiquetas de seguridad ni de tu razonamiento.');
     // Screen images ride on the user turn (screen-look), not the system prompt.

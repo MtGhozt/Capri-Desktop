@@ -1241,10 +1241,15 @@ async function boot() {
   };
   if (config.guide?.welcome) {
     const hooks = await host.hooksStatus();
-    if (!config.welcomed || !hooks.installed) guide.welcome();
+    if (!config.welcomed && !config.userName) await guide.askName(); // once, on the very first run
+    if (!config.welcomed || !hooks.installed) await guide.welcome();
     else await hello();
   } else if ((await host.llmStatus()) !== 'booting') {
     await hello();
+  }
+  // after an update only: one bubble with what changed in this version
+  if (config.whatsNew?.length) {
+    panel.say({ kind: 'info', badge: 'NUEVO', line: config.whatsNew.join(' '), hold: 9000 });
   }
 }
 

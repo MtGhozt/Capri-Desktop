@@ -396,6 +396,19 @@ body {
   margin: 12px 0 2px;
 }
 
+/* a message that asks for one line of text (her first-run "¿cómo querés que te llame?") */
+.panel__input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0 2px;
+}
+
+.panel__input .appmenu__input {
+  flex: 1;
+  min-width: 0;
+}
+
 .panel__action {
   appearance: none;
   border: 0;
@@ -1312,6 +1325,11 @@ button.appmenu__row {
 .appmenu__comment-frequency {
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.appmenu__name-row .appmenu__input {
+  width: 140px;
+  flex: none;
 }
 
 .appmenu__comment-frequency .appmenu__input {

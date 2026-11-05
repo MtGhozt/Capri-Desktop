@@ -28,13 +28,13 @@ export class Guide {
   }
 
   // One panel of the guide; resolves with the id of the button you click, or null if it went away.
-  ask({ kind = 'info', face, line, quote, badge, actions }) {
+  ask({ kind = 'info', face, line, quote, badge, actions, input }) {
     this.answer(null);
     const token = Symbol('guide');
     return new Promise((resolve) => {
       this.waiting = { token, resolve };
       // something more important on screen (a permission prompt, Claude's answer): no guide now
-      if (!this.panel.say({ kind, face, line, quote, badge, actions, guide: true, hold: null, token })) this.answer(null);
+      if (!this.panel.say({ kind, face, line, quote, badge, actions, input, guide: true, hold: null, token })) this.answer(null);
     });
   }
 
@@ -76,6 +76,30 @@ export class Guide {
   }
 
   // ---------- topics ----------
+
+  // First launch: what she should call him. "Saltar" leaves it for Ajustes › Comportamiento.
+  askName() {
+    return this.scene(async () => {
+      this.host.menuAction({ id: 'menu-keyboard', value: true }).catch(() => {});
+      let name = '';
+      const answer = this.ask({
+        face: 'look',
+        line: '¿Cómo querés que te llame?',
+        input: {
+          placeholder: 'tu nombre',
+          onSubmit: (value) => {
+            name = value;
+            this.answer('ok');
+          },
+        },
+        actions: [{ id: 'skip', label: 'Saltar' }],
+      });
+      this.panel.focusAsk();
+      await answer;
+      this.host.menuAction({ id: 'menu-keyboard', value: false }).catch(() => {});
+      if (name) await this.host.menuAction({ id: 'user-name', value: name }).catch(() => {});
+    });
+  }
 
   // First launch, or nothing hooked up yet: who she is, and plugging her into Claude Code.
   welcome() {

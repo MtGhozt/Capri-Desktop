@@ -21,6 +21,12 @@ ajustado a este proyecto.
 | Volver a ser clickeable cuando el puntero está encima de ella | `59c5c5a` | PolyForm Noncommercial 1.0.0 | `src/renderer/js/app.js` |
 | Opción "Pantalla" (OpenGL / sin tarjeta gráfica) para PCs donde su ventana sale negra | `4096696` | MIT | `src/main/render-mode.js`, `src/renderer/js/menu.js`, `src/main/config.js` |
 
+## Créditos de ideas
+
+| Idea | Proyecto | Licencia | Dónde quedó |
+| --- | --- | --- | --- |
+| Preguntar cómo llamarte ("¿cómo querés que te llame?", comando `llamame X`) y contarte qué cambió al actualizar ("¿qué hay de nuevo?"). Código escrito desde cero. | [Capri-cmd/capri-ai](https://github.com/Capri-cmd/capri-ai), [lachydotmcg/capri-desktop](https://github.com/lachydotmcg/capri-desktop) | MIT | `src/main/name-command.js`, `src/main/whats-new.js` |
+
 ## Fases anteriores (ya en el repo)
 
 | Qué se adaptó | Commit de upstream | Licencia | Dónde quedó |

@@ -6,6 +6,8 @@ const { app } = require('electron');
 
 const DEFAULTS = {
   scale: 0.6,        // sprite scale, 0.6 ≈ 250px tall
+  userName: '',      // what she calls you; '' = no name yet (asks on first run, "llamame Mati")
+  lastSeenVersion: '', // version whose "what's new" lines were already shown; '' = fresh install
   muted: false,
   volume: 0.7,
   lang: 'es',        // overlay + Capri's spoken replies; 'auto' follows the system language

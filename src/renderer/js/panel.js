@@ -35,6 +35,10 @@ export class Panel {
     this.onDismiss = null; // (message) => void, a message left: closed, timed out or replaced
     this.summary = panel.querySelector('.panel__summary');
     this.log = panel.querySelector('.panel__log');
+    this.askForm = panel.querySelector('.panel__input');
+    this.askField = panel.querySelector('.panel__input .appmenu__input');
+    this.askOk = panel.querySelector('.panel__input .panel__action');
+    this.askSubmit = null; // (value) => void, when the message asks for one line of text
     this.tag = panel.querySelector('.panel__tag');
     this.state = panel.querySelector('.panel__state');
     this.tickerVerb = ticker.querySelector('.ticker__verb');
@@ -52,6 +56,16 @@ export class Panel {
     this.tickerTimer = null;
 
     this.el.addEventListener('click', () => this.hide());
+    // the text row is part of the message, not a click that closes it
+    for (const type of ['mousedown', 'click']) this.askForm.addEventListener(type, (e) => e.stopPropagation());
+    this.askOk.addEventListener('click', () => this.submitAsk());
+    this.askField.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.submitAsk();
+      }
+    });
     this.portrait.addEventListener('animationend', (e) => {
       if (e.animationName === 'face-swap') this.portrait.classList.remove('is-swapping');
     });
@@ -103,6 +117,13 @@ export class Panel {
       return button;
     }));
     this.actions.hidden = !msg.actions?.length;
+    this.askSubmit = msg.input?.onSubmit || null;
+    this.askForm.hidden = !msg.input;
+    if (msg.input) {
+      this.askField.value = msg.input.value || '';
+      this.askField.placeholder = msg.input.placeholder || '';
+      this.askOk.textContent = msg.input.ok || 'LISTO';
+    }
     this.summary.textContent = msg.summary || '';
     this.summary.hidden = !msg.summary;
     this.renderLog(msg.log || []);
@@ -117,6 +138,18 @@ export class Panel {
 
     if (msg.hold) this.hideTimer = setTimeout(() => this.hide(), msg.hold);
     return true;
+  }
+
+  // The one-line answer of a message that asked for it (the text row).
+  submitAsk() {
+    const submit = this.askSubmit;
+    if (!submit) return;
+    this.askSubmit = null;
+    submit(this.askField.value.trim());
+  }
+
+  focusAsk() {
+    this.askField?.focus();
   }
 
   // Change her expression; the swap glitches across a couple of drawings.
@@ -156,6 +189,7 @@ export class Panel {
     clearInterval(this.decodeTimer);
     this.onTalk?.(false);
     if (this.el.hidden || this.leaving) return;
+    this.askSubmit = null;
     const gone = this.current;
     this.current = null;
     this.leaving = true;
