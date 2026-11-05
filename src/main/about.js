@@ -26,6 +26,8 @@ const OPEN_HOSTS = new Set([
   'python.org', 'www.python.org',
   'build.nvidia.com', 'aistudio.google.com',
   'console.anthropic.com', 'console.x.ai', 'platform.openai.com',
+  'console.groq.com', 'console.mistral.ai', 'platform.deepseek.com',
+  'openrouter.ai',
   'developer.spotify.com',
   'ko-fi.com', 'www.ko-fi.com',
 ]);

@@ -31,6 +31,10 @@ test('open-url allowlist: discord, tiktok, Capri github, Spotify; http/https onl
   assert.equal(isAllowedOpenUrl(LINKS.changelog), true);
   assert.equal(isAllowedOpenUrl(LINKS.license), true);
   assert.equal(isAllowedOpenUrl('https://console.anthropic.com/'), true);
+  assert.equal(isAllowedOpenUrl('https://console.groq.com/keys'), true);
+  assert.equal(isAllowedOpenUrl('https://console.mistral.ai/api-keys'), true);
+  assert.equal(isAllowedOpenUrl('https://platform.deepseek.com/api_keys'), true);
+  assert.equal(isAllowedOpenUrl('https://openrouter.ai/keys'), true);
   assert.equal(isAllowedOpenUrl('https://ko-fi.com/someone'), true);
   assert.equal(isAllowedOpenUrl('https://www.python.org/downloads/release/python-3119/'), true);
   assert.equal(isAllowedOpenUrl('https://developer.spotify.com/dashboard'), true);
