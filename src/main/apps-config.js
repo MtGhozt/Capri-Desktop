@@ -19,8 +19,9 @@ const TYPES = ['program', 'steam', 'link'];
 const CLOSE_MODES = ['graceful', 'force', 'ask'];
 const MAX_NAME = 40;
 const MAX_ALIASES = 12;
-// which first-run candidates a table already got: 1 = Paso 4C, 2 = Grok, Cursor, Warp, Explorer…
-const SEED_VERSION = 2;
+// which first-run candidates a table already got: 1 = Paso 4C, 2 = Grok, Cursor, Warp, Explorer…,
+// 3 = folders (Descargas, Documentos, Escritorio)
+const SEED_VERSION = 3;
 // never something to open from a phrase: local files and scripts through a "link"
 const BAD_SCHEMES = /^(?:file|javascript|vbscript|data|ms-msdt|search-ms|ms-officecmd|shell)$/i;
 
@@ -233,6 +234,14 @@ function defaultCandidates({ env = process.env, exists = () => false, found = {}
     since: 2, name: 'Explorador de archivos', aliases: ['explorador', 'archivos', 'el explorador', 'explorer', 'file explorer', 'mis archivos'],
     type: 'program', target: '%WINDIR%\\explorer.exe', windows: 'explorer', close: 'graceful',
   });
+  // Folders open through the shell; without processes, closing them is a friendly no-op.
+  for (const [name, target, aliases] of [
+    ['Descargas', '%USERPROFILE%\\Downloads', ['descargas', 'downloads', 'carpeta descargas', 'carpeta de descargas']],
+    ['Documentos', '%USERPROFILE%\\Documents', ['documentos', 'documents', 'mis documentos', 'carpeta documentos']],
+    ['Escritorio', '%USERPROFILE%\\Desktop', ['escritorio', 'desktop', 'carpeta escritorio']],
+  ]) {
+    if (has(target)) out.push({ since: 3, name, aliases, type: 'program', target, close: 'graceful' });
+  }
   const notion = shortcut('Notion') || first('%LOCALAPPDATA%\\Programs\\Notion\\Notion.exe');
   if (notion) out.push({ since: 2, name: 'Notion', aliases: ['nocion', 'noshon', 'notion app'], type: 'program', target: path.win32.normalize(notion), close: 'graceful' });
   const epic = shortcut('Epic Games Launcher') || first(

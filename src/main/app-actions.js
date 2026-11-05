@@ -6,7 +6,7 @@
 //   exists(path)            the file is there (lstat: Store aliases can't be stat'ed)
 //   spawn(file, args, opts) starts a program, detached; resolves once it started
 //   openExternal(url)       a URL or URI through the shell (Steam, Spotify, the browser…)
-//   openPath(path)          a shortcut (.lnk) through the shell
+//   openPath(path)          a shortcut, folder or file through the shell
 //   probe(spec, skip)       { ids, names, left, rect } of the app's processes, `skip` pids left out;
 //                           spec { names, dir, title }: by exe name, by folder, by window title
 //   graceful(spec, skip)    WM_CLOSE to their windows, then waits ~4 s: { ids, names, left }
@@ -71,7 +71,8 @@ function createAppActions(deps) {
       }
       const file = expandEnv(app.target, env);
       if (!deps.exists(file)) return { ok: false, error: 'no existe el archivo' };
-      if (/\.lnk$/i.test(file)) {
+      // Folders and files open through the shell; only a real .exe is spawned.
+      if (!/\.exe$/i.test(file)) {
         const err = await deps.openPath(file);
         return err ? { ok: false, error: String(err) } : { ok: true };
       }

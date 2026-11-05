@@ -87,6 +87,22 @@ test('opening programs, shortcuts, links and Steam games', async () => {
   assert.equal(f.calls.length, 4);
 });
 
+test('folders and non-exe files open through the shell, never spawned', async () => {
+  const f = fake({ files: ['C:\\Users\\M\\Downloads', 'C:\\Users\\M\\notas.txt'] });
+  const actions = createAppActions(f.deps);
+  assert.equal((await actions.open({ type: 'program', target: 'C:\\Users\\M\\Downloads' })).ok, true);
+  assert.equal((await actions.open({ type: 'program', target: 'C:\\Users\\M\\notas.txt' })).ok, true);
+  assert.deepEqual(f.calls, [['path', 'C:\\Users\\M\\Downloads'], ['path', 'C:\\Users\\M\\notas.txt']]);
+  assert.ok(!f.calls.some((c) => c[0] === 'spawn'));
+});
+
+test('a seeded folder is never closed like an app', async () => {
+  const f = fake({ files: ['C:\\Users\\M\\Downloads'] });
+  const folder = { name: 'Descargas', type: 'program', target: 'C:\\Users\\M\\Downloads', processes: [], close: 'graceful' };
+  assert.deepEqual(await createAppActions(f.deps).close(folder, 'force'), { status: 'notCloseable' });
+  assert.deepEqual(f.calls, []);
+});
+
 test('File Explorer: only its windows close, explorer.exe is never probed or killed', async () => {
   const f = fake();
   let windows = 2;

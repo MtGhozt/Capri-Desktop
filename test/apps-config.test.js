@@ -80,11 +80,28 @@ test('seed versions: an older table only gets the newer candidates', () => {
   assert.equal(seededVersion(false), 0);
   assert.equal(seededVersion(undefined), 0);
   assert.equal(seededVersion(2), 2);
-  assert.equal(SEED_VERSION, 2);
+  assert.equal(SEED_VERSION, 3);
   const all = defaultCandidates({ env: { WINDIR: 'C:\\Windows' }, exists: () => false });
   assert.deepEqual(newCandidates(all, 1).map((a) => a.name), ['Grok', 'Explorador de archivos']);
   assert.deepEqual(newCandidates(all, 2), []);
   assert.equal(all.find((a) => a.name === 'Grok').target, 'https://grok.com'); // no desktop app: the site
+});
+
+test('seed 3 adds Descargas, Documentos and Escritorio when they exist', () => {
+  const env = { USERPROFILE: 'C:\\Users\\M' };
+  const files = new Set(['C:\\Users\\M\\Downloads', 'C:\\Users\\M\\Documents', 'C:\\Users\\M\\Desktop']);
+  const candidates = newCandidates(
+    defaultCandidates({ env, exists: (p) => files.has(p) }),
+    2,
+  ).map((raw) => normalizeApp(raw));
+  assert.deepEqual(candidates.map((a) => a.name), ['Descargas', 'Documentos', 'Escritorio']);
+  const downloads = candidates.find((a) => a.name === 'Descargas');
+  assert.equal(downloads.target, '%USERPROFILE%\\Downloads'); // expanded when opening
+  assert.deepEqual(downloads.processes, []); // folders have no process to close
+  assert.ok(downloads.aliases.includes('carpeta descargas'));
+  // A folder that is not there is not seeded.
+  const onlyDesktop = defaultCandidates({ env, exists: (p) => p === 'C:\\Users\\M\\Desktop' });
+  assert.deepEqual(newCandidates(onlyDesktop, 2).map((a) => a.name), ['Escritorio']);
 });
 
 test('seed 2 finds Grok, Cursor, Warp, Notion and Epic from their Start menu shortcuts', () => {
