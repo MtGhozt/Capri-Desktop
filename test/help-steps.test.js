@@ -8,7 +8,7 @@ const { HELP_STEPS, toggleHelp, splitHelpText } = require('../src/renderer/js/he
 
 test('each help id has a title and steps', () => {
   assert.deepEqual(Object.keys(HELP_STEPS).sort(), [
-    'agents', 'apps', 'brain', 'gaming', 'hearing', 'screen', 'spotify', 'talk', 'voice', 'wake',
+    'agents', 'apps', 'brain', 'gaming', 'hearing', 'namida', 'screen', 'spotify', 'talk', 'voice', 'wake',
   ]);
   for (const [id, help] of Object.entries(HELP_STEPS)) {
     assert.ok(help.title, id);
@@ -78,6 +78,10 @@ test('help covers current install, talk, brain cards, apps, screen and #bugs', (
   assert.match(all, /#bugs/);
   assert.match(all, /developer\.spotify\.com/);
   assert.match(all, /127\.0\.0\.1:47835\/callback/);
+  assert.match(all, /Reproductor = NAMIDA/);
+  assert.match(all, /namida\.exe/);
+  assert.match(all, /qué está sonando/);
+  assert.match(all, /Agregar carpeta o archivo/);
   assert.match(all, /Microsoft Visual C\+\+ Redistributable \(x64\)/);
   assert.match(all, /vc_redist\.x64\.exe/);
 });

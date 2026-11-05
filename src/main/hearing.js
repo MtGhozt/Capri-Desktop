@@ -121,9 +121,14 @@ const sameCombo = (a, b) => {
   return Boolean(x) && x === normalizeAccelerator(b);
 };
 
+// Which [id, combo, label] entry already holds `accel`, ignoring the one being changed.
+function shortcutConflict(accel, combos, skipId = '') {
+  return (combos || []).find(([id, combo]) => id !== skipId && sameCombo(combo, accel)) || null;
+}
+
 module.exports = {
   SENS_MIN, SENS_MAX, SENS_STEP, DEFAULT_THRESHOLD,
   thresholdFromPct, pctFromThreshold, WAKE_LEVELS, wakeSensitivity,
   PAUSE_LEVELS, pauseBeforeCutMs,
-  normalizeAccelerator, acceleratorFromKey, sameCombo,
+  normalizeAccelerator, acceleratorFromKey, sameCombo, shortcutConflict,
 };

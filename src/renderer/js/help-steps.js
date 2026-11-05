@@ -38,6 +38,16 @@ export const HELP_STEPS = {
       'Sin Spotify Premium Capri solo abre la app; con Premium controla play, pausa, siguiente y búsqueda.',
     ],
   },
+  namida: {
+    title: 'Namida',
+    section: 'music',
+    steps: [
+      'En Namida, agregá tus carpetas de música (Biblioteca / Folders) y esperá a que termine de leerlas.',
+      'En Capri: Ajustes › Música / Reproductor › Reproductor = NAMIDA.',
+      'En Mis apps asegurate de tener la app «Namida»; si es portable, agregá namida.exe a mano.',
+      'Ejemplos: «pon música», «pon <canción>», «qué está sonando», «pausa la música», «siguiente».',
+    ],
+  },
   hearing: {
     title: 'Instalar voz',
     section: 'hearing',
@@ -140,6 +150,7 @@ export const HELP_STEPS = {
     steps: [
       'Ajustes › Mis apps › «Mis apps» abre la lista de programas y enlaces que Capri puede abrir o cerrar.',
       '«Buscar programa…» elige un .exe o acceso directo de esta PC.',
+      '«Agregar carpeta o archivo» suma una carpeta (Descargas, Documentos, Escritorio) o cualquier archivo: se abre como «abrí Descargas».',
       '«Añadir enlace» guarda una URL (por ejemplo un sitio) con el nombre que le pongas.',
       'En «Probar comando» escribí algo como «abre Discord»: te dice qué haría, sin hacerlo.',
     ],

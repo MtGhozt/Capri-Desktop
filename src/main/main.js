@@ -45,7 +45,7 @@ const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
 const { createSystemFlow, runSystem } = require('./system-command');
 const { wakePhraseLabel } = require('./wake-phrase');
-const { createMusic } = require('./music');
+const { createMusic, readNowPlaying, NOW_PLAYING_SCRIPT } = require('./music');
 const { createSpotify, createTokenStore, authorizeSpotify, spotifyFailureLine } = require('./spotify');
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
@@ -63,7 +63,7 @@ const { micActive, voiceStatus: ttsStatus } = require('./voice-config');
 const { createFollowUp } = require('./follow-up');
 const {
   SENS_MIN, SENS_MAX, SENS_STEP, thresholdFromPct, pctFromThreshold, wakeSensitivity,
-  normalizeAccelerator, acceleratorFromKey, sameCombo,
+  normalizeAccelerator, acceleratorFromKey, sameCombo, shortcutConflict,
 } = require('./hearing');
 const { createAppFlow } = require('./app-flow');
 const { createAppActions, isProtected } = require('./app-actions');
@@ -1116,6 +1116,7 @@ const music = createMusic({
   openExternal: (url) => shell.openExternal(url),
   log: (text) => appLog(text),
   isRunning: (name) => processRunning(name),
+  readNowPlaying: () => readNowPlaying(spawn, NOW_PLAYING_SCRIPT),
   sendKey: (action, script) => new Promise((resolve, reject) => {
     if (process.platform !== 'win32') return reject(new Error('media keys require Windows'));
     const child = spawn('powershell.exe', [
@@ -1303,6 +1304,25 @@ async function pickProgram() {
   return addApp({
     name, aliases: [], type: 'program', target, args,
     processes: /\.exe$/i.test(target) ? [processName(target)] : [], close: 'graceful',
+  });
+}
+
+// "abrí Descargas": a folder or any file, opened through the shell like a .lnk.
+async function pickFolderOrFile() {
+  const res = await dialog.showOpenDialog(overlay, {
+    title: 'Buscar carpeta o archivo',
+    properties: ['openFile', 'openDirectory'],
+  });
+  const file = !res.canceled && res.filePaths?.[0];
+  if (!file) return { ok: false, message: '' };
+  return addApp({
+    name: path.basename(file),
+    aliases: [],
+    type: 'program',
+    target: file,
+    args: '',
+    processes: /\.exe$/i.test(file) ? [processName(file)] : [],
+    close: 'graceful',
   });
 }
 
@@ -1989,8 +2009,10 @@ function applyMenuAction(id, value) {
     case 'pause-before-cut':
       updateConfig({ voice: { pauseBeforeCut: ['short', 'normal', 'long'].includes(String(value)) ? String(value) : 'normal' } });
       break;
-    case 'talk-hotkey': return setTalkHotkey(value);
+    case 'talk-hotkey': return setShortcut('talk', value); // old alias from OÍDO
+    case 'shortcut-set': return setShortcut(value?.id, value);
     case 'apps-pick-program': return pickProgram().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
+    case 'apps-pick-folder-file': return pickFolderOrFile().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
     case 'apps-add-link': return addLink(value);
     case 'apps-update': return updateApp(value);
     case 'apps-remove': return removeApp(value);
@@ -2028,26 +2050,44 @@ function applyMenuAction(id, value) {
 let overlayFolded = false;
 let registeredShortcuts = [];
 let menuCloseCombo = ''; // the shortcut that closes her menu, as registered
+const shortcutActive = { toggle: false, chat: false, talk: false };
+const shortcutCombo = { toggle: '', chat: '', talk: '' };
 
-// The combos shown in her menu; edit shortcuts.* in config.json and restart to change them.
+// Ajustes › Atajos edits these; a combo another app already holds stays in config.json as is.
 function registerShortcuts() {
   for (const accel of registeredShortcuts) {
     try { globalShortcut.unregister(accel); } catch { /* already gone */ }
   }
   registeredShortcuts = [];
+  shortcutActive.toggle = false;
+  shortcutActive.chat = false;
+  shortcutActive.talk = false;
+  shortcutCombo.toggle = '';
+  shortcutCombo.chat = '';
+  shortcutCombo.talk = '';
   const bind = (accel, run) => {
     const combo = String(accel || '').trim();
-    if (!combo) return;
+    if (!combo) return false;
     try {
-      if (globalShortcut.register(combo, run)) registeredShortcuts.push(combo);
-      else console.error(`[capri] shortcut already taken: ${combo}`);
+      if (globalShortcut.register(combo, run)) {
+        registeredShortcuts.push(combo);
+        return true;
+      }
+      console.error(`[capri] shortcut already taken: ${combo}`);
     } catch (err) {
       console.error(`[capri] bad shortcut "${combo}": ${err.message}`);
     }
+    return false;
   };
   const s = config.load().shortcuts || {};
-  bind(s.toggle, () => toggleVisible());
-  bind(s.chat, () => toggleChat());
+  if (bind(s.toggle, () => toggleVisible())) {
+    shortcutActive.toggle = true;
+    shortcutCombo.toggle = s.toggle;
+  }
+  if (bind(s.chat, () => toggleChat())) {
+    shortcutActive.chat = true;
+    shortcutCombo.chat = s.chat;
+  }
   // Always on: emergency quit with no confirmation (README "Si Capri se traba").
   bind(FORCE_QUIT_ACCEL, () => doQuit());
   // Close her menu: the first of these that's free (another app may hold Ctrl+Alt+M)
@@ -2062,10 +2102,14 @@ function registerShortcuts() {
     } catch { /* a bad combo in config.json: the next one */ }
   }
   logEvent(voiceLogPath(), `[capri] close-menu shortcut: ${menuCloseCombo || 'none free'}`);
-  rebuildTray(); // the tray shows the combo that's really there
   talkCombo = '';
   const talk = talkHotkey(config.load());
-  if (talk && registerTalk(talk)) talkCombo = talk;
+  if (talk && registerShortcut('talk', talk)) {
+    talkCombo = talk;
+    shortcutActive.talk = true;
+    shortcutCombo.talk = talk;
+  }
+  rebuildTray(); // the tray shows the combo that's really there
 }
 
 // Push to talk (OÍDO in her menu, hearing.talkHotkey): she listens right away, as if you had
@@ -2099,9 +2143,15 @@ function talkNow() {
   voice?.pttStart();
 }
 
-function registerTalk(combo) {
+const shortcutRuns = {
+  toggle: () => toggleVisible(),
+  chat: () => toggleChat(),
+  talk: () => talkNow(),
+};
+
+function registerShortcut(id, combo) {
   try {
-    if (globalShortcut.register(combo, talkNow)) {
+    if (globalShortcut.register(combo, shortcutRuns[id])) {
       registeredShortcuts.push(combo);
       return true;
     }
@@ -2112,7 +2162,7 @@ function registerTalk(combo) {
   return false;
 }
 
-function unregisterTalk(combo) {
+function unregisterShortcut(combo) {
   if (!combo) return;
   try { globalShortcut.unregister(combo); } catch { /* already gone */ }
   registeredShortcuts = registeredShortcuts.filter((c) => c !== combo);
@@ -2120,26 +2170,45 @@ function unregisterTalk(combo) {
 
 // A new combo from her menu: { key, code, ctrlKey, altKey, shiftKey, metaKey } or { accel }.
 // { ok, accel } or { ok: false, message } in Spanish for her menu.
-function setTalkHotkey(value) {
+function setShortcut(id, value) {
+  if (!['toggle', 'chat', 'talk'].includes(id)) {
+    return { ok: false, message: 'Ese atajo no se puede cambiar.' };
+  }
   const accel = value?.accel != null ? normalizeAccelerator(value.accel) : acceleratorFromKey(value || {});
   if (!accel) return { ok: false, message: 'Esa no sirve: Ctrl, Alt o Win más una tecla.' };
   const cfg = config.load();
-  if (accel === talkCombo) return { ok: true, accel };
-  const others = [
-    [cfg.shortcuts?.toggle, 'mostrar / ocultar'],
-    [cfg.shortcuts?.chat, 'abrir el chat'],
-    [cfg.clips?.saveHotkey, 'guardar clip'],
+  const combos = [
+    ['toggle', cfg.shortcuts?.toggle, 'mostrar / ocultar'],
+    ['chat', cfg.shortcuts?.chat, 'abrir el chat'],
+    ['talk', talkHotkey(cfg), 'escuchar / detener'],
+    ['clip', cfg.clips?.saveHotkey, 'guardar clip'],
+    ['menu', menuCloseCombo, 'cerrar el menú'],
+    ['force', FORCE_QUIT_ACCEL, 'salir de emergencia'],
   ];
-  const clash = others.find(([combo]) => sameCombo(combo, accel));
-  if (clash) return { ok: false, message: `${accel} ya es «${clash[1]}».` };
-  const old = talkCombo;
-  unregisterTalk(old);
-  if (!registerTalk(accel)) {
-    if (old && registerTalk(old)) talkCombo = old;
+  const clash = shortcutConflict(accel, combos, id);
+  if (clash) return { ok: false, message: `${accel} ya es «${clash[2]}».` };
+  const old = id === 'talk' ? talkCombo : (shortcutActive[id] ? shortcutCombo[id] : '');
+  if (old && sameCombo(old, accel)) return { ok: true, accel };
+  unregisterShortcut(old);
+  if (!registerShortcut(id, accel)) {
+    if (old && registerShortcut(id, old)) {
+      shortcutCombo[id] = old;
+      shortcutActive[id] = true;
+    } else {
+      shortcutCombo[id] = '';
+      shortcutActive[id] = false;
+    }
+    if (id === 'talk') talkCombo = old && shortcutActive.talk ? old : '';
     return { ok: false, message: `${accel} ya lo usa otra app.` };
   }
-  talkCombo = accel;
-  config.save({ hearing: { talkHotkey: accel } });
+  shortcutCombo[id] = accel;
+  shortcutActive[id] = true;
+  if (id === 'talk') {
+    talkCombo = accel;
+    config.save({ hearing: { talkHotkey: accel } });
+  } else {
+    config.save({ shortcuts: { [id]: accel } });
+  }
   rebuildTray();
   return { ok: true, accel };
 }
@@ -2291,9 +2360,9 @@ function menuState(extra = {}) {
       folder: clipFolderLabel(cfg),
     },
     shortcuts: [
-      { label: 'Mostrar / ocultar Capri', accel: cfg.shortcuts?.toggle || '' },
-      { label: 'Abrir el chat', accel: cfg.shortcuts?.chat || '' },
-      { label: 'Escuchar / detener', accel: talkCombo || talkHotkey(cfg) },
+      { id: 'toggle', label: 'Mostrar / ocultar Capri', accel: cfg.shortcuts?.toggle || '', active: Boolean(shortcutActive.toggle) },
+      { id: 'chat', label: 'Abrir el chat', accel: cfg.shortcuts?.chat || '', active: Boolean(shortcutActive.chat) },
+      { id: 'talk', label: 'Escuchar / detener', accel: talkCombo || talkHotkey(cfg), active: Boolean(talkCombo) },
     ],
     micDevices: voice?.devices() || [],
     voiceInstall: voiceInstall?.status?.() || null,
@@ -2325,7 +2394,11 @@ function rebuildTray() {
       { label: t.demo, click: () => applyMenuAction('demo') },
     ] : []),
     { label: t.help, click: () => applyMenuAction('help') },
-    ...(!s.folded ? [{ label: s.cfg.visible ? t.hide : t.show, accelerator: 'Ctrl+Alt+C', click: () => applyMenuAction('visible') }] : []),
+    ...(!s.folded ? [{
+      label: s.cfg.visible ? t.hide : t.show,
+      accelerator: s.shortcuts.find((k) => k.id === 'toggle')?.accel || undefined,
+      click: () => applyMenuAction('visible'),
+    }] : []),
     s.folded
       ? { label: t.wake, click: () => applyMenuAction('wake') }
       : { label: t.sleep, click: () => applyMenuAction('sleep') },

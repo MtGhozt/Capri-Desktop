@@ -86,8 +86,9 @@ export class AppMenu {
     this.onOpenChange = null;
     this.fixNote = '';     // "GUARDADO" under Corregir lo último, once a fix is saved
     this.keyboard = false; // Corregir lo último has text fields: the overlay has the keyboard
-    this.capturing = false; // OÍDO › Tecla para hablar: waiting for the new combo
-    this.talkNote = '';     // what came of the last combo (taken, saved...)
+    this.capturingId = null; // Atajos / OÍDO: waiting for the new combo ('toggle' | 'chat' | 'talk')
+    this.talkNote = '';     // what came of the last talk combo (taken, saved...)
+    this.shortcutNote = ''; // what came of any shortcut change
     this.lastState = null;
     this.view = 'main';     // 'apps': her app table instead of the menu (Paso 4C)
     this.appOpen = null;    // the app being edited
@@ -131,17 +132,18 @@ export class AppMenu {
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
     // the new push-to-talk combo: this keydown is the combo, not a menu key
     window.addEventListener('keydown', (e) => {
-      if (!this.open || !this.capturing) return;
+      if (!this.open || !this.capturingId) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.key === 'Escape') {
-        this.capturing = false;
+        this.capturingId = null;
         this.talkNote = '';
+        this.shortcutNote = '';
         this.rerender();
         return;
       }
       if (['Control', 'Alt', 'Shift', 'Meta', 'AltGraph', 'OS'].includes(e.key)) return; // still holding
-      this.saveTalkKey({
+      this.saveShortcut(this.capturingId, {
         key: e.key, code: e.code, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, metaKey: e.metaKey,
       });
     }, true);
@@ -231,7 +233,7 @@ export class AppMenu {
   // Esc: close one layer (submenu → parent), or the whole menu / settings window.
   onEscape() {
     const step = menuEscapeStep({
-      capturing: this.capturing,
+      capturing: this.capturingId,
       helpOpen: this.helpOpen,
       quickOpen: this.quickOpen,
       expanded: this.expanded,
@@ -239,8 +241,9 @@ export class AppMenu {
       settingsMode: this.settingsMode,
     });
     if (step === 'cancel-capture') {
-      this.capturing = false;
+      this.capturingId = null;
       this.talkNote = '';
+      this.shortcutNote = '';
       if (this.lastState) this.render(this.lastState);
       return step;
     }
@@ -286,8 +289,9 @@ export class AppMenu {
     this.confirmForget = false;
     this.confirmSoftware = false;
     this.el.hidden = true;
-    this.capturing = false;
+    this.capturingId = null;
     this.talkNote = '';
+    this.shortcutNote = '';
     this.view = 'main';
     this.resetApps();
     this.useKeyboard(false);
@@ -980,6 +984,7 @@ export class AppMenu {
       ],
       current: cfg.musicPlayer || 'namida',
       onChange: (id) => this.act('music-player', id),
+      help: 'namida',
     });
     const spotify = build('div', 'appmenu__fix');
     const client = build('input', 'appmenu__input');
@@ -1252,8 +1257,11 @@ export class AppMenu {
       });
     }
     section('ATAJOS', 'shortcuts');
-    for (const s of state.shortcuts || []) {
-      action(s.label, s.accel ? { hotkey: s.accel, sub: true, setting: 'shortcuts' } : { value: '—', sub: true, setting: 'shortcuts' });
+    for (const s of state.shortcuts || []) body.append(this.shortcutRow(s, build, kbd));
+    if (this.shortcutNote) {
+      const note = build('div', 'appmenu__hint', this.shortcutNote);
+      note.dataset.setting = 'shortcuts';
+      body.append(note);
     }
     action('Abrir config.json', {
       setting: 'shortcuts',
@@ -1285,7 +1293,7 @@ export class AppMenu {
       }
     }
     if (this.open && this.at && !this.settingsMode) this.place();
-    this.useKeyboard(this.expanded === 'fixes' || this.settingsSection === 'model' || this.capturing);
+    this.useKeyboard(this.expanded === 'fixes' || this.settingsSection === 'model' || Boolean(this.capturingId));
   }
 
   restoreSettingsScroll(top) {
@@ -1360,6 +1368,14 @@ export class AppMenu {
       value: 'PROGRAMA / ACCESO DIRECTO',
       onClick: async () => {
         const res = await this.host.menuAction({ id: 'apps-pick-program' }).catch(() => ({ ok: false, message: 'No se pudo.' }));
+        this.appNote = res?.ok ? `AÑADIDA: ${res.name}` : res?.message || '';
+        await this.refresh();
+      },
+    });
+    action('Agregar carpeta o archivo', {
+      value: 'CARPETA / ARCHIVO',
+      onClick: async () => {
+        const res = await this.host.menuAction({ id: 'apps-pick-folder-file' }).catch(() => ({ ok: false, message: 'No se pudo.' }));
         this.appNote = res?.ok ? `AÑADIDA: ${res.name}` : res?.message || '';
         await this.refresh();
       },
@@ -1661,19 +1677,42 @@ export class AppMenu {
     const talkLabel = build('span', 'appmenu__label appmenu__label--help');
     talkLabel.append(build('span', '', 'Tecla para hablar'), this.helpButton('talk'));
     row.append(talkLabel);
-    if (this.capturing) row.append(build('span', 'appmenu__meta appmenu__capture', 'PULSA LA COMBINACIÓN…'));
+    if (this.capturingId === 'talk') row.append(build('span', 'appmenu__meta appmenu__capture', 'PULSA LA COMBINACIÓN…'));
     else if (hearing.talkHotkey) row.append(kbd(hearing.talkHotkey));
-    row.append(build('span', 'appmenu__meta', this.capturing ? 'ESC' : 'CAMBIAR'));
+    row.append(build('span', 'appmenu__meta', this.capturingId === 'talk' ? 'ESC' : 'CAMBIAR'));
     row.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.capturing = !this.capturing;
+      this.capturingId = this.capturingId === 'talk' ? null : 'talk';
       this.talkNote = '';
+      this.shortcutNote = '';
       this.rerender();
     });
     wrap.append(row);
-    const note = this.capturing ? 'Ctrl, Alt o Win más una tecla. Esc cancela.'
+    const note = this.capturingId === 'talk' ? 'Ctrl, Alt o Win más una tecla. Esc cancela.'
       : this.talkNote || (hearing.talkActive ? '' : 'No se pudo registrar: elige otra combinación.');
     if (note) wrap.append(build('div', 'appmenu__hint', note));
+    return wrap;
+  }
+
+  // Ajustes › Atajos: one editable combo each, same capture flow as Tecla para hablar.
+  shortcutRow(s, build, kbd) {
+    const wrap = build('div', 'appmenu__talkkey');
+    const row = build('button', 'appmenu__row appmenu__row--action');
+    row.type = 'button';
+    row.append(build('span', 'appmenu__label', s.label));
+    const capturing = this.capturingId === s.id;
+    if (capturing) row.append(build('span', 'appmenu__meta appmenu__capture', 'PULSA LA COMBINACIÓN…'));
+    else if (s.accel) row.append(kbd(s.accel));
+    row.append(build('span', 'appmenu__meta', capturing ? 'ESC' : 'CAMBIAR'));
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.capturingId = capturing ? null : s.id;
+      this.shortcutNote = '';
+      this.rerender();
+    });
+    wrap.append(row);
+    if (capturing) wrap.append(build('div', 'appmenu__hint', 'Ctrl, Alt o Win más una tecla. Esc cancela.'));
+    else if (!s.active) wrap.append(build('div', 'appmenu__hint', 'No se pudo registrar: elige otra combinación.'));
     return wrap;
   }
 
@@ -2221,15 +2260,17 @@ export class AppMenu {
     await this.refresh();
   }
 
-  async saveTalkKey(keys) {
+  async saveShortcut(id, keys) {
     let result;
     try {
-      result = await this.host.menuAction({ id: 'talk-hotkey', value: keys });
+      result = await this.host.menuAction({ id: 'shortcut-set', value: { id, ...keys } });
     } catch {
       result = { ok: false, message: 'No se pudo guardar.' };
     }
-    this.capturing = false;
-    this.talkNote = result?.ok ? `GUARDADA: ${result.accel}` : result?.message || 'Esa no sirve.';
+    this.capturingId = null;
+    const note = result?.ok ? `GUARDADA: ${result.accel}` : result?.message || 'Esa no sirve.';
+    if (id === 'talk') this.talkNote = note;
+    this.shortcutNote = note;
     await this.refresh();
   }
 
