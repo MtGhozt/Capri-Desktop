@@ -144,6 +144,9 @@ const DEFAULTS = {
 };
 
 let cache = null;
+// Whether config.json already existed before load() wrote this boot's migrations.
+// '' (no lastSeenVersion) + an existing file means an upgrade from a version before that field.
+let existedAtFirstLoad = null;
 
 // Pre-4L defaults written into many configs even when the user never opened the voice menu.
 // Migrate that baked-in pair to blips/off once. Leave alone if they pointed at a clone
@@ -235,6 +238,7 @@ function persist() {
 
 function load() {
   if (cache) return cache;
+  existedAtFirstLoad = fs.existsSync(file());
   const saved = readSaved() || {};
   cache = {
     ...DEFAULTS,
@@ -358,5 +362,12 @@ function save(patch) {
 }
 
 module.exports = {
-  load, save, filePath: file, DEFAULTS, migratePublicReply, reviveMigratedTts, migrateBrainOrder,
+  load,
+  save,
+  filePath: file,
+  existedAtLoad: () => existedAtFirstLoad === true,
+  DEFAULTS,
+  migratePublicReply,
+  reviveMigratedTts,
+  migrateBrainOrder,
 };

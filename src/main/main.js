@@ -1,8 +1,9 @@
 'use strict';
 
 const path = require('node:path');
+const os = require('node:os');
 const fs = require('node:fs');
-const { spawn } = require('node:child_process');
+const { spawn, execFile } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const {
   app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog, safeStorage, clipboard, desktopCapturer,
@@ -43,6 +44,7 @@ const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { parseNameCommand, cleanName } = require('./name-command');
 const { notesFor, bootNotes, isWhatsNewCommand } = require('./whats-new');
+const { checkLine, formatReport, redact } = require('./diagnose');
 const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
 const { createSystemFlow, runSystem } = require('./system-command');
@@ -1858,6 +1860,42 @@ async function probeChatFromMenu(value = {}) {
   return { ok: Boolean(result.ok), message: String(result.message || '') };
 }
 
+function probePython() {
+  return new Promise((resolve) => {
+    execFile('py', ['-3.11', '--version'], { timeout: 5000, windowsHide: true }, (err, stdout, stderr) => {
+      const out = `${stdout || ''}${stderr || ''}`.trim();
+      if (err && !out) return resolve({ ok: false, detail: 'no responde' });
+      resolve({ ok: /^Python 3\.11/.test(out), detail: out || 'sin salida' });
+    });
+  });
+}
+
+// The "Diagnóstico" card: a few facts support can act on, no paths and no keys.
+async function runDiagnostics() {
+  const py = await probePython();
+  const vcMissing = missingVcRuntime();
+  const agents = detectAgents().filter((a) => a.installed);
+  const running = Boolean(voice?.running?.());
+  const user = path.basename(process.env.USERPROFILE || os.homedir());
+  const checks = [
+    { label: 'Python 3.11', ok: py.ok, detail: py.detail },
+    { label: 'VC++ 2015-2022 (x64)', ok: !vcMissing, detail: vcMissing ? 'falta vcruntime140.dll' : 'instalado' },
+    { label: 'Voz', ok: running, detail: running ? 'sidecar activo' : 'detenida' },
+    {
+      label: 'Agentes de código',
+      ok: agents.length > 0,
+      detail: agents.map((a) => a.label).join(', ') || 'ninguno en el PATH',
+    },
+  ];
+  const text = redact(formatReport({
+    version: app.getVersion(),
+    windows: os.release(),
+    log: voiceLogPath(),
+    checks,
+  }), { user });
+  return { checks, lines: checks.map((c) => redact(checkLine(c), { user })), text };
+}
+
 function applyMenuAction(id, value) {
   switch (id) {
     case 'teleport': sendCommand('teleport'); break;
@@ -1917,6 +1955,13 @@ function applyMenuAction(id, value) {
       shell.showItemInFolder(file);
       return { ok: true, message: 'Ruta de voice.log copiada.' };
     }
+    case 'diagnose':
+      return runDiagnostics().then((res) => ({ ok: true, ...res }));
+    case 'diagnose-copy':
+      return runDiagnostics().then(({ text }) => {
+        clipboard.writeText(text);
+        return { ok: true, message: 'Reporte copiado.' };
+      });
     case 'model-share': {
       const wasOn = config.load().llm?.shareScreen === true;
       updateConfig({ llm: value });
@@ -2917,7 +2962,11 @@ function main() {
     serveProtocol();
     registerIpc();
     // "what's new" once, only after an update: computed before lastSeenVersion moves on
-    whatsNewLines = bootNotes({ version: app.getVersion(), lastSeenVersion: config.load().lastSeenVersion });
+    whatsNewLines = bootNotes({
+      version: app.getVersion(),
+      lastSeenVersion: config.load().lastSeenVersion,
+      configExisted: config.existedAtLoad(),
+    });
     if (config.load().lastSeenVersion !== app.getVersion()) config.save({ lastSeenVersion: app.getVersion() });
     userFiles = ensureUserFiles({ userData: app.getPath('userData'), root: ROOT });
     llm = createLlm({

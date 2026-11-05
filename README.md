@@ -138,6 +138,8 @@ Código en este repo; el instalador se genera con `pnpm dist`.
 
 ## 9. FAQ / problemas
 
+Si algo no arranca, mirá [`docs/SOPORTE.md`](docs/SOPORTE.md) (síntoma → causa → arreglo). Antes de reportar: **Ajustes → Acerca de → Diagnóstico → Copiar reporte**.
+
 | Problema | Qué probar |
 | --- | --- |
 | **No detecta el mic** | Ajustes → Oído → Micrófono **ACTIVO**; elige dispositivo. Sin «Instalar voz» no hay lista útil. |

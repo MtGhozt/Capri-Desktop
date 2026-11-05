@@ -105,6 +105,7 @@ export class AppMenu {
     this.modelNote = '';   // first-run Capri welcome (or last cerebro note)
     this.agentNote = '';   // last Agentes install / remove result
     this.probeNote = '';   // last Probar result
+    this.diag = null;      // Ajustes › Diagnóstico: { lines, text }
     this.probeOk = false;
     this.settingsMode = false;
     this.settingsSection = 'model';
@@ -2217,6 +2218,13 @@ export class AppMenu {
           const res = await this.host.menuAction({ id: 'share-logs' }).catch(() => null);
           if (res?.message) this.probeNote = res.message;
           await this.refresh();
+          return;
+        }
+        if (item.action === 'diagnose') {
+          const res = await this.host.menuAction({ id: 'diagnose' }).catch(() => null);
+          this.diag = res?.ok ? { lines: res.lines || [], text: res.text || '' } : null;
+          this.probeNote = res?.ok ? '' : 'No se pudo revisar.';
+          await this.refresh();
         }
       });
       return btn;
@@ -2236,6 +2244,24 @@ export class AppMenu {
     block('Desarrollo', about.dev);
     block('Donar', about.donate);
     block('Otros', about.other);
+
+    if (this.diag) {
+      const card = build('div', 'appmenu__brain-card');
+      card.append(build('div', 'appmenu__brain-card-title', 'Diagnóstico'));
+      for (const line of this.diag.lines) card.append(build('div', 'appmenu__hint', line));
+      const copy = build('button', 'appmenu__toggle-btn', 'Copiar reporte');
+      copy.type = 'button';
+      copy.addEventListener('mousedown', (e) => e.preventDefault());
+      copy.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const res = await this.host.menuAction({ id: 'diagnose-copy' }).catch(() => null);
+        this.probeNote = res?.message || 'No se pudo copiar.';
+        await this.refresh();
+      });
+      card.append(copy);
+      wrap.append(card);
+    }
 
     const upd = build('div', 'appmenu__brain-card');
     upd.append(build('div', 'appmenu__brain-card-title', 'Actualizaciones'));

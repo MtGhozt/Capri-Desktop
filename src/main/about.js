@@ -63,6 +63,7 @@ function aboutInfo({ version } = {}) {
     other: [
       { id: 'license', label: 'Licencia', url: LINKS.license },
       { id: 'check-updates', label: 'Buscar actualizaciones', action: 'check-updates' },
+      { id: 'diagnose', label: 'Diagnóstico', action: 'diagnose' },
       { id: 'share-logs', label: 'Compartir registros', action: 'share-logs' },
     ],
     links: LINKS,

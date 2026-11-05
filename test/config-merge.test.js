@@ -105,6 +105,16 @@ test('the name she calls him is empty by default and survives a restart', (t) =>
   assert.equal(freshConfig(dir).load().userName, 'Mati');
 });
 
+test('whether config.json existed before this boot is remembered', (t) => {
+  const dir = profile(t);
+  const first = freshConfig(dir);
+  first.load();
+  assert.equal(first.existedAtLoad(), false); // fresh install wrote it on this load
+  const second = freshConfig(dir);
+  second.load();
+  assert.equal(second.existedAtLoad(), true); // upgrade: the file was already there
+});
+
 test('a key file that cannot be decrypted is reported, not treated as empty', (t) => {
   const dir = profile(t);
   fs.writeFileSync(keysFile(dir), 'not-a-token-file');

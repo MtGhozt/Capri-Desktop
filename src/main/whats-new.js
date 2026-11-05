@@ -21,10 +21,14 @@ function notesFor(version, notes = NOTES) {
 }
 
 /** What to show at boot: nothing on a fresh install, on the same version, or with no notes. */
-function bootNotes({ version, lastSeenVersion, notes = NOTES } = {}) {
+function bootNotes({ version, lastSeenVersion, configExisted = false, notes = NOTES } = {}) {
   const seen = String(lastSeenVersion || '').trim();
   const now = String(version || '').trim();
-  if (!seen || !now || seen === now) return null;
+  if (!now) return null;
+  // No lastSeenVersion can also mean an upgrade from before that field existed: an existing
+  // config.json proves it, so the notes are shown this one time.
+  if (!seen) return configExisted ? notesFor(now, notes) : null;
+  if (seen === now) return null;
   return notesFor(now, notes);
 }
 

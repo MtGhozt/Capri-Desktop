@@ -21,6 +21,16 @@ test('a version with no entry says nothing', () => {
 test('fresh install: no bubble, nothing seen yet', () => {
   assert.equal(bootNotes({ version: '0.2.4', lastSeenVersion: '' }), null);
   assert.equal(bootNotes({ version: '0.2.4' }), null);
+  assert.equal(bootNotes({ version: '0.2.4', lastSeenVersion: '', configExisted: false }), null);
+});
+
+test('upgrade from before lastSeenVersion existed: config.json present, notes show once', () => {
+  assert.deepEqual(
+    bootNotes({ version: '0.2.4', lastSeenVersion: '', configExisted: true }),
+    NOTES['0.2.4'],
+  );
+  // once lastSeenVersion is saved, the next boot stays quiet
+  assert.equal(bootNotes({ version: '0.2.4', lastSeenVersion: '0.2.4', configExisted: true }), null);
 });
 
 test('upgrade: the new version lines, once', () => {
