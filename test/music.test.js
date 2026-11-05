@@ -3,7 +3,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const { EventEmitter } = require('node:events');
 const { parseMusicCommand, DEFAULT_HER_SONG } = require('../src/main/music-command');
+const { parseNowPlaying, readNowPlaying } = require('../src/main/music');
 const { createPkce } = require('../src/main/spotify');
 
 test('parses media commands without matching ordinary phrases', () => {
@@ -64,6 +66,73 @@ test('her song phrases map to music.herSong (default)', () => {
   assert.deepEqual(parseMusicCommand('pon tu canción', { herSong: 'Custom Hit' }), {
     action: 'query', query: 'Custom Hit', herSong: true,
   });
+});
+
+test('now playing reads the Namida SMTC line, then its window title', () => {
+  assert.deepEqual(parseNowPlaying('SMTC\tnamida.exe\tWorth It\tCorbin'), {
+    ok: true, player: 'namida', track: 'Worth It', artist: 'Corbin',
+  });
+  assert.deepEqual(parseNowPlaying('WINDOW\tWorth It • Namida'), {
+    ok: true, player: 'namida', via: 'window', artist: '', track: 'Worth It',
+  });
+  assert.deepEqual(parseNowPlaying('WINDOW\tCorbin - Worth It'), {
+    ok: true, player: 'namida', via: 'window', artist: 'Corbin', track: 'Worth It',
+  });
+  // Another player's SMTC session is not Namida.
+  assert.deepEqual(parseNowPlaying('SMTC\tSpotify.exe\tSong\tArtist'), { ok: false });
+  assert.deepEqual(parseNowPlaying(''), { ok: false });
+});
+
+test('readNowPlaying returns the ps1 output or gives up after its timeout', async () => {
+  let command = null;
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  const found = readNowPlaying((cmd, args) => {
+    command = [cmd, ...args];
+    process.nextTick(() => {
+      child.stdout.emit('data', 'SMTC\tnamida.exe\tWorth It\tCorbin\r\n');
+      child.emit('close', 0);
+    });
+    return child;
+  }, 'C:\\x\\now-playing.ps1');
+  assert.match(await found, /Worth It/);
+  assert.equal(command[0], 'powershell.exe');
+  assert.ok(command.includes('-File'));
+
+  let killed = false;
+  const silent = new EventEmitter();
+  silent.stdout = new EventEmitter();
+  silent.kill = () => { killed = true; };
+  assert.equal(await readNowPlaying(() => silent, 'C:\\x\\now-playing.ps1', 10), '');
+  assert.equal(killed, true);
+});
+
+test('qué está sonando answers Namida first, then Spotify, then says it does not know', async () => {
+  const make = ({ out = '', spotify = null, spotifyClient = false } = {}) => {
+    const { createMusic } = require('../src/main/music');
+    return createMusic({
+      config: { load: () => ({ music: { player: 'namida', spotify: { clientId: spotifyClient ? 'id' : '' } } }) },
+      apps: () => [],
+      sendKey: async () => {},
+      sendVolume: async () => {},
+      spotify,
+      readNowPlaying: async () => out,
+    });
+  };
+  assert.deepEqual(
+    await make({ out: 'SMTC\tnamida.exe\tWorth It\tCorbin' }).command({ action: 'nowPlaying' }),
+    { ok: true, player: 'namida', track: 'Worth It', artist: 'Corbin' },
+  );
+  assert.deepEqual(
+    await make({
+      spotifyClient: true,
+      spotify: { nowPlaying: async () => ({ ok: true, player: 'spotify', track: 'Neon', artist: 'Juno' }) },
+    }).command({ action: 'nowPlaying' }),
+    { ok: true, player: 'spotify', track: 'Neon', artist: 'Juno' },
+  );
+  const unknown = await make().command({ action: 'nowPlaying' });
+  assert.equal(unknown.ok, false);
+  assert.match(unknown.error, /No sé qué está sonando en Namida/);
 });
 
 test('creates a valid PKCE verifier and S256 challenge', () => {

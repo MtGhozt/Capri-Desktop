@@ -11,6 +11,62 @@ const {
 const unpackedPath = (p) => p.split(`app.asar${path.sep}`).join(`app.asar.unpacked${path.sep}`);
 const KEY_SCRIPT = unpackedPath(path.join(__dirname, 'media-keys.ps1'));
 const VOLUME_SCRIPT = unpackedPath(path.join(__dirname, 'session-volume.ps1'));
+const NOW_PLAYING_SCRIPT = unpackedPath(path.join(__dirname, 'now-playing.ps1'));
+
+// PowerShell writes one TSV line: SMTC<TAB>app<TAB>title<TAB>artist, or WINDOW<TAB>title.
+function parseWindowTitle(raw) {
+  const title = String(raw || '').trim().replace(/\s*[•·]\s*Namida\s*$/i, '').trim();
+  if (!title) return null;
+  const parts = title.split(/\s+[-–—]\s+/);
+  if (parts.length === 2 && parts[0] && parts[1]) return { artist: parts[0].trim(), track: parts[1].trim() };
+  return { artist: '', track: title };
+}
+
+function parseNowPlaying(out) {
+  const lines = String(out || '').split(/\r?\n/);
+  for (const line of lines) {
+    const [kind, app, title, artist] = line.split('\t');
+    if (kind !== 'SMTC' || !/namida/i.test(app || '') || !String(title || '').trim()) continue;
+    return { ok: true, player: 'namida', track: title.trim(), artist: String(artist || '').trim() };
+  }
+  for (const line of lines) {
+    const [kind, raw] = line.split('\t');
+    if (kind !== 'WINDOW') continue;
+    const parsed = parseWindowTitle(raw);
+    if (parsed) return { ok: true, player: 'namida', via: 'window', ...parsed };
+  }
+  return { ok: false };
+}
+
+// 3 s is enough for SMTC; Windows keeps the answer in a session, not a dialog.
+function readNowPlaying(spawnProcess, script = NOW_PLAYING_SCRIPT, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    let out = '';
+    let done = false;
+    let timer = null;
+    const finish = (text) => {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer);
+      resolve(text);
+    };
+    let child;
+    try {
+      child = spawnProcess('powershell.exe', [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+      ], { windowsHide: true });
+    } catch {
+      return finish('');
+    }
+    timer = setTimeout(() => {
+      try { child.kill(); } catch { /* already gone */ }
+      finish('');
+    }, timeoutMs);
+    child.stdout?.on('data', (chunk) => { out += String(chunk); });
+    child.once('error', () => finish(''));
+    child.once('close', () => finish(out));
+  });
+}
 
 const ACTIONS = new Set(['pause', 'play', 'next', 'previous', 'volumeUp', 'volumeDown', 'mute', 'unmute']);
 const VOLUME_ACTIONS = new Set(['volumeUp', 'volumeDown', 'mute', 'unmute']);
@@ -22,7 +78,7 @@ function createMusic({
   config, apps, sendKey, sendVolume, spotify, isRunning = () => false, spawnProcess = spawn,
   wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   openExternal = null, findTrack = findNamidaTrack, listFiles = listNamidaFiles,
-  writePlaylist = writeNamidaM3u, log = () => {},
+  writePlaylist = writeNamidaM3u, readNowPlaying: readTrack = null, log = () => {},
 } = {}) {
   const key = (action) => sendKey(action, KEY_SCRIPT);
   const volumeSession = (action, processNames) => {
@@ -198,11 +254,15 @@ function createMusic({
     }
     if (parsed.action === 'open') return openPlayer();
     if (parsed.action === 'start') return startPlayer();
-    if (parsed.action === 'nowPlaying' && cfg.music?.spotify?.clientId) {
-      const result = await spotify.nowPlaying();
-      return result?.ok ? result : { ok: false, error: 'No pude leer qué está sonando en Spotify.' };
+    if (parsed.action === 'nowPlaying') {
+      const local = readTrack ? parseNowPlaying(await readTrack().catch(() => '')) : { ok: false };
+      if (local.ok) return local;
+      if (cfg.music?.spotify?.clientId && spotify?.nowPlaying) {
+        const result = await spotify.nowPlaying();
+        if (result?.ok) return result;
+      }
+      return { ok: false, error: 'No sé qué está sonando en Namida.' };
     }
-    if (parsed.action === 'nowPlaying') return { ok: false, error: 'Solo sé qué está sonando con Spotify conectado.' };
     if (parsed.action === 'query') {
       if (parsed.player === 'spotify') return playSpotifyQuery(parsed.query);
       return playQuery(parsed.query);
@@ -213,4 +273,7 @@ function createMusic({
   return { command, redactSpotifyConfig, playQuery };
 }
 
-module.exports = { createMusic, KEY_SCRIPT, VOLUME_SCRIPT, unpackedPath, NO_MUSIC_APP };
+module.exports = {
+  createMusic, KEY_SCRIPT, VOLUME_SCRIPT, NOW_PLAYING_SCRIPT, unpackedPath, NO_MUSIC_APP,
+  parseNowPlaying, readNowPlaying,
+};

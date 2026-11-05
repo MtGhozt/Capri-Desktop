@@ -64,7 +64,8 @@
       "src/main/hotkey.ps1",
       "src/main/close-app.ps1",
       "src/main/media-keys.ps1",
-      "src/main/session-volume.ps1"
+      "src/main/session-volume.ps1",
+      "src/main/now-playing.ps1"
     ],
     "win": {
       "target": [
