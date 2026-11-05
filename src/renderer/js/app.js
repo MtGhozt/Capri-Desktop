@@ -16,6 +16,8 @@ import { createDrone } from './drone.js';
 import { runArtKit } from './art-kit.js';
 import { startGamepadPtt } from './gamepad-ptt.js';
 import { pick, fmt, sleep, tween, reducedMotion } from './util.js';
+import { createPetTaps, shouldPlayPetPurr } from './pet-taps.js';
+import { redactSecrets } from './redact-secrets.js';
 
 const host = window.host;
 
@@ -330,11 +332,19 @@ async function boot() {
       mask.hide();
     }
   };
+  const petTaps = createPetTaps();
   capri.onCaress = () => {
     if (config.behavior?.caresses === false || capri.busy || capri.hidden) return;
+    if (petTaps.tap() === 'annoyed') {
+      host.menuAction({ id: 'pet-annoyed' }).catch(() => {});
+      return;
+    }
     // 'laugh' is a cut-in face / victory cue, not an ACTS name — hop is the playful beat.
     capri.perform('hop');
     capri.voice?.play?.('land');
+    if (shouldPlayPetPurr({ muted: config.muted, replyMode: config.voice?.replyMode })) {
+      voice.play('purr');
+    }
   };
   capri.onMode = (mode, prev) => chip.setMode(mode, prev);
   // now and then she says something about the satellite: while she looks at it, or once
@@ -715,24 +725,32 @@ async function boot() {
       bubble.holdVoice = false;
       bumpIdle();
       await unfold();
-      const line = evt.message || 'Voice sidecar is offline. Chat still works.';
+      const line = redactSecrets(evt.message || 'Voice sidecar is offline. Chat still works.');
       const kind = evt.level === 'info' ? 'info' : 'error';
       bubble.note('sistema', line);
       const prevAction = panel.onAction;
+      const actions = [];
+      if (evt.url) actions.push({ id: 'open-url', label: 'Descargar e instalar', primary: true });
+      if (kind === 'error') actions.push({ id: 'copy-error', label: 'Copiar error' });
       panel.say({
         kind,
         badge: evt.badge || 'VOICE',
         line,
-        hold: evt.url ? null : 10000,
-        actions: evt.url ? [{ id: 'open-url', label: 'Descargar e instalar', primary: true }] : undefined,
+        hold: actions.length ? null : 10000,
+        actions: actions.length ? actions : undefined,
         ...(kind === 'info' ? { face: 'calm' } : {}),
       });
-      if (evt.url) {
+      if (actions.length) {
         panel.onAction = (id) => {
           if (id === 'open-url') {
             host.menuAction({ id: 'open-vc' }).catch(() => {});
             panel.onAction = prevAction;
             panel.hide();
+            return;
+          }
+          if (id === 'copy-error') {
+            host.menuAction({ id: 'copy-error', value: line }).catch(() => {});
+            panel.onAction = prevAction;
             return;
           }
           prevAction?.(id);
@@ -1246,6 +1264,10 @@ async function boot() {
     else await hello();
   } else if ((await host.llmStatus()) !== 'booting') {
     await hello();
+  }
+  if (!config.guide?.extras) {
+    await guide.extras();
+    config.guide = { ...config.guide, extras: true };
   }
   // after an update only: one bubble with what changed in this version
   if (config.whatsNew?.length) {

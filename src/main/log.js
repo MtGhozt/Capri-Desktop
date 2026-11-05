@@ -39,7 +39,12 @@ function rotate(file, maxBytes = MAX_BYTES) {
 
 /** Writes one timestamped line; returns false when there was nothing to say. */
 function logEvent(file, text, { maxBytes = MAX_BYTES, now = new Date() } = {}) {
-  const line = oneLine(text);
+  let line = oneLine(text);
+  if (!line) return false;
+  try {
+    const { redactSecrets } = require('./diagnose');
+    line = oneLine(redactSecrets(line));
+  } catch { /* diagnose missing in odd boots */ }
   if (!line) return false;
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });

@@ -5,6 +5,7 @@ import { reducedMotion, sleep } from './util.js';
 import { EventLog, DEFAULT_LOG_LIMIT } from './event-log.js';
 import { messageBadge } from './message-status.js';
 import { boxAbove, clampBox } from './box-place.js';
+import { redactSecrets } from './redact-secrets.js';
 
 const NOISE = '▚▞▙▟░▒#%&/\\<>01XZ';
 const DECODE_STEP_MS = 28;
@@ -296,7 +297,7 @@ export class Bubble {
 
   note(kind, text = '') {
     if (!TAG[kind]) return;
-    this.events.push(kind, text);
+    this.events.push(kind, redactSecrets(text));
     this.renderLog();
   }
 
@@ -343,9 +344,10 @@ export class Bubble {
   }
 
   setLine(text) {
+    const safe = redactSecrets(text);
     if (this.lineEl) {
-      this.lineEl.textContent = text;
-      this.lineEl.classList.toggle('is-emphasis', this.fx && /[!?]$|[A-ZÁÉÍÓÚÑ]{3,}/.test(text));
+      this.lineEl.textContent = safe;
+      this.lineEl.classList.toggle('is-emphasis', this.fx && /[!?]$|[A-ZÁÉÍÓÚÑ]{3,}/.test(safe));
     }
   }
 
@@ -360,7 +362,7 @@ export class Bubble {
   onDone(text) {
     if (!this.busy) return;
     this.stopThink();
-    this.replyText = text || this.replyText;
+    this.replyText = redactSecrets(text || this.replyText);
     this.busy = false;
     this.armVoiceWatch();
     this.typeToward(this.replyText, { finish: true });
@@ -374,7 +376,7 @@ export class Bubble {
   fail(text) {
     this.stopThink();
     this.busy = false;
-    const line = String(text || '').trim() || OFFLINE[Math.floor(Math.random() * OFFLINE.length)];
+    const line = redactSecrets(String(text || '').trim() || OFFLINE[Math.floor(Math.random() * OFFLINE.length)]);
     this.replyText = line;
     this.note('sistema', line);
     this.typeToward(line, { finish: true });

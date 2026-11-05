@@ -18,9 +18,21 @@ function formatReport({ version, windows, log, checks = [] } = {}) {
 const SECRETS = [
   /\bsk-[A-Za-z0-9_-]{8,}/g,
   /\bAIza[0-9A-Za-z_-]{10,}/g,
+  /\bxai-[A-Za-z0-9_-]{8,}/g,
   /\bgsk_[A-Za-z0-9]{8,}/g,
   /\bBearer\s+[A-Za-z0-9._-]{8,}/gi,
+  /\b[A-Fa-f0-9]{40,}\b/g,
+  /\b[A-Za-z0-9+/]{48,}={0,2}\b/g,
 ];
+
+/** Strip API keys / tokens from text. Does not touch files on disk. */
+function redactSecrets(text) {
+  let out = String(text ?? '');
+  for (const re of SECRETS) {
+    out = out.replace(re, (hit) => (/^bearer/i.test(hit) ? 'Bearer <clave>' : '<clave>'));
+  }
+  return out;
+}
 
 // `user` is the profile folder name (C:\Users\<user>); only paths are touched, never words.
 function redact(text, { user } = {}) {
@@ -30,10 +42,12 @@ function redact(text, { user } = {}) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     out = out.replace(new RegExp(`(users[\\\\/])${escaped}(?=[\\\\/]|$)`, 'gi'), '$1<usuario>');
   }
-  for (const re of SECRETS) {
-    out = out.replace(re, (hit) => (/^bearer/i.test(hit) ? 'Bearer <clave>' : '<clave>'));
-  }
-  return out;
+  return redactSecrets(out);
 }
 
-module.exports = { checkLine, formatReport, redact };
+/** Shape for "Copiar error": redacted text safe to paste. */
+function copyErrorPayload(message, { user } = {}) {
+  return { ok: true, text: redact(String(message ?? ''), { user }) };
+}
+
+module.exports = { checkLine, formatReport, redact, redactSecrets, copyErrorPayload };

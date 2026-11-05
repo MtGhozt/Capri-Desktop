@@ -128,6 +128,36 @@ export class Guide {
     });
   }
 
+  // Once after name/welcome: optional screen share + Desktop shortcut.
+  extras() {
+    return this.scene(async () => {
+      let share = false;
+      let desk = false;
+      for (;;) {
+        const id = await this.ask({
+          face: 'look',
+          line: 'Extras',
+          quote: 'Opcional: Capri puede mirar tu pantalla cuando se lo pedís, y podés dejar un acceso en el Escritorio.',
+          actions: [
+            { id: 'share', label: share ? '☑ Ver mi pantalla' : '☐ Ver mi pantalla' },
+            { id: 'desk', label: desk ? '☑ Acceso en Escritorio' : '☐ Acceso en Escritorio' },
+            { id: 'ok', label: 'Listo', primary: true },
+          ],
+        });
+        if (id === 'share') { share = !share; continue; }
+        if (id === 'desk') { desk = !desk; continue; }
+        break;
+      }
+      await this.host.setConfig({ guide: { extras: true } });
+      if (share) {
+        await this.host.menuAction({ id: 'model-share', value: { shareScreen: true } }).catch(() => {});
+      }
+      if (desk) {
+        await this.host.menuAction({ id: 'desktop-shortcut' }).catch(() => {});
+      }
+    });
+  }
+
   // "How does it work?" in her menu: what she can show you.
   menu() {
     return this.scene(() => this.menuNow());

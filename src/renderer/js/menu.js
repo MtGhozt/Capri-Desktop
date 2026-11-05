@@ -2220,6 +2220,12 @@ export class AppMenu {
           await this.refresh();
           return;
         }
+        if (item.action === 'open-log') {
+          const res = await this.host.menuAction({ id: 'open-log' }).catch(() => null);
+          if (res?.message) this.probeNote = res.message;
+          await this.refresh();
+          return;
+        }
         if (item.action === 'diagnose') {
           const res = await this.host.menuAction({ id: 'diagnose' }).catch(() => null);
           this.diag = res?.ok ? { lines: res.lines || [], text: res.text || '' } : null;

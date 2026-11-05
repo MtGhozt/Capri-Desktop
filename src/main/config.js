@@ -45,6 +45,7 @@ const DEFAULTS = {
   guide: {
     welcome: false,          // Claude Code "plug me in" onboarding
     setupHint: false,        // first-run: opened Cerebro because nothing could answer yet
+    extras: false,           // first-run Extras step (screen share / desktop shortcut) already shown
   },
   idle: {
     dormantAfterMs: 5 * 60 * 1000, // 0 = never fold into the DORMANT widget

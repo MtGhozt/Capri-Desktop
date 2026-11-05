@@ -8,7 +8,7 @@ import { rand, pick } from './util.js';
 const BLIP_NOTES = [62, 65, 67, 69, 72, 74, 77, 79];
 const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
-export const CUES = ['teleport-out', 'teleport-in', 'done', 'alert', 'error', 'hello', 'blip', 'tick', 'star', 'land', 'rise', 'bolt', 'charge', 'possess'];
+export const CUES = ['teleport-out', 'teleport-in', 'done', 'alert', 'error', 'hello', 'blip', 'tick', 'star', 'land', 'rise', 'bolt', 'charge', 'possess', 'purr'];
 
 export class Voice {
   constructor() {
@@ -88,6 +88,7 @@ export class Voice {
       bolt: () => this.bolt(opts.soft),
       charge: () => this.charge(),
       possess: () => this.possess(),
+      purr: () => this.purr(),
     }[cue];
     fn?.();
   }
@@ -235,6 +236,15 @@ export class Voice {
     const o = this.osc('triangle', 150, t, 0.14, 0.22);
     o.frequency.exponentialRampToValueAtTime(48, t + 0.12);
     this.noiseBurst(t, 0.06, 0.08, 1800, 400, 1.5);
+  }
+
+  // short soft purr when you stroke her head
+  purr() {
+    const t = this.ctx.currentTime;
+    const o = this.osc('triangle', 90, t, 0.28, 0.07);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.22);
+    this.noiseBurst(t, 0.22, 0.045, 180, 420, 1.2);
+    this.osc('sine', 55, t + 0.04, 0.2, 0.04);
   }
 
   // the satellite: two soft, high pings and a shimmer

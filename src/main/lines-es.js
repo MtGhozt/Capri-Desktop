@@ -10,6 +10,11 @@
 // pickLine() never repeats any of the last three lines it gave for the same command.
 
 const POOLS = {
+  cariciaMolesta: [
+    '¡Ey! ¿Me estás golpeando o qué, gonk?',
+    'Basta de toquetearme tres veces seguidas, choom.',
+    'Uy, uy, uy… un caricia a la vez, humanito.',
+  ],
   dormir: [
     'Bueno, me voy a dormir. No hagas nada tonto sin mí, ¿sí?',
     'Ay, ya, ya. Descansá tú también, humanito.',

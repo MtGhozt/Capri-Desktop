@@ -20,6 +20,14 @@ test('Acerca de shows the Ko-fi donation link', () => {
   assert.equal(LINKS.kofi, KOFI_URL);
 });
 
+test('Acerca de exposes Abrir log next to Diagnóstico', () => {
+  const about = aboutInfo({ version: '0.2.4' });
+  const ids = about.other.map((o) => o.id);
+  assert.ok(ids.includes('diagnose'));
+  assert.ok(ids.includes('open-log'));
+  assert.ok(ids.indexOf('open-log') > ids.indexOf('diagnose') - 2);
+});
+
 test('open-url allowlist: discord, tiktok, Capri github, Spotify; http/https only', () => {
   assert.equal(isAllowedOpenUrl(LINKS.discord), true);
   assert.equal(isAllowedOpenUrl('https://discord.com/invite/wmVfYdjpdA'), true);

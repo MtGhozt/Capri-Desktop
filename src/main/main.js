@@ -44,7 +44,7 @@ const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { parseNameCommand, cleanName } = require('./name-command');
 const { notesFor, bootNotes, isWhatsNewCommand } = require('./whats-new');
-const { checkLine, formatReport, redact } = require('./diagnose');
+const { checkLine, formatReport, redact, copyErrorPayload } = require('./diagnose');
 const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
 const { createSystemFlow, runSystem } = require('./system-command');
@@ -1954,6 +1954,39 @@ function applyMenuAction(id, value) {
       clipboard.writeText(file);
       shell.showItemInFolder(file);
       return { ok: true, message: 'Ruta de voice.log copiada.' };
+    }
+    case 'pet-annoyed':
+      return { ok: true, line: commandReply('cariciaMolesta', { chat: false, badge: 'OYE' }) };
+    case 'open-log': {
+      const file = voiceLogPath();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      if (!fs.existsSync(file)) fs.writeFileSync(file, '');
+      shell.showItemInFolder(file);
+      return { ok: true, message: 'Log abierto.' };
+    }
+    case 'copy-error': {
+      const user = path.basename(process.env.USERPROFILE || os.homedir());
+      const payload = copyErrorPayload(value, { user });
+      clipboard.writeText(payload.text);
+      return { ...payload, message: 'Error copiado.' };
+    }
+    case 'desktop-shortcut': {
+      try {
+        const desk = app.getPath('desktop');
+        const link = path.join(desk, 'Capri.lnk');
+        const ok = shell.writeShortcutLink(link, {
+          target: process.execPath,
+          cwd: path.dirname(process.execPath),
+          description: 'Capri Desktop',
+          icon: process.execPath,
+          iconIndex: 0,
+        });
+        return ok
+          ? { ok: true, message: 'Acceso directo creado en el Escritorio.' }
+          : { ok: false, message: 'No se pudo crear el acceso directo.' };
+      } catch (err) {
+        return { ok: false, message: `No se pudo crear el acceso: ${err.message}` };
+      }
     }
     case 'diagnose':
       return runDiagnostics().then((res) => ({ ok: true, ...res }));
