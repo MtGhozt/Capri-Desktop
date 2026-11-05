@@ -17,7 +17,7 @@ import { runArtKit } from './art-kit.js';
 import { startGamepadPtt } from './gamepad-ptt.js';
 import { pick, fmt, sleep, tween, reducedMotion } from './util.js';
 import { createPetTaps, shouldPlayPetPurr } from './pet-taps.js';
-import { redactSecrets } from './redact-secrets.js';
+import { redactSecrets } from './redact-keys.js';
 
 const host = window.host;
 

@@ -5,7 +5,7 @@ import { reducedMotion, sleep } from './util.js';
 import { EventLog, DEFAULT_LOG_LIMIT } from './event-log.js';
 import { messageBadge } from './message-status.js';
 import { boxAbove, clampBox } from './box-place.js';
-import { redactSecrets } from './redact-secrets.js';
+import { redactSecrets } from './redact-keys.js';
 
 const NOISE = '▚▞▙▟░▒#%&/\\<>01XZ';
 const DECODE_STEP_MS = 28;
