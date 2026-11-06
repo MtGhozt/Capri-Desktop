@@ -36,6 +36,8 @@ const { VC_URL, VC_MESSAGE, missingVcRuntime } = require('./vc-runtime');
 const { activeVoiceLabel, saveCustomRef } = require('./voice-ref');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
+const { planMultiCommand } = require('./multi-command');
+const { isDirectCommand } = require('./direct-match');
 const { isQuitCommand } = require('./quit-command');
 const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
@@ -764,24 +766,55 @@ async function musicReply(parsed, { chat = true } = {}) {
 }
 
 // Hidden [open:<app>] / [play:<query>] tag on her reply: the same paths a typed order takes,
-// without her generic "opening X" line (she already answered in her own words).
+// without her generic "opening X" line (she already answered in her own words). The closed list
+// of every other action lives in mood-tag.js; nothing here runs anything else.
+const REPLY_MUSIC = {
+  pause: 'pause',
+  play: 'play',
+  next: 'next',
+  previous: 'previous',
+  up: 'volumeUp',
+  down: 'volumeDown',
+  mute: 'mute',
+  unmute: 'unmute',
+  nowplaying: 'nowPlaying',
+  open: 'open',
+  start: 'start',
+};
+
 async function runReplyAction(action) {
   const value = String(action?.value || '').trim();
-  if (!value) return;
   const kind = String(action?.kind || '').toLowerCase();
   try {
     if (kind === 'open') {
+      if (!value) return;
       const result = await apps().command(`abre ${value}`);
       if (result && result.ok === false) showLine(result.line, { chat: true, badge: 'APPS' });
       return;
     }
     if (kind === 'play') {
+      if (!value) return;
       const parsed = parseMusicCommand(action.herSong ? 'tu canción' : `pon ${value}`, {
         herSong: config.load().music?.herSong,
       });
       if (!parsed) return;
       const result = await music.command(parsed);
       if (!result?.ok) showLine(result?.error || 'No pude poner esa música.', { chat: true, badge: 'MUSIC' });
+      return;
+    }
+    if (kind === 'sleep') return goSleepReply({ chat: false });
+    if (kind === 'wake') return goWakeReply({ chat: false });
+    if (kind === 'minimize') return await systemFlow.command('minimiza todo');
+    if (kind === 'lock') return await systemFlow.command('bloquea la pc');
+    if (kind === 'mic') return goMicReply(value === 'on', { chat: false });
+    if (kind === 'forget') return goForgetReply({ chat: false });
+    if (kind === 'clip') return goClipReply({ chat: false });
+    if (kind === 'quit') return askQuit({ chat: true });
+    if (kind === 'music') {
+      const parsed = REPLY_MUSIC[value];
+      if (!parsed) return;
+      const result = await music.command({ action: parsed });
+      if (!result?.ok) showLine(result?.error || 'No pude hacer eso con la música.', { chat: true, badge: 'MUSIC' });
     }
   } catch (err) {
     logEvent(voiceLogPath(), `[capri] reply action ${kind} failed: ${err.message}`);
@@ -2615,6 +2648,49 @@ function createTray() {
   rebuildTray();
 }
 
+// The direct-command ladder, from a chat/voice line to her reply: null when it's for the model.
+// Shared by chat:send and the splitter, so every part of "minimiza todo y ve a dormir" runs the
+// same detectors as when it is said alone.
+async function directCommand(line) {
+  const fixOrder = parseFixCommand(line);
+  if (fixOrder) {
+    const done = goFixReply(fixOrder);
+    if (done.line) return done; // a fix that can't be saved (too long) goes to the model
+  }
+  const newName = parseNameCommand(line);
+  if (newName) return goNameReply(newName);
+  if (isWhatsNewCommand(line)) return goWhatsNewReply();
+  const powerOrder = await systemFlow.command(line);
+  if (powerOrder) return { ok: true };
+  const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
+  if (musicOrder) return musicReply(musicOrder);
+  if (isSleepCommand(line)) return goSleepReply();
+  if (quitFlow.pending) return answerQuit(line);
+  if (isQuitCommand(line)) return askQuit({ chat: true });
+  if (isClipCommand(line)) return goClipReply();
+  if (isMuteCommand(line)) return goMicReply(false);
+  if (isUnmuteCommand(line)) return goMicReply(true);
+  if (isForgetCommand(line)) return goForgetReply();
+  // typing to her while she's DORMANT (or asking her to wake) brings her back, no model needed
+  if (overlayFolded || isWakeCommand(line)) return goWakeReply();
+  const appOrder = await apps().command(line); // "abre Discord", "cierra Spotify"
+  if (appOrder) return appReply(appOrder);
+  return null;
+}
+
+// Every part already checked as direct: run them in order, unless one asks first ("¿seguro?") —
+// then the rest waits for the answer instead of firing blind.
+async function runDirectSegments(segments) {
+  let last = { ok: true };
+  for (const segment of segments) {
+    const result = await directCommand(segment);
+    if (!result) break;
+    last = result;
+    if (systemFlow.pending || systemFlow.running || quitFlow.pending || apps().confirm.pending) break;
+  }
+  return last;
+}
+
 function registerIpc() {
   ipcMain.on('overlay:interactive', (_e, on) => setClickThrough(!on, on ? 'hover-on' : 'hover-off'));
   ipcMain.on('renderer:log', (_e, payload = {}) => {
@@ -2752,29 +2828,15 @@ function registerIpc() {
     // her "¿quisiste decir…?" / "¿seguro?" waiting for this answer (Paso 4C)
     const answered = await apps().answer(line);
     if (answered) return appReply(answered);
-    const fixOrder = parseFixCommand(line);
-    if (fixOrder) {
-      const done = goFixReply(fixOrder);
-      if (done.line) return done; // said something; a fix that can't be saved (too long) goes to the model
-    }
-    const newName = parseNameCommand(line);
-    if (newName) return goNameReply(newName);
-    if (isWhatsNewCommand(line)) return goWhatsNewReply();
-    const powerOrder = await systemFlow.command(line);
-    if (powerOrder) return { ok: true };
-    const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
-    if (musicOrder) return musicReply(musicOrder);
-    if (isSleepCommand(line)) return goSleepReply();
-    if (quitFlow.pending) return answerQuit(line);
-    if (isQuitCommand(line)) return askQuit({ chat: true });
-    if (isClipCommand(line)) return goClipReply();
-    if (isMuteCommand(line)) return goMicReply(false);
-    if (isUnmuteCommand(line)) return goMicReply(true);
-    if (isForgetCommand(line)) return goForgetReply();
-    // typing to her while she's DORMANT (or asking her to wake) brings her back, no model needed
-    if (overlayFolded || isWakeCommand(line)) return goWakeReply();
-    const appOrder = await apps().command(line); // "abre Discord", "cierra Spotify"
-    if (appOrder) return appReply(appOrder);
+    // several orders in one breath: only when every part is already direct, and sleep last.
+    // A mixed line ("saluda y duerme") goes to the model whole: no partial execution.
+    // While she's DORMANT any message wakes her first, as it always did.
+    const segments = quitFlow.pending || overlayFolded
+      ? null
+      : planMultiCommand(line, (part) => isDirectCommand(part, allApps()));
+    if (segments) return runDirectSegments(segments);
+    const direct = await directCommand(line);
+    if (direct) return direct;
     // Phase 6C: "mirá mi pantalla" → JPEG in memory when shareScreen is on and the brain can see.
     let lookImage = null;
     let didLook = false;

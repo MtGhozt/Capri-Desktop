@@ -1,13 +1,30 @@
 'use strict';
 
-// Hidden leading reply tags: a mood picks the TTS ref, an action opens an app or music.
-// [calm] is kept as an alias for [seria].
+// Hidden leading reply tags: a mood picks the TTS ref, an action opens an app, plays music or
+// runs one of her own closed-list actions. [calm] is kept as an alias for [seria].
 
 const MOODS = ['burla', 'emocion', 'aburrida', 'seria'];
 const ALIAS = { calm: 'seria' };
 const TAG = /^\s*\[(burla|emocion|aburrida|seria|calm)\]\s*/i;
-const ACTION_KINDS = ['open', 'play'];
+// The whole closed list of things a reply may do. A bare tag takes no value; mic and music take
+// one from their own list. Anything else is text and never runs.
+const ACTION_KINDS = [
+  'open', 'play', 'sleep', 'wake', 'minimize', 'lock', 'mic', 'forget', 'clip', 'quit', 'music',
+];
+const PLAIN_ACTIONS = new Set(['sleep', 'wake', 'minimize', 'lock', 'forget', 'clip', 'quit']);
+const MIC_VALUES = ['on', 'off'];
+const MUSIC_VALUES = ['pause', 'play', 'next', 'previous', 'up', 'down', 'mute', 'unmute', 'nowplaying', 'open', 'start'];
 const TAG_NAMES = [...new Set([...MOODS, ...Object.keys(ALIAS), ...ACTION_KINDS])];
+
+// Told to her in the system prompt: the same closed list the parser accepts, built here so the
+// two can't drift.
+const ACTION_TAG_HELP = [
+  'Tus únicas acciones sobre la PC son etiquetas ocultas al inicio de tu respuesta (nunca las menciones):',
+  '[sleep], [wake], [minimize], [lock], [mic:on], [mic:off], [forget], [clip], [quit],',
+  '[open:<app>], [play:<canción>] o [play:hersong],',
+  `[music:${MUSIC_VALUES.join('|')}].`,
+  'Solo esas se ejecutan; cualquier otra cosa es texto normal.',
+].join(' ');
 
 function normalizeMood(name) {
   const key = String(name || '').toLowerCase();
@@ -25,18 +42,27 @@ function stripMoodTag(text) {
 function parseAction(name, value) {
   const kind = String(name || '').toLowerCase();
   const text = String(value || '').trim();
-  if (!ACTION_KINDS.includes(kind) || !text) return null;
-  if (kind === 'play' && text.toLowerCase() === 'hersong') return { kind, value: 'hersong', herSong: true };
-  return { kind, value: text };
+  if (!ACTION_KINDS.includes(kind)) return null;
+  if (kind === 'open' || kind === 'play') {
+    if (!text) return null;
+    if (kind === 'play' && text.toLowerCase() === 'hersong') return { kind, value: 'hersong', herSong: true };
+    return { kind, value: text };
+  }
+  if (PLAIN_ACTIONS.has(kind)) return text ? null : { kind, value: '' };
+  const allowed = kind === 'mic' ? MIC_VALUES : MUSIC_VALUES;
+  const picked = text.toLowerCase();
+  return allowed.includes(picked) ? { kind, value: picked } : null;
 }
 
-// [burla] / [open:Discord] / [play:some song]
+// [burla] / [open:Discord] / [play:some song] / [sleep] / [music:next]
 function parseTag(inner) {
   const raw = String(inner || '');
   const colon = raw.indexOf(':');
   if (colon < 0) {
     const mood = normalizeMood(raw.trim());
-    return mood ? { mood } : null;
+    if (mood) return { mood };
+    const action = parseAction(raw.trim(), '');
+    return action ? { action } : null;
   }
   const action = parseAction(raw.slice(0, colon), raw.slice(colon + 1));
   return action ? { action } : null;
@@ -144,4 +170,6 @@ function createMoodStripper({ onText, onMood, onAction } = {}) {
   };
 }
 
-module.exports = { MOODS, normalizeMood, stripMoodTag, stripReplyTags, createMoodStripper };
+module.exports = {
+  MOODS, ACTION_KINDS, ACTION_TAG_HELP, normalizeMood, stripMoodTag, stripReplyTags, createMoodStripper,
+};

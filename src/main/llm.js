@@ -6,7 +6,7 @@ const {
 } = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
-const { stripReplyTags, createMoodStripper } = require('./mood-tag');
+const { stripReplyTags, createMoodStripper, ACTION_TAG_HELP } = require('./mood-tag');
 const { userContentWithImage } = require('./screen-look');
 
 const HISTORY_LIMIT = 20; // ~10 user+assistant turns
@@ -107,6 +107,7 @@ function createLlm({
     if (notes) parts.push(`Notas fijas sobre el usuario (memory.md):\n${notes}`);
     const name = String(cfg.userName || '').trim();
     if (name) parts.push(`El usuario se llama ${name}; llamalo así de vez en cuando, sin abusar.`);
+    parts.push(ACTION_TAG_HELP);
     // her answer is shown in a terminal box and read out loud: markers would be spelled out
     if (cloud) parts.push('Responde en texto plano, sin Markdown, sin asteriscos ni listas; frases cortas para ser leídas en voz alta. Nada de etiquetas de seguridad ni de tu razonamiento.');
     // Screen images ride on the user turn (screen-look), not the system prompt.

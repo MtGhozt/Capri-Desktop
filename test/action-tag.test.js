@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { stripReplyTags, createMoodStripper } = require('../src/main/mood-tag');
+const { stripReplyTags, createMoodStripper, ACTION_KINDS, ACTION_TAG_HELP } = require('../src/main/mood-tag');
 
 test('stripReplyTags takes a mood and an action tag, in either order', () => {
   assert.deepEqual(stripReplyTags('[burla] [open:Discord] Ahí va.'), {
@@ -60,4 +60,31 @@ test('stream stripper passes plain text through', () => {
   assert.equal(s.mood, null);
   assert.equal(s.action, null);
   assert.equal(out.join(''), 'Sin tags, choom.');
+});
+
+test('stripReplyTags understands the closed list of argument-free actions', () => {
+  assert.deepEqual(stripReplyTags('[sleep] A dormir.'), {
+    text: 'A dormir.', mood: null, action: { kind: 'sleep', value: '' },
+  });
+  assert.deepEqual(stripReplyTags('[emocion] [minimize] Listo.'), {
+    text: 'Listo.', mood: 'emocion', action: { kind: 'minimize', value: '' },
+  });
+  assert.deepEqual(stripReplyTags('[lock] Ya.').action, { kind: 'lock', value: '' });
+  assert.deepEqual(stripReplyTags('[mic:on] Te escucho.').action, { kind: 'mic', value: 'on' });
+  assert.deepEqual(stripReplyTags('[music:next] Otra.').action, { kind: 'music', value: 'next' });
+});
+
+test('an argument-free action with a value, or a value out of the list, does not run', () => {
+  for (const text of ['[sleep:ya] Nada.', '[mic:loud] Nada.', '[music:sing] Nada.', '[open:] Nada.']) {
+    assert.deepEqual(stripReplyTags(text), { text, mood: null, action: null });
+  }
+});
+
+test('the system prompt lists every action the parser accepts', () => {
+  for (const kind of ACTION_KINDS) {
+    assert.ok(
+      ACTION_TAG_HELP.includes(`[${kind}:`) || ACTION_TAG_HELP.includes(`[${kind}]`),
+      `missing from the prompt: ${kind}`,
+    );
+  }
 });
