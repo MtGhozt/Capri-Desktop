@@ -330,6 +330,7 @@ function createOverlay() {
 // Click-through, as she last asked for it: put back after anything that may touch the window's
 // styles (focusable, show, focus), and again on her heartbeat, so it can't stay off by itself.
 let clickThrough = true;
+let lastThrough = null; // last value written to the log: hover flips it on every click
 let handedBackAt = 0; // when she last gave the keyboard back to the window before her
 let quitSolid = false; // ¿Salir? visible: ignoreMouseEvents stays off until clear + grace
 function setClickThrough(on, reason = 'state') {
@@ -337,7 +338,10 @@ function setClickThrough(on, reason = 'state') {
   if (!overlay || overlay.isDestroyed()) return;
   // ¿Salir? / open menu: never re-enable ignoreMouseEvents (hover can stay false after Win+L).
   const through = (quitSolid || menuGuard?.menuOpen) ? false : clickThrough;
-  logEvent(voiceLogPath(), `[capri] click-through ${through ? 'on' : 'off'} reason=${reason}`);
+  if (through !== lastThrough) {
+    lastThrough = through;
+    logEvent(voiceLogPath(), `[capri] click-through ${through ? 'on' : 'off'} reason=${reason}`);
+  }
   if (through) overlay.setIgnoreMouseEvents(true, { forward: true });
   else overlay.setIgnoreMouseEvents(false);
 }

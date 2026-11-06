@@ -261,6 +261,15 @@ test('unlock, resume, and display changes use the same overlay resync', () => {
   assert.match(main, /quitSolid \|\| menuGuard\?\.menuOpen/);
 });
 
+test('click-through is logged only when it changes, not on every hover', () => {
+  const main = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
+    'utf8',
+  );
+  assert.match(main, /let lastThrough = null;/);
+  assert.match(main, /if \(through !== lastThrough\) \{\s*lastThrough = through;\s*logEvent\(voiceLogPath\(\), `\[capri\] click-through/);
+});
+
 test('menu opens with explicit mouse capture and restores click-through on close', () => {
   const main = require('node:fs').readFileSync(
     require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
