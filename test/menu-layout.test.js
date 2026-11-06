@@ -155,6 +155,14 @@ test('agent install rows keep the command inside the panel and expose Copiar', (
   assert.match(css, /\.appmenu__agent-row \.appmenu__input\s*\{[^}]*min-width:\s*0;/s);
 });
 
+test('copy buttons say Copiado only for a moment, then Copiar again', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(source, /copy\.textContent = 'Copiado';[\s\S]*?copy\.textContent = 'Copiar'/);
+  assert.match(source, /copy\.textContent = 'COPIADO';[\s\S]*?copy\.textContent = 'COPIAR'/);
+  assert.match(source, /copy\.resetTimer = setTimeout\(\(\) => \{ copy\.textContent = 'Copiar'; \}, 1600\)/);
+  assert.match(source, /copy\.resetTimer = setTimeout\(\(\) => \{ copy\.textContent = 'COPIAR'; \}, 1600\)/);
+});
+
 test('agent rows show a name, state, and actionable hint', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(source, /build\('span', 'appmenu__agent-name', item\.label\)/);

@@ -593,6 +593,8 @@ export class AppMenu {
           try {
             await navigator.clipboard.writeText(step.command);
             copy.textContent = 'COPIADO';
+            clearTimeout(copy.resetTimer);
+            copy.resetTimer = setTimeout(() => { copy.textContent = 'COPIAR'; }, 1600);
           } catch { /* no clipboard: the command is still on screen */ }
         });
         cmd.append(copy);
@@ -1920,6 +1922,8 @@ export class AppMenu {
               try {
                 await navigator.clipboard.writeText(command.value);
                 copy.textContent = 'Copiado';
+                clearTimeout(copy.resetTimer);
+                copy.resetTimer = setTimeout(() => { copy.textContent = 'Copiar'; }, 1600);
               } catch { /* no clipboard: the command is still on screen */ }
             });
             cmdWrap.append(command, copy);
