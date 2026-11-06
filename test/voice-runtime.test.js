@@ -65,3 +65,40 @@ except RuntimeError as err:
 `);
   assert.deepEqual(out.trim().split(/\r?\n/).pop().split(/\s+/), ['1', 'True', 'True']);
 });
+
+test('the whisper load timeout outlasts a slow CPU first load', { skip: skip() }, () => {
+  const out = py('import server; print(server.WHISPER_LOAD_S)');
+  assert.equal(Number(out), 240, 'a 60 s timeout killed the ~180 s CPU warmup');
+});
+
+test('a warmup already in progress is not started again', { skip: skip() }, () => {
+  const out = py(`
+import asyncio
+import threading
+import server
+
+calls = []
+started = threading.Event()
+release = threading.Event()
+
+def slow():
+    calls.append(1)
+    started.set()
+    release.wait(5)
+    return object()
+
+engine = server.Engine(asyncio.new_event_loop(), 'test')
+engine.cfg['wakeWord'] = False
+engine._vad = server.EnergyVAD()
+engine._load_whisper = slow
+worker = threading.Thread(target=engine.ensure_stt)
+worker.start()
+started.wait(2)
+engine.ensure_stt()  # must return at once instead of queueing a second warmup
+print(len(calls))
+release.set()
+worker.join(5)
+print(len(calls), engine._whisper is not None)
+`);
+  assert.deepEqual(out.trim().split(/\r?\n/).slice(-2), ['1', '1 True']);
+});

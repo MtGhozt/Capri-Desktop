@@ -42,10 +42,12 @@ MIC_QUEUE = 48
 WAKE_FRAME = 1280
 MEDIUM_VRAM_MIB = 2800
 # auto: a small GPU (GTX 1650 4 GB) has enough *free* VRAM for medium cuda on paper, but the
-# download + load takes ~117 s, past WHISPER_LOAD_S (60 s): every STT then times out.
+# download + load takes ~117 s, past the old 60 s load timeout: every STT then timed out.
 MEDIUM_TOTAL_VRAM_MIB = 6144
 LISTEN_TIMEOUT_S = 10.0
-WHISPER_LOAD_S = 60.0
+# CPU-only PCs take ~170-180 s on the first Whisper load: 4 min leaves margin without
+# changing which device the loader picks.
+WHISPER_LOAD_S = 240.0
 WAKE_ATTEMPTS = 3
 PREFETCH = 2
 SHORT_PHRASE = 20
@@ -447,6 +449,7 @@ class Engine:
         self._wake = None
         self._vad = None
         self._stt_error = ""
+        self._stt_loading = False
         self._runtime_reported = False
         self._lock = threading.Lock()
         self._stt_lock = threading.Lock()
@@ -580,6 +583,11 @@ class Engine:
 
     def ensure_stt(self) -> None:
         with self._stt_lock:
+            if self._stt_loading:
+                # slow CPU: the first load takes minutes. Don't queue a second warmup behind it.
+                return
+            self._stt_loading = True
+        try:
             MODELS.mkdir(parents=True, exist_ok=True)
             if self._vad is None:
                 path = MODELS / "silero_vad.onnx"
@@ -606,6 +614,9 @@ class Engine:
                     else:
                         log(f"stt unavailable: {err}")
                     self.broadcast({"type": "stt", "available": False, "reason": self._stt_error})
+        finally:
+            with self._stt_lock:
+                self._stt_loading = False
 
     def _report_runtime_missing(self, module: str) -> None:
         if self._runtime_reported:
