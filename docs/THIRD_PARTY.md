@@ -26,6 +26,9 @@ ajustado a este proyecto.
 | Idea | Proyecto | Licencia | Dónde quedó |
 | --- | --- | --- | --- |
 | Preguntar cómo llamarte ("¿cómo querés que te llame?", comando `llamame X`) y contarte qué cambió al actualizar ("¿qué hay de nuevo?"). Código escrito desde cero. | [Capri-cmd/capri-ai](https://github.com/Capri-cmd/capri-ai), [lachydotmcg/capri-desktop](https://github.com/lachydotmcg/capri-desktop) | MIT | `src/main/name-command.js`, `src/main/whats-new.js` |
+| Fastidiarse tras varias caricias seguidas y una pantalla de "Extras" en el primer arranque (pantalla + acceso directo). Código escrito desde cero. | [Capri-cmd/capri-ai](https://github.com/Capri-cmd/capri-ai) | MIT | `src/renderer/js/pet-taps.js`, `src/renderer/js/guide.js`, `src/renderer/js/app.js` |
+| Ronroneo suave al acariciarla. Idea, sin código copiado. | [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop) | MIT (hasta `f839580`) | `src/renderer/js/voice.js` (cue `purr`), `src/renderer/js/app.js` |
+| Redactar claves y tokens antes de copiar un error o escribir el log. Idea, sin código copiado. | [lachydotmcg/capri-desktop](https://github.com/lachydotmcg/capri-desktop) | MIT | `src/main/diagnose.js`, `src/main/log.js`, `src/renderer/js/redact-keys.js` |
 
 ## Fases anteriores (ya en el repo)
 

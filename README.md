@@ -10,7 +10,7 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 > Fan art. **No** afiliado a CD PROJEKT RED. Licencia PolyForm Noncommercial — [LICENSE](LICENSE), [CREDITS.md](CREDITS.md).
 
-**Versión actual:** `0.2.2` (`Capri-Setup-0.2.2.exe`).
+**Versión actual:** `0.2.4` (`Capri-Setup-0.2.4.exe`).
 
 <img src="docs/media/capri-desktop.png" alt="Capri en el escritorio" width="100%">
 
@@ -20,7 +20,6 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 Lo que viene; detalle y estado en [`docs/roadmap.md`](docs/roadmap.md):
 
-- **Copiar detalles de error** con un clic y botón **“Abrir log”**, para reportar en #bugs sin buscar archivos.
 - **Wake word** que no interfiera con **audífonos Bluetooth**.
 - Aviso de **SmartScreen** al instalar y **actualización con un clic**.
 - Arreglo de **“Mirá mi pantalla”** cuando manda una captura vieja o el primer frame vacío.
@@ -44,7 +43,7 @@ Overlay sin bordes, siempre encima. Vive en tu escritorio: puedes arrastrarla, a
 
 ## 2. Inicio rápido (sin código)
 
-1. Baja **`Capri-Setup-0.1.2.exe`** desde [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
+1. Baja **`Capri-Setup-0.2.4.exe`** desde [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
 2. Si SmartScreen dice *Windows protegió tu PC* → **Más información** → **Ejecutar de todas formas** (el instalador no está firmado con certificado de pago; es normal).
 3. Instala y abre **Capri**. No hace falta Node.js ni admin.
 
@@ -56,7 +55,7 @@ La primera vez, si no hay LM Studio/Ollama local ni clave en la nube, Capri pued
 
 ## 3. Su cerebro
 
-**Clic derecho → Ajustes… → Cerebro.** Grupos: **Gratis** (LM Studio, OpenRouter), **Gratis con límite** (Gemini) y **De pago**; más abajo **Agentes instalados** si hay CLIs. Pegá la Key si hace falta, tocá **Probar** y pasá a **Activo**. Las claves quedan cifradas en tu PC (`safeStorage`; no van al repo ni a los logs).
+**Clic derecho → Ajustes… → Cerebro.** Grupos: **Gratis** (LM Studio, OpenRouter), **Gratis con límite** (Gemini, Groq) y **De pago** (OpenAI, Anthropic, DeepSeek, Mistral, xAI); más abajo **Agentes instalados** si hay CLIs. Pegá la Key si hace falta, tocá **Probar** y pasá a **Activo**. Las claves quedan cifradas en tu PC (`safeStorage`; no van al repo ni a los logs).
 
 **Compartir pantalla / memoria con la nube** está **apagado** por defecto. Personalidad y memoria: **Ajustes → Memoria → Abrir personalidad / Abrir memoria**.
 
@@ -138,7 +137,7 @@ Código en este repo; el instalador se genera con `pnpm dist`.
 
 ## 9. FAQ / problemas
 
-Si algo no arranca, mirá [`docs/SOPORTE.md`](docs/SOPORTE.md) (síntoma → causa → arreglo). Antes de reportar: **Ajustes → Acerca de → Diagnóstico → Copiar reporte**.
+Si algo no arranca, mirá [`docs/SOPORTE.md`](docs/SOPORTE.md) (síntoma → causa → arreglo). Antes de reportar: **Ajustes → Acerca de → Diagnóstico → Copiar reporte**. Si te piden el log, usá **Abrir log** (abre `voice.log` en el Explorador) y adjuntalo en Discord **#bugs**.
 
 | Problema | Qué probar |
 | --- | --- |
@@ -163,7 +162,7 @@ Si algo no arranca, mirá [`docs/SOPORTE.md`](docs/SOPORTE.md) (síntoma → cau
 
 # Capri (English, short)
 
-Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop). **v0.1.2** — download `Capri-Setup-0.1.2.exe` from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases); SmartScreen → *More info* → *Run anyway*.
+Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop). **v0.2.4** — download `Capri-Setup-0.2.4.exe` from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases); SmartScreen → *More info* → *Run anyway*.
 
 **Brain:** LM Studio / Ollama locally, or free NVIDIA/Gemini keys, or OpenRouter, Groq, OpenAI, Mistral, DeepSeek in **Settings → Cerebro**. Keys stay on your PC (`safeStorage`).
 
@@ -171,4 +170,4 @@ Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [m
 
 **Can do:** text chat, open/close apps, music (Namida/Spotify: play/pause/next/search, music-only volume, “pon tu canción”), PC power with confirm, game-mode drone, drag/drop, head pats, dormant/sleep forms.
 
-**Quit stuck:** **Ctrl+Alt+Shift+Q**, or tray **Salir** twice. Logs: `%APPDATA%\capri-desktop\logs\`. Fan project — not affiliated with CD PROJEKT RED. See [CREDITS.md](CREDITS.md) / [LICENSE](LICENSE).
+**Quit stuck:** **Ctrl+Alt+Shift+Q**, or tray **Salir** twice. Logs: `%APPDATA%\capri-desktop\logs\` (or **Settings → About → Open log**; **Diagnose → Copy report** for Discord). Fan project — not affiliated with CD PROJEKT RED. See [CREDITS.md](CREDITS.md) / [LICENSE](LICENSE).

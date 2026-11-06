@@ -1,6 +1,6 @@
 # Soporte
 
-Problemas comunes, de síntoma a arreglo. Antes de escribir en Discord, probá **Ajustes → Acerca de → Diagnóstico** y copiá el reporte.
+Problemas comunes, de síntoma a arreglo. Antes de escribir en Discord, probá **Ajustes → Acerca de → Diagnóstico → Copiar reporte** (sale sin rutas ni claves) y adjuntá el reporte. Si te piden el log completo, **Acerca de → Abrir log** lo muestra en el Explorador.
 
 ## «Instalar voz» falla con 0x80070660 o 1632
 
@@ -59,5 +59,7 @@ Después volvé a **Ajustes → Oído → Instalar voz**.
 ## ¿Dónde están los logs?
 
 `%APPDATA%\capri-desktop\logs\voice.log`
+
+Usá **Ajustes → Acerca de → Abrir log** para abrirlo en el Explorador, o **Copiar error** en una burbuja de error para pegar el detalle ya redactado.
 
 Adjuntalo (o el reporte de **Diagnóstico**) cuando reportes en Discord **#bugs**.

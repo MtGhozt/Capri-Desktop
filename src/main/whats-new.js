@@ -7,9 +7,9 @@ const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
   '0.2.4': [
-    'Los atajos ahora se editan desde mi menú, sin tocar archivos.',
-    'Con Namida te digo qué está sonando.',
-    'Mis apps abre carpetas y archivos, y ahora te pregunto cómo llamarte.',
+    'Groq y Mistral volvieron, y los atajos se editan desde mi menú.',
+    'Namida te dice qué suena, Mis apps abre carpetas y ya sé cómo llamarte.',
+    'Diagnóstico + Abrir log para reportar, y las caricias ahora ronronean (3 seguidas me fastidian).',
   ],
 };
 

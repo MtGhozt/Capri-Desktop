@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.2.4
+
+> [!TIP]
+> **¿Venís de 0.2.3?** Al abrir esta versión, Capri muestra una burbuja **NUEVO** con las novedades; **«¿qué hay de nuevo?»** la repite cuando quieras. Si venís de una versión anterior sin `lastSeenVersion`, también aparece una vez (basta con que exista `config.json`).
+>
+> Para Discord: copiá el reporte con **Ajustes → Acerca de → Diagnóstico → Copiar reporte** y, si te lo piden, **Abrir log** y adjuntá `voice.log`.
+
+### Cerebro y proveedores
+
+- **Groq** vuelve a la lista en **Gratis con límite** y **Mistral** en **De pago**; se habían ocultado al reordenar las tarjetas.
+- **Abrir la página de la clave** desde Cerebro vuelve a funcionar para **Groq, Mistral, DeepSeek y OpenRouter**: sus hosts ya están en la allowlist de enlaces externos (solo abre en el navegador del sistema y solo hosts conocidos).
+- **Detección de agentes:** Cursor Agent se reconoce también con el binario `agent`, su instalación en Windows usa `irm 'https://cursor.com/install?win32=true' | iex` y OpenCode se instala con `npm install -g opencode-ai`. La comprobación de versión tiene 15 s y cada detección escribe `agent detect <id> bin=… path=… version=ok|timeout|error|none` en `voice.log`, así un CLI lento ya no queda como «No instalado» sin explicación.
+
+### Voz
+
+- **Whisper en CPU:** el primer arranque puede tardar ~170–180 s (más con disco frío). El límite de carga pasa de 60 s a **240 s**; antes se vencía a mitad de carga y parecía que la voz no arrancaba.
+- **Un solo warmup:** si Whisper ya se está cargando, un segundo pedido (config, PTT, saludo) no inicia otra carga ni queda esperando minutos. Es un intento hasta que esté listo o falle una vez, con el motivo en `voice.log` y en Ajustes.
+- **PC sin GPU:** el aviso de «la primera carga puede tardar ~3 minutos» sigue en Ajustes y en `docs/SOPORTE.md`; ahora el timeout real acompaña ese tiempo.
+
+### UI y comportamiento
+
+- **Atajos editables:** los atajos globales, el toggle del chat, la tecla de hablar y las teclas de música se capturan desde el menú. Rechaza un combo ya usado por otro atajo, un clip, cerrar el menú o la salida de emergencia; si Windows no lo acepta, restaura el anterior. El atajo de la bandeja sigue `config.json`.
+- **Namida — qué está sonando:** lee la sesión multimedia de Windows (SMTC) y, si no hay, el título de la ventana; Spotify queda como fallback. Si no encuentra nada: «No sé qué está sonando en Namida.»
+- **Mis apps:** abre **carpetas y archivos** (solo un `.exe` real se ejecuta; el resto va por el shell), agrega Descargas, Documentos y Escritorio cuando existen, y cerrar una carpeta es un no-op amable en vez de tocar el Explorador.
+- **Tu nombre:** en el primer arranque te pregunta «¿Cómo querés que te llame?» (con **Saltar**), queda en Ajustes › Comportamiento y también con **«llamame Mati»** / «decime Mati». El nombre solo se manda al modelo cuando existe.
+- **Copiar en comandos de agentes:** el botón **Copiar** de los comandos de instalación dice **Copiado** y vuelve a **Copiar** a los 1,6 s; igual en las ayudas **COPIAR → COPIADO → COPIAR**.
+- **Caricias:** suenan con un **ronroneo** suave (respeta silencio / BLIPS); **3 caricias seguidas** en 1,2 s y se fastidia con una línea propia. Las caricias se pueden apagar en Comportamiento.
+- **Extras (primera vez):** después del nombre/saludo, una pantalla opcional para activar **Ver mi pantalla** y crear un **acceso directo en el Escritorio**.
+- **Qué hay de nuevo:** burbuja **NUEVO** solo después de actualizar (nunca en instalación nueva) y **«¿qué hay de nuevo?»** a pedido. Cubre el upgrade desde 0.2.3 y desde versiones sin `lastSeenVersion`.
+
+### Soporte y diagnóstico
+
+- **Ajustes › Acerca de › Diagnóstico:** revisa Python 3.11, VC++ x64, el sidecar de voz y los agentes detectados; **Copiar reporte** genera texto sin rutas de usuario ni claves.
+- **Abrir log** en Acerca de y en el menú; **Copiar error** en las burbujas de error, siempre redactado. Menos pasos para reportar en Discord **#bugs**.
+- **`docs/SOPORTE.md`:** guía de síntoma → causa → arreglo (Python `0x80070660` / `1632` con Microsoft Store o NuGet, VC++/DLL, `CERTIFICATE_VERIFY_FAILED`, Claude Code, PC sin GPU, LM Studio, dónde están los logs).
+- **Redacción de secretos:** `redactSecrets` limpia claves y tokens (`sk-`, `AIza`, `xai-`, hex/base64 largos, `Bearer …`) en el reporte, en **Copiar error**, en la burbuja y en **cada línea de `voice.log`**. El helper del renderer se llama `redact-keys.js` porque `.gitignore` confundía `redact-secrets.js` con un archivo de claves y no lo empaquetaba.
+- **`voice.log` sin spam:** la línea `click-through on/off` se escribe solo cuando el estado cambia; antes cada clic o hover llenaba el log.
+
+### Correcciones
+
+- Agentes marcados «No instalado» con el CLI presente (Cursor `agent`, OpenCode).
+- Enlaces de claves bloqueados en Cerebro (Groq, Mistral, DeepSeek, OpenRouter).
+- Whisper: timeout de 60 s y warmups duplicados en PCs sin GPU.
+- Los botones de copiar quedaban en «Copiado» para siempre.
+- `voice.log` se llenaba de líneas `click-through` al hacer clic.
+- El helper que redacta claves en la burbuja no llegaba al instalador.
+
 ## 0.2.3
 
 > [!IMPORTANT]
