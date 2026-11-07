@@ -41,6 +41,8 @@ def bare():
     eng._omni = None
     eng._tts = None
     eng._omni_loading = False
+    eng._omni_blocked = None
+    eng._omni_notice_shown = False
     eng._want_tts = True
     eng._session_tts = None
     eng._whisper = None

@@ -80,6 +80,11 @@ test('an argument-free action with a value, or a value out of the list, does not
   }
 });
 
+test('the prompt forbids claiming an action without its tag', () => {
+  assert.match(ACTION_TAG_HELP, /Nunca digas/);
+  assert.match(ACTION_TAG_HELP, /sin etiqueta no pas/i);
+});
+
 test('the system prompt lists every action the parser accepts', () => {
   for (const kind of ACTION_KINDS) {
     assert.ok(

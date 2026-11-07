@@ -4,6 +4,18 @@ const crypto = require('node:crypto');
 const http = require('node:http');
 const https = require('node:https');
 
+async function refreshSpotifyToken({ clientId, refreshToken, fetcher = fetch }) {
+  const response = await fetcher('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId, grant_type: 'refresh_token', refresh_token: refreshToken,
+    }),
+  });
+  if (!response.ok) throw new Error(`Spotify token HTTP ${response.status}`);
+  return response.json();
+}
+
 function createPkce(randomBytes = crypto.randomBytes) {
   const verifier = randomBytes(64).toString('base64url');
   const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
@@ -87,19 +99,56 @@ async function authorizeSpotify({ clientId, openExternal, tokenStore, port = OAU
   return tokens;
 }
 
-function createSpotify({ token, request = defaultRequest } = {}) {
+function createSpotify({
+  token, request = defaultRequest, refresh = null, expired = null,
+  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) {
+  const isHttp = (err, code) => new RegExp(`\\b${code}\\b`).test(String(err?.message || ''));
+
+  // Expired access token: refresh before the call. A 401 mid-flight is handled per request.
+  async function accessToken() {
+    if (expired?.()) {
+      const next = await refresh?.().catch(() => null);
+      if (next) return next;
+    }
+    return token?.();
+  }
+
+  async function call(endpoint, access, body, method) {
+    try {
+      return await request(endpoint, access, body, method);
+    } catch (err) {
+      if (!refresh || !isHttp(err, 401)) throw err;
+      const next = await refresh().catch(() => null);
+      if (!next) throw err;
+      return request(endpoint, next, body, method);
+    }
+  }
+
   async function playQuery(query, openTrack) {
-    const access = token?.();
+    const access = await accessToken();
     if (!access) return { ok: false, fallback: true };
-    const result = await request('/v1/search', access, { q: query, type: 'track', limit: 1 });
+    const result = await call('/v1/search', access, { q: query, type: 'track', limit: 1 });
     const track = result?.tracks?.items?.[0];
     if (!track) return { ok: false, error: 'No encontré esa canción.' };
     try {
-      await request('/v1/me/player/play', access, { uris: [track.uri] }, 'PUT');
-    } catch {
+      await call('/v1/me/player/play', access, { uris: [track.uri] }, 'PUT');
+    } catch (err) {
+      // No active device: open Spotify, give it a beat, then retry the play once.
+      if (isHttp(err, 404) && openTrack) {
+        await openTrack('spotify:');
+        await wait(2000);
+        try {
+          await call('/v1/me/player/play', access, { uris: [track.uri] }, 'PUT');
+          return { ok: true, track: track.name, artist: track.artists?.[0]?.name || '' };
+        } catch {
+          // still no device: fall through to opening the track
+        }
+      }
       // play needs Premium (403) and a live device: hand the track to the desktop app instead
       if (!openTrack) throw new Error('Spotify no pudo reproducir esa canción.');
       await openTrack(track.uri);
+      return { ok: true, track: track.name, artist: track.artists?.[0]?.name || '', opened: true };
     }
     return { ok: true, track: track.name, artist: track.artists?.[0]?.name || '' };
   }
@@ -107,10 +156,10 @@ function createSpotify({ token, request = defaultRequest } = {}) {
   // "pon música": resume in Spotify itself. No Premium (403) or no live device: the app is open,
   // not an error.
   async function resume(openApp) {
-    const access = token?.();
+    const access = await accessToken();
     if (!access) return { ok: false, fallback: true };
     try {
-      await request('/v1/me/player/play', access, undefined, 'PUT');
+      await call('/v1/me/player/play', access, undefined, 'PUT');
       return { ok: true };
     } catch {
       await openApp?.();
@@ -119,19 +168,19 @@ function createSpotify({ token, request = defaultRequest } = {}) {
   }
 
   async function nowPlaying() {
-    const access = token?.();
+    const access = await accessToken();
     if (!access) return { ok: false, fallback: true };
-    const item = await request('/v1/me/player', access);
+    const item = await call('/v1/me/player', access);
     return item?.item ? { ok: true, track: item.item.name, artist: item.item.artists?.[0]?.name || '' } : { ok: false };
   }
 
   // Music volume only (Web API). Never the PC master volume.
   async function volume(action) {
-    const access = token?.();
+    const access = await accessToken();
     if (!access) return { ok: false, fallback: true };
     let player;
     try {
-      player = await request('/v1/me/player', access);
+      player = await call('/v1/me/player', access);
     } catch {
       return { ok: false, fallback: true };
     }
@@ -145,7 +194,7 @@ function createSpotify({ token, request = defaultRequest } = {}) {
     else if (action === 'volumeDown') next = Math.max(0, base - 10);
     else return { ok: false, error: 'volume action desconocida' };
     try {
-      await request(`/v1/me/player/volume?volume_percent=${next}`, access, undefined, 'PUT');
+      await call(`/v1/me/player/volume?volume_percent=${next}`, access, undefined, 'PUT');
       return { ok: true, player: 'spotify', volume: next };
     } catch {
       return { ok: false, fallback: true };
@@ -179,4 +228,5 @@ function defaultRequest(endpoint, access, body, method = 'GET') {
 
 module.exports = {
   createPkce, createSpotify, redactSpotifyConfig, createTokenStore, authorizeSpotify, spotifyFailureLine,
+  refreshSpotifyToken,
 };

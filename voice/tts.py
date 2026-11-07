@@ -35,6 +35,10 @@ class SlowCpuTTS(RuntimeError):
     """OmniVoice on CPU took longer than OMNI_CPU_MAX_MS for the first phrase."""
 
 
+class OmniVoiceUnavailable(RuntimeError):
+    """GPU/VRAM cannot run OmniVoice: stay on Kokoro for this sidecar session."""
+
+
 class TTSEngine(ABC):
     @abstractmethod
     def speak(self, text: str) -> tuple[np.ndarray, int]:
@@ -115,13 +119,39 @@ def design_instruct(raw) -> str:
     return ", ".join(parts)
 
 
+def read_ref_text(txt: Path) -> str:
+    """User transcripts come from Notepad and phones: utf-8, then BOM, then Windows cp1252."""
+    raw = Path(txt).read_bytes()
+    for encoding in ("utf-8", "utf-8-sig", "cp1252"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def cuda_arch_reason(torch) -> str | None:
+    """The GPU's compute capability must be one this torch build was compiled for."""
+    try:
+        if not torch.cuda.is_available():
+            return None
+        major, minor = torch.cuda.get_device_capability(0)
+        arch = f"sm_{major}{minor}"
+        archs = [str(name).lower() for name in (torch.cuda.get_arch_list() or [])]
+        if archs and arch not in archs:
+            return f"omnivoice skipped GPU: {arch} not supported by torch ({','.join(archs)})"
+    except Exception:
+        return None
+    return None
+
+
 def verify_ref_transcript(txt: Path, log, label: str) -> str:
     """Ensure a clone transcript exists, is non-empty and trimmed; warn in voice.log if not."""
     if not txt.is_file():
         log(f"tts transcript missing label={label} path={txt}")
         return ""
-    raw = txt.read_text(encoding="utf-8")
-    text = raw.strip()
+    raw = read_ref_text(txt)
+    text = raw.strip().lstrip("\ufeff")
     if not text:
         log(f"tts transcript empty label={label} path={txt}")
         return ""
@@ -253,9 +283,11 @@ class OmniVoiceTTS(TTSEngine):
         steps: int = DEFAULT_TTS_STEPS,
         mood_refs: dict | None = None,
         instruct: str | None = None,
+        notice=None,
     ):
         self.models_dir = models_dir
         self.log = log
+        self.notice = notice or (lambda _message: None)
         self.wav = Path(wav) if wav else None
         self.txt = Path(txt) if txt else None
         self.instruct = design_instruct(instruct)
@@ -290,6 +322,7 @@ class OmniVoiceTTS(TTSEngine):
             transcript = verify_ref_transcript(self.txt, self.log, "ttsRef") if self.txt else ""
             if not transcript:
                 self.log(f"tts ref transcript missing path={self.txt}; falling back to voice-design")
+                self.notice("No pude usar tu voz clonada: falta la transcripción. Uso la voz normal.")
                 use_clone = False
         if use_clone:
             for name, (mwav, mtxt) in list(self.mood_refs.items()):
@@ -304,7 +337,14 @@ class OmniVoiceTTS(TTSEngine):
             self.instruct = design_instruct(self.instruct)
             self.log(f"omnivoice voice-design instruct={self.instruct!r}")
 
-        cuda_ok = bool(torch.cuda.is_available()) and int(free_vram or 0) >= OMNI_MIN_GPU_MIB
+        arch_reason = cuda_arch_reason(torch) if torch.cuda.is_available() else None
+        if arch_reason:
+            self.log(arch_reason)
+        cuda_ok = (
+            bool(torch.cuda.is_available())
+            and not arch_reason
+            and int(free_vram or 0) >= OMNI_MIN_GPU_MIB
+        )
         self.log(f"omnivoice vram free ~{free_vram} MiB cuda={torch.cuda.is_available()} min={OMNI_MIN_GPU_MIB}")
         if cuda_ok:
             try:
@@ -314,15 +354,18 @@ class OmniVoiceTTS(TTSEngine):
                 self.close()
                 if _is_oom(err):
                     self.log(f"omnivoice GPU OOM, released: {err}")
+                    if not allow_cpu:
+                        raise OmniVoiceUnavailable(f"omnivoice GPU OOM: {err}") from err
                 else:
                     self.log(f"omnivoice GPU failed: {err}")
                     if not allow_cpu:
-                        raise
+                        raise OmniVoiceUnavailable(f"omnivoice GPU failed: {err}") from err
         elif not allow_cpu:
-            raise RuntimeError(f"omnivoice skipped GPU: vram {free_vram} MiB < {OMNI_MIN_GPU_MIB}")
+            reason = arch_reason or f"omnivoice skipped GPU: vram {free_vram} MiB < {OMNI_MIN_GPU_MIB}"
+            raise OmniVoiceUnavailable(reason)
 
         if not allow_cpu:
-            raise RuntimeError("omnivoice GPU unavailable")
+            raise OmniVoiceUnavailable("omnivoice GPU unavailable")
         self._boot(OmniVoice, VoiceClonePrompt, torch, "cpu", torch.float32, transcript, use_clone)
         ms = self.warmup()
         if ms > OMNI_CPU_MAX_MS:
@@ -390,7 +433,7 @@ class OmniVoiceTTS(TTSEngine):
         if not wav_txt or self._model is None or self._vcp is None:
             return None
         wav, txt = wav_txt
-        text = txt.read_text(encoding="utf-8").strip() if txt.is_file() else ""
+        text = read_ref_text(txt).strip().lstrip("\ufeff") if txt.is_file() else ""
         if not text or not wav.is_file():
             self.log(f"omnivoice mood {name} skipped (missing wav/txt)")
             self.mood_refs.pop(name, None)
@@ -506,7 +549,7 @@ def load_engine(
         # tts_ref null / missing files → voice-design (not TTS off)
         omni = OmniVoiceTTS(
             models_dir, log, wav, txt, speed, tts_steps(tts_steps_n),
-            instruct=tts_design or DEFAULT_TTS_DESIGN,
+            instruct=tts_design or DEFAULT_TTS_DESIGN, notice=notice,
         )
         try:
             omni.load(allow_cpu=allow_cpu, free_vram=usable)

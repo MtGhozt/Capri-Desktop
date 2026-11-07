@@ -151,7 +151,7 @@ function createMusic({
     await key('play');
     return {
       ok: true, action: 'start', player: 'spotify', via: 'media-keys',
-      freeHint: true,
+      freeHint: true, notConnected: Boolean(api?.fallback),
     };
   }
 
@@ -206,19 +206,21 @@ function createMusic({
   }
 
   async function playSpotifyQuery(query) {
+    let api = null;
     if (spotify) {
       // search or play blowing up (free account, no device) still ends in the app, not an error
-      const api = await spotify.playQuery(query, openExternal).catch(() => null);
+      api = await spotify.playQuery(query, openExternal).catch(() => null);
       if (api?.ok) return { ...api, action: 'query', player: 'spotify' };
     }
     if (typeof openExternal !== 'function') {
       return { ok: false, error: 'No pude abrir Spotify.' };
     }
+    const notConnected = Boolean(spotify && api?.fallback);
     const uri = `spotify:search:${query}`;
     await openExternal(uri);
     return {
       ok: true, action: 'query', player: 'spotify', searchOnly: true,
-      query, track: query, artist: '',
+      query, track: query, artist: '', notConnected,
     };
   }
 

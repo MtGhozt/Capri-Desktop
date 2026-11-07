@@ -24,6 +24,7 @@ from heavy import IMPORT_LOCK, import_whisper_model, preload_torch
 from tts import (
     NullTTS,
     OmniVoiceTTS,
+    OmniVoiceUnavailable,
     load_kokoro,
     normalize_pcm,
     release_memory,
@@ -58,6 +59,7 @@ SHORT_SILENCE_MS = 1000.0
 MIN_SPEECH_MS = 250
 WAKE_THRESHOLD = 0.2
 WAKE_WHILE_TALKING = 0.5
+TTS_SETTINGS = ("tts", "ttsRef", "ttsDesign", "ttsMoods", "ttsSpeed", "ttsSteps")
 IDLE_TALK_S = 2.0
 DEFAULT_IDLE_UNLOAD_MIN = 10.0
 SPEECH_THRESHOLD = 0.5
@@ -467,6 +469,8 @@ class Engine:
         self._tts = None
         self._omni = None
         self._omni_loading = False
+        self._omni_blocked = None
+        self._omni_notice_shown = False
         self._want_tts = False
         self._session_tts = None
         self._tts_lock = threading.Lock()
@@ -501,9 +505,14 @@ class Engine:
         local_llm_before = self.cfg.get("localLlm", True)
         was_muted = bool(self.cfg.get("muted"))
         was_sleeping = bool(self.cfg.get("sleeping"))
+        tts_before = tuple(self.cfg.get(key) for key in TTS_SETTINGS)
         for key in self.cfg:
             if key in patch:
                 self.cfg[key] = patch[key]
+        # An explicit voice change may retry OmniVoice; a plain config resend must not.
+        if any(self.cfg.get(key) != value for key, value in zip(TTS_SETTINGS, tts_before)):
+            self._omni_blocked = None
+            self._omni_notice_shown = False
         if any(k in patch for k in ("wakeSensitivity", "wakeThreshold", "wakeMinSpeechMs", "wakeEnergy")):
             log(
                 f"wake config sensitivity={self.cfg.get('wakeSensitivity')} "
@@ -1371,6 +1380,14 @@ class Engine:
             self._announce_tts("off", "off")
             return
         self._want_tts = True
+        if self._omni_blocked:
+            # This GPU could not clone in this session: Kokoro until settings change or restart.
+            with self._tts_lock:
+                if self._tts is None:
+                    self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+            log(f"tts engine=kokoro reason=omnivoice-blocked:{self._omni_blocked} vram_free={free_vram_mib()} vram_usable=n/a")
+            self._announce_tts("kokoro", "fallback")
+            return
         if kind == "kokoro":
             with self._tts_lock:
                 if self._tts is None:
@@ -1428,12 +1445,22 @@ class Engine:
             tts_steps(self.cfg.get("ttsSteps")),
             mood_refs=mood_refs,
             instruct=self.cfg.get("ttsDesign"),
+            notice=lambda msg: self.broadcast({"type": "notice", "message": msg}),
         )
         try:
             omni.load(allow_cpu=str(self.cfg.get("tts") or "").lower() == "omnivoice", free_vram=usable)
         except Exception as err:
             omni.close()
             log(f"omnivoice unavailable: {err}")
+            gpu_reason = isinstance(err, OmniVoiceUnavailable)
+            if gpu_reason:
+                self._omni_blocked = str(err)
+                if not self._omni_notice_shown and str(self.cfg.get("ttsRef") or "").strip():
+                    self._omni_notice_shown = True
+                    self.broadcast({
+                        "type": "notice",
+                        "message": "Tu GPU no alcanza para clonar voz, uso la voz normal.",
+                    })
             with self._tts_lock:
                 self._omni_loading = False
             if not self._want_tts:
@@ -1445,7 +1472,7 @@ class Engine:
             with self._tts_lock:
                 self._tts = kokoro
             log(f"tts engine=kokoro reason=omnivoice-failed:{err} vram_free={free} vram_usable={usable}")
-            self._announce_tts("kokoro", "ready")
+            self._announce_tts("kokoro", "fallback")
             return
         if not self._want_tts:
             omni.close()

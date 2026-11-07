@@ -7,6 +7,12 @@ const { normalizeCommandText } = require('./command-text');
 const DEFAULT_HER_SONG = "I'm in love with myself";
 const HER_SONG = /^(?:(?:pon|ponme|reproduce|reproduceme|toca|play) )?(?:tu cancion(?: favorita)?|your song)$/;
 const SONG = '(?: (?:la |el )?(?:musica|cancion|tema|rola|pista))?';
+// Accents are already folded, so poné/ponés/reproducí/tocá arrive as pone/pones/reproduci/toca.
+const PLAY_VERB = '(?:pon|ponme|pone|pones|poneme|reproduce|reproduceme|reproduci|toca)';
+const GENERIC_PLAY = new RegExp(
+  `^(?:${PLAY_VERB}(?: reproducir)? )?`
+  + '(?:cualquier (?:cancion|tema|rola|musica)|algo de musica|un poco de musica)$',
+);
 // Pause before any "pon <query>" search: "pon pausa a la música" is pause, not a song named pausa.
 const PAUSE = new RegExp(
   `^(?:`
@@ -26,6 +32,7 @@ const PATTERNS = [
   ['mute', /^(?:silencio|silencia(?: la musica)?|mutea(?: la musica)?|mute|quita(?: el )?sonido)$/],
   ['unmute', /^(?:desmutea(?: la musica)?|unmute|quita(?: el )?silencio|con sonido|restaura(?: el )?sonido)$/],
   ['start', /^(?:pon|ponme|pone|reproduce|reproduceme|toca|quiero|inicia)(?: algo de| un poco de)? musica(?: en namida)?$/],
+  ['start', GENERIC_PLAY],
   // before the generic "abre <app>": the player is whatever MÚSICA has chosen, not a fixed app
   ['open', /^(?:abre|abreme|abrime|abrir|open)(?: (?:el|la|the))? (?:reproductor(?: de musica)?|player|musica|music(?: player)?)$/],
   ['nowPlaying', /^(?:que (?:esta sonando|suena)|que cancion (?:es esta|es|suena))$/],
@@ -46,11 +53,11 @@ function parseMusicCommand(text, { herSong = DEFAULT_HER_SONG } = {}) {
     const query = String(herSong || '').trim() || DEFAULT_HER_SONG;
     return { action: 'query', query, herSong: true };
   }
-  const spotify = /^(?:pon|ponme|reproduce|toca|play) (.+?) en spotify$/.exec(value);
+  const spotify = new RegExp(`^(?:${PLAY_VERB}|play) (?:reproducir )?(.+?) en spotify$`).exec(value);
   if (spotify) return { action: 'query', query: spotify[1], player: 'spotify' };
   const playEn = /^play (?!music(?:a)?$)(.+)$/.exec(value);
   if (playEn) return { action: 'query', query: playEn[1].replace(/^en\s+/, '') };
-  const query = /^(?:pon|ponme|reproduce|reproduceme|toca) (?!un |una |el timer|la alarma)(.+)$/.exec(value);
+  const query = new RegExp(`^(?:${PLAY_VERB}) (?:reproducir )?(?!un timer|una alarma|el timer|la alarma)(.+)$`).exec(value);
   if (query) return { action: 'query', query: query[1].replace(/^en\s+/, '') };
   return null;
 }

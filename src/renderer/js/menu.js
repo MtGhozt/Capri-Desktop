@@ -282,6 +282,13 @@ export class AppMenu {
   // force: whatever it thinks it is, it goes (a forced close, or drawn while it thought it was closed)
   hide({ force = false } = {}) {
     if (!force && !this.open && !this.opening && this.el.hidden) return;
+    if (this.voiceRefForm && this.pendingRefWav) {
+      this.voiceNote = 'No se guardó la voz.';
+      this.voiceRefForm = false;
+      this.pendingRefWav = '';
+      this.pendingRefText = '';
+      this.pendingRefTranscriptPath = '';
+    }
     this.open = false;
     this.opening = false;
     this.expanded = null;
@@ -887,11 +894,16 @@ export class AppMenu {
     const voiceSource = voice.source || voice.ttsSourceName
       || (String(voice.ttsRef || '').trim() ? `Tu voz (${String(voice.ttsRef).split(/[\\/]/).pop()})` : 'Voz por defecto');
     body.append(build('div', 'appmenu__hint appmenu__voice-source', `Voz activa: ${voiceSource}`));
+    if (voice.tts?.state === 'fallback') {
+      body.append(build('div', 'appmenu__hint', 'Tu GPU no alcanza para clonar voz, uso la voz normal.'));
+    }
     if (this.voiceRefForm) {
       const form = build('div', 'appmenu__voice-ref');
+      form.append(build('div', 'appmenu__hint', '1) Elegí tu audio .wav (5–15 s)'));
       form.append(build('div', 'appmenu__hint', this.pendingRefWav
         ? `Archivo: ${String(this.pendingRefWav).split(/[\\/]/).pop()}`
-        : 'Elegí un .wav corto (5–15 s).'));
+        : 'Ningún audio elegido todavía.'));
+      form.append(build('div', 'appmenu__hint', '2) Escribí exactamente lo que dice el audio (o un .txt con el mismo nombre) y guardá.'));
       const transcript = build('input', 'appmenu__input');
       let saveRef;
       transcript.type = 'text';

@@ -68,6 +68,21 @@ test('her song phrases map to music.herSong (default)', () => {
   });
 });
 
+test('voseo and generic song requests reach playback, not a fake title', () => {
+  for (const said of ['Poné una canción', 'Ponés reproducir bohemian rhapsody', 'Reproducí neon genesis']) {
+    assert.equal(parseMusicCommand(said)?.action, 'query', said);
+  }
+  assert.deepEqual(parseMusicCommand('Ponés reproducir bohemian rhapsody'), {
+    action: 'query', query: 'bohemian rhapsody',
+  });
+  for (const said of ['Ponés reproducir cualquier canción', 'Poné cualquier tema', 'Pon algo de música', 'cualquier canción']) {
+    assert.deepEqual(parseMusicCommand(said), { action: 'start' }, said);
+  }
+  assert.deepEqual(parseMusicCommand('Poné reproducir neon genesis en Spotify'), {
+    action: 'query', query: 'neon genesis', player: 'spotify',
+  });
+});
+
 test('now playing reads the Namida SMTC line, then its window title', () => {
   assert.deepEqual(parseNowPlaying('SMTC\tnamida.exe\tWorth It\tCorbin'), {
     ok: true, player: 'namida', track: 'Worth It', artist: 'Corbin',
@@ -186,9 +201,89 @@ test('a free account opens the track in the app instead of failing on 403', asyn
     },
   });
   const result = await spotify.playQuery('neon', async (uri) => { opened.push(uri); });
-  assert.deepEqual(result, { ok: true, track: 'Neon', artist: 'Juno' });
+  assert.deepEqual(result, { ok: true, track: 'Neon', artist: 'Juno', opened: true });
   assert.deepEqual(opened, ['spotify:track:abc']);
   assert.deepEqual(calls, ['GET /v1/search', 'PUT /v1/me/player/play']); // no devices round-trip
+});
+
+test('an expired Spotify token refreshes before the API call', async () => {
+  const { createSpotify } = require('../src/main/spotify');
+  const seen = [];
+  let refreshed = 0;
+  const spotify = createSpotify({
+    token: () => 'old-token',
+    expired: () => true,
+    refresh: async () => { refreshed += 1; return 'new-token'; },
+    request: async (endpoint, access) => {
+      seen.push(`${endpoint} ${access}`);
+      return endpoint === '/v1/search'
+        ? { tracks: { items: [{ uri: 'spotify:track:1', name: 'Neon', artists: [{ name: 'Juno' }] }] } }
+        : {};
+    },
+  });
+  assert.equal((await spotify.playQuery('neon')).ok, true);
+  assert.equal(refreshed, 1);
+  assert.deepEqual(seen, ['/v1/search new-token', '/v1/me/player/play new-token']);
+});
+
+test('a 401 refreshes the token once and retries the same request', async () => {
+  const { createSpotify } = require('../src/main/spotify');
+  const seen = [];
+  let refreshed = 0;
+  const spotify = createSpotify({
+    token: () => 'old-token',
+    refresh: async () => { refreshed += 1; return 'new-token'; },
+    request: async (endpoint, access) => {
+      seen.push(`${endpoint} ${access}`);
+      if (access === 'old-token') throw new Error('Spotify HTTP 401');
+      return { item: { name: 'Neon', artists: [{ name: 'Juno' }] } };
+    },
+  });
+  assert.deepEqual(await spotify.nowPlaying(), { ok: true, track: 'Neon', artist: 'Juno' });
+  assert.equal(refreshed, 1);
+  assert.deepEqual(seen, ['/v1/me/player old-token', '/v1/me/player new-token']);
+});
+
+test('play with no active device opens Spotify, waits, and retries once', async () => {
+  const { createSpotify } = require('../src/main/spotify');
+  const calls = [];
+  const opened = [];
+  const waits = [];
+  let playAttempts = 0;
+  const spotify = createSpotify({
+    token: () => 'token',
+    wait: async (ms) => { waits.push(ms); },
+    request: async (endpoint, access, body, method = 'GET') => {
+      calls.push(`${method} ${endpoint}`);
+      if (endpoint === '/v1/search') {
+        return { tracks: { items: [{ uri: 'spotify:track:abc', name: 'Neon', artists: [{ name: 'Juno' }] }] } };
+      }
+      playAttempts += 1;
+      if (playAttempts === 1) throw new Error('Spotify HTTP 404');
+      return {};
+    },
+  });
+  const result = await spotify.playQuery('neon', async (uri) => { opened.push(uri); });
+  assert.deepEqual(result, { ok: true, track: 'Neon', artist: 'Juno' });
+  assert.deepEqual(opened, ['spotify:']);
+  assert.deepEqual(waits, [2000]);
+  assert.deepEqual(calls, ['GET /v1/search', 'PUT /v1/me/player/play', 'PUT /v1/me/player/play']);
+});
+
+test('a track opened in the app is marked opened, not played', async () => {
+  const { createSpotify } = require('../src/main/spotify');
+  const spotify = createSpotify({
+    token: () => 'token',
+    request: async (endpoint) => {
+      if (endpoint === '/v1/search') {
+        return { tracks: { items: [{ uri: 'spotify:track:abc', name: 'Neon', artists: [{ name: 'Juno' }] }] } };
+      }
+      throw new Error('Spotify HTTP 403');
+    },
+  });
+  const result = await spotify.playQuery('neon', async () => {});
+  assert.equal(result.opened, true);
+  assert.equal(result.track, 'Neon');
 });
 
 test('spotify oauth listens on 47835, 404s anything but /callback and exchanges the code', async () => {

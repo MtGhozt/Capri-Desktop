@@ -113,11 +113,68 @@ test('missing mood prompt falls back to the playful default', () => {
   assert.equal(lines[3], "('DEFAULT', 'playful')");
 });
 
+test('reference transcripts read utf-8 BOM and Windows cp1252', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-ref-enc-'));
+  const txt = path.join(dir, 'ref.txt');
+  const read = () => py(
+    `from pathlib import Path; from tts import verify_ref_transcript; `
+    + `print(verify_ref_transcript(Path(r'${txt}'), lambda m: None, 'test').encode('utf-8').hex())`,
+  );
+  const expected = Buffer.from('Hola ñandú', 'utf8').toString('hex');
+  fs.writeFileSync(txt, Buffer.concat([
+    Buffer.from([0xef, 0xbb, 0xbf]),
+    Buffer.from('Hola ñandú', 'utf8'),
+  ]));
+  assert.equal(read(), expected);
+  fs.writeFileSync(txt, Buffer.from('Hola ñandú', 'latin1'));
+  assert.equal(read(), expected);
+});
+
+test('a missing clone transcript says it fell back to voice-design', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-ref-notice-'));
+  const wav = path.join(dir, 'ref.wav');
+  fs.writeFileSync(wav, 'RIFF');
+  const out = py(
+    'from pathlib import Path; import tts\n'
+    + 'class Cuda:\n'
+    + '    def is_available(self): return False\n'
+    + 'class Torch:\n'
+    + '    cuda = Cuda()\n'
+    + 'tts.import_omnivoice = lambda log: (Torch(), object, object)\n'
+    + 'seen = []\n'
+    + `o = tts.OmniVoiceTTS(Path('.'), lambda m: None, Path(r'${wav}'), Path(r'${wav}').with_suffix('.txt'), notice=seen.append)\n`
+    + 'try:\n'
+    + '    o.load(allow_cpu=False, free_vram=0)\n'
+    + 'except tts.OmniVoiceUnavailable as err:\n'
+    + '    print(type(err).__name__)\n'
+    + 'print(seen)',
+  );
+  const [error, notices] = out.split(/\r?\n/);
+  assert.match(error, /OmniVoiceUnavailable/);
+  assert.match(notices, /transcripci/i);
+});
+
+test('an unsupported CUDA compute capability is a GPU reason, not a warning', () => {
+  const out = py(
+    'import tts\n'
+    + 'class Cuda:\n'
+    + '    def is_available(self): return True\n'
+    + '    def get_device_capability(self, n=0): return (6, 1)\n'
+    + '    def get_arch_list(self): return ["sm_75", "sm_80"]\n'
+    + 'class Torch:\n'
+    + '    cuda = Cuda()\n'
+    + 'print(tts.cuda_arch_reason(Torch()))',
+  );
+  assert.match(out, /sm_61/);
+  assert.match(out, /not supported/);
+});
+
 test('mood prompts are built once, on first use, not all at boot', () => {
   const out = py(
-    'from pathlib import Path; from tts import OmniVoiceTTS; '
-    + 'o = OmniVoiceTTS(Path("."), print, Path("a.wav"), Path("a.txt"), '
-    + 'mood_refs={"burla": (Path("b.wav"), Path("b.txt"))}); '
+    'import tempfile; from pathlib import Path; from tts import OmniVoiceTTS\n'
+    + 'd = Path(tempfile.mkdtemp()); (d / "b.wav").write_bytes(b"x"); (d / "b.txt").write_text("hola")\n'
+    + 'o = OmniVoiceTTS(Path("."), lambda m: None, d / "a.wav", d / "a.txt", '
+    + 'mood_refs={"burla": (d / "b.wav", d / "b.txt")}); '
     + 'o._model = object(); o._vcp = object; o.device = "cpu"; '
     + 'calls = []; '
     + 'o._cache_prompt = lambda vcp, wav, txt, text: calls.append(wav.name) or f"P-{wav.stem}"; '

@@ -24,6 +24,7 @@ const ACTION_TAG_HELP = [
   '[open:<app>], [play:<canción>] o [play:hersong],',
   `[music:${MUSIC_VALUES.join('|')}].`,
   'Solo esas se ejecutan; cualquier otra cosa es texto normal.',
+  'Nunca digas que ponés, abrís, cerrás o hacés algo si no incluiste la etiqueta correspondiente: sin etiqueta no pasó nada. Si no podés emitirla, no lo prometas.',
 ].join(' ');
 
 function normalizeMood(name) {

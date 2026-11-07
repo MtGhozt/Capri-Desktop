@@ -52,7 +52,9 @@ const { parseMusicCommand } = require('./music-command');
 const { createSystemFlow, runSystem } = require('./system-command');
 const { wakePhraseLabel } = require('./wake-phrase');
 const { createMusic, readNowPlaying, NOW_PLAYING_SCRIPT } = require('./music');
-const { createSpotify, createTokenStore, authorizeSpotify, spotifyFailureLine } = require('./spotify');
+const {
+  createSpotify, createTokenStore, authorizeSpotify, spotifyFailureLine, refreshSpotifyToken,
+} = require('./spotify');
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
 const { parseFixCommand, readTranscript } = require('./fix-command');
@@ -741,9 +743,15 @@ async function musicReply(parsed, { chat = true } = {}) {
     } else if (parsed.herSong) {
       line = pickLine('musicaSuCancion');
     } else if (result.searchOnly) {
-      line = `Abrí la búsqueda de «${result.query}» en Spotify — dale play al primero, choom.`;
+      line = `Abrí la búsqueda de «${result.query}» en Spotify — dale play al primero, choom.`
+        + (result.notConnected ? ' Conectá Spotify en MÚSICA para que le dé play.' : '');
+    } else if (result.opened) {
+      line = result.artist
+        ? `Abrí «${result.track}» de ${result.artist} en Spotify — dale play.`
+        : `Abrí «${result.track}» en Spotify — dale play.`;
     } else if (result.freeHint || result.via === 'media-keys') {
-      line = 'Spotify free no me deja el play por API, choom — te mandé la tecla de medios. Si sigue quieto, dale play tú.';
+      line = 'Spotify free no me deja el play por API, choom — te mandé la tecla de medios. Si sigue quieto, dale play tú.'
+        + (result.notConnected ? ' Conectá Spotify en MÚSICA para que le dé play.' : '');
     } else if (parsed.action === 'query' && result.track) {
       line = result.artist
         ? `Va, pongo «${result.track}» de ${result.artist}.`
@@ -1070,6 +1078,33 @@ function restoreSpotifyToken() {
   const saved = spotifyTokens().read();
   if (saved?.access_token) spotifyAccessToken = saved.access_token;
 }
+// Reuse the saved refresh token; one in-flight refresh shared by every caller.
+let spotifyRefreshing = null;
+function refreshSpotifyAccess() {
+  if (spotifyRefreshing) return spotifyRefreshing;
+  spotifyRefreshing = (async () => {
+    const saved = spotifyTokens().read();
+    const clientId = String(config.load().music?.spotify?.clientId || '').trim();
+    if (!saved?.refresh_token || !clientId) return null;
+    try {
+      const tokens = await refreshSpotifyToken({ clientId, refreshToken: saved.refresh_token });
+      spotifyAccessToken = tokens.access_token;
+      spotifyTokens().write({
+        ...saved,
+        ...tokens,
+        refresh_token: tokens.refresh_token || saved.refresh_token,
+        expiresAt: Date.now() + Number(tokens.expires_in || 3600) * 1000,
+      });
+      return spotifyAccessToken;
+    } catch (err) {
+      console.error('[capri] Spotify token refresh failed:', err.message);
+      return null;
+    } finally {
+      spotifyRefreshing = null;
+    }
+  })();
+  return spotifyRefreshing;
+}
 async function connectSpotify(clientId) {
   const id = String(clientId || '').trim();
   if (!id) return { ok: false, message: 'Falta el Client ID.' };
@@ -1089,7 +1124,15 @@ async function connectSpotify(clientId) {
     return { ok: false, message };
   }
 }
-const spotify = createSpotify({ token: () => spotifyAccessToken });
+const spotify = createSpotify({
+  token: () => spotifyAccessToken,
+  refresh: () => refreshSpotifyAccess(),
+  expired: () => {
+    const saved = spotifyTokens().read();
+    const at = Number(saved?.expiresAt || 0);
+    return at > 0 && at <= Date.now();
+  },
+});
 
 // Cloud chat keys, kept encrypted with your Windows account in their own file: never in config.json,
 // never in a log (Paso 4K). Same store as Spotify's tokens.
@@ -2386,6 +2429,7 @@ function menuState(extra = {}) {
         installed: Boolean(checkVoiceDir(cfg.voice?.dir || '').ok),
         ttsRef: cfg.voice?.ttsRef || null,
         status: voiceStatus(cfg),
+        tts: lastTts,
         source: activeVoiceLabel(cfg.voice),
       },
       locked: Boolean(cfg.position?.locked),
@@ -3145,7 +3189,11 @@ function main() {
         }
         if (payload?.type === 'tts_state') {
           ttsLoading = payload.state === 'loading';
-          lastTts = { engine: String(payload.engine || ''), state: String(payload.state || '') };
+          lastTts = {
+            engine: String(payload.engine || ''),
+            state: String(payload.state || ''),
+            reason: String(payload.reason || ''),
+          };
           // replyMode=voice with nothing to speak with: the technical reason is already in the log
           // (sidecar side); say which state was reached and why she stays quiet.
           const quiet = voiceStatus(config.load());
