@@ -1,4 +1,4 @@
-# Capri — Roadmap (actualizado 2026-11-03)
+# Capri — Roadmap (actualizado 2026-11-07)
 
 Upstream de referencia: mochiiwuff/capri-desktop v0.4.0 (`bde7b42`). Nunca push a upstream. Traer cosas por partes (port manual o cherry-pick), no merge completo.
 
@@ -10,6 +10,7 @@ Resumen de lo cerrado (el detalle está en el historial de git y en el CHANGELOG
 - **Fase 4 — Acciones en la PC:** corrector de lo que oye mal, conversación sin wake word, motor de apps ("abre / cierra X", "abre X y Y"), escaneo de Steam/Epic/GOG/Inicio, animaciones al abrir y cerrar, música con Namida y Spotify, energía con confirmación, modo dron, caja `CAPRI.SYS // MENSAJE`, caricias y saludos.
 - **Fase 5 — Cerebro fácil:** tarjetas de Cerebro (gratis con key, en tu PC, tu propia key), "Probar", keys solo locales y README reescrito para empezar sin código.
 - **Fase 6 — Hecho:** hooks de agentes (Claude Code, Codex, Antigravity, Cursor y OpenCode), "Usar mi agente instalado", ver la pantalla a pedido con consentimiento, detección de juegos con No molestar y proveedores con key.
+- **Fixes 0.2.x — Hecho:** 0.2.2 (aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL experimental, etiquetas de Mis apps); Diagnóstico en Acerca de con "Copiar detalles de error" y "Abrir log" (0.2.4); entender varios comandos y comandos "parecidos" (0.2.5).
 
 Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía corta por opción y leer el estado del juego.
 
@@ -17,14 +18,9 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ### P1 — Estabilidad (versiones chicas de fixes)
 
-- 0.2.2: aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL (experimental), etiquetas de Mis apps.
 - "Mirá mi pantalla" a veces ve el fondo o "Activar Windows" (captura vieja / primer frame vacío).
-- Copiar detalles de error con un clic (para reportes en #bugs) y botón "Abrir log".
 - Que el wake word no interfiera con audífonos Bluetooth.
 - Aviso de SmartScreen en el README/instalación; actualización con un clic.
-- **Entender varios comandos y comandos "parecidos" (próxima versión):** hoy "ve a dormir y minimiza todo" se va al cerebro y no hace nada (log 2026-11-04).
-  - Capa 1: partir la frase por "y / luego / después / comas" y ejecutar cada parte si es un comando directo (dormir siempre al final). Sin palabras reservadas nuevas.
-  - Capa 2: si no es comando directo, el cerebro recibe la lista cerrada de comandos de Capri y responde con la acción que más se parece (misma intención, palabras parecidas, mal transcrito o en otro tiempo verbal: "duérmete", "andate a dormir", "minimizá todo") o "ninguna"; Capri ejecuta solo acciones de la lista y, si no hay, sigue como charla. Funciona también para frases mezcladas (charla + comando).
 - **Idea de la comunidad (0.2.x):** país/zona horaria en Ajustes (hora local correcta, clima, feriados); recordatorios por voz ("mañana a las 8 tengo un evento" → avisar 1–2 h antes), con conocimiento de la fecha y el día.
 
 ### P2 — Que el chat haga cosas en la PC (idea de upstream `cb33e87`)
@@ -53,6 +49,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - Fallback a modelos cloud gratis de Ollama (`3e6f529`).
 - Voz local gratis para todos (ex Fase 7), varias voces de referencia.
 - Retomar respuesta tras interrupción.
+- **Idiomas:** detectar el idioma de Windows (con selector en Ajustes) y traducir la interfaz (textos en un archivo por idioma); que el cerebro responda en ese idioma; Whisper ya entiende varios idiomas; pendiente: voces de Kokoro/OmniVoice por idioma y comandos directos (hoy en español). Versión grande, sin fecha.
 
 ### P5 — Personalidad y diversión
 
