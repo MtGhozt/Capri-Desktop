@@ -58,6 +58,35 @@ const THEME_OPTIONS = [
   { id: 'capri', label: 'CAPRI' },
 ];
 
+const TIME_ZONE_OPTIONS = [
+  { id: '', label: 'Automático (Windows)' },
+  { id: 'Europe/Madrid', label: 'España' },
+  { id: 'America/Mexico_City', label: 'México' },
+  { id: 'America/Argentina/Buenos_Aires', label: 'Argentina' },
+  { id: 'America/Bogota', label: 'Colombia' },
+  { id: 'America/Santiago', label: 'Chile' },
+  { id: 'America/Lima', label: 'Perú' },
+  { id: 'America/Costa_Rica', label: 'Costa Rica' },
+  { id: 'America/Caracas', label: 'Venezuela' },
+  { id: 'America/Montevideo', label: 'Uruguay' },
+  { id: 'America/New_York', label: 'Estados Unidos (Este)' },
+];
+
+function validTimeZone(zone) {
+  const value = String(zone || '').trim();
+  if (!value) return '';
+  try {
+    new Intl.DateTimeFormat('es', { timeZone: value });
+    return value;
+  } catch {
+    return '';
+  }
+}
+
+function resolvedTimeZone(zone) {
+  return validTimeZone(zone) || validTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC';
+}
+
 export const QUICK_MENU_ITEMS = [
   { id: 'mic' }, { id: 'mic-device' }, { id: 'reply-mode' }, { id: 'model-provider' },
   { id: 'fixes' }, { id: 'clip-save' }, { id: 'do-something' }, { id: 'behavior' }, { id: 'drone-mode' }, { id: 'theme' }, { id: 'settings' }, { id: 'quit' },
@@ -1170,6 +1199,18 @@ export class AppMenu {
     nameInput.addEventListener('change', () => this.act('user-name', nameInput.value.trim()));
     nameRow.append(nameInput);
     body.append(nameRow);
+    const zone = resolvedTimeZone(cfg.timeZone);
+    selector('País / zona horaria', {
+      setting: 'behavior',
+      options: TIME_ZONE_OPTIONS,
+      current: validTimeZone(cfg.timeZone),
+      onChange: (id) => this.act('time-zone', id),
+    });
+    const zoneNow = build('div', 'appmenu__hint', `${new Intl.DateTimeFormat('es', {
+      timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+    }).format(new Date())} · ${zone}`);
+    zoneNow.dataset.setting = 'behavior';
+    body.append(zoneNow);
     toggle('Comentarios', {
       setting: 'behavior',
       on: cfg.comments?.enabled !== false,

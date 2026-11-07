@@ -13,16 +13,34 @@ const HISTORY_LIMIT = 20; // ~10 user+assistant turns
 const HISTORY_IDLE_MS = 10 * 60 * 1000; // after this long, old turns are no context
 const COMMENT_WINDOW_MS = 60 * 1000; // an unprompted line only counts for its follow-up
 const TIMEOUT_MS = 45000;
-const LOCAL_TZ = 'America/Costa_Rica';
+const SYSTEM_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// A zone name Intl accepts, or ''.
+function validTimeZone(zone) {
+  const value = String(zone || '').trim();
+  if (!value) return '';
+  try {
+    new Intl.DateTimeFormat('es-CR', { timeZone: value });
+    return value;
+  } catch {
+    return '';
+  }
+}
+
+// '' / invalid saved zone = automatic: this PC's zone, UTC if Windows gives none.
+function resolveTimeZone(zone = '') {
+  return validTimeZone(zone) || validTimeZone(SYSTEM_TZ) || 'UTC';
+}
 
 // 401/403 is a key problem: retrying it costs another wait and fails the same way.
 function isAuthError(err) {
   return err?.status === 401 || err?.status === 403;
 }
 
-function temporalContext({ now = new Date(), lastTalkAt = null } = {}) {
+function temporalContext({ now = new Date(), lastTalkAt = null, timeZone = '' } = {}) {
+  const zone = resolveTimeZone(timeZone);
   const parts = new Intl.DateTimeFormat('es-CR', {
-    timeZone: LOCAL_TZ, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    timeZone: zone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(now);
   const get = (type) => parts.find((p) => p.type === type)?.value || '';
@@ -38,7 +56,7 @@ function temporalContext({ now = new Date(), lastTalkAt = null } = {}) {
       elapsed = `hace ${hours} ${hours === 1 ? 'hora' : 'horas'}`;
     }
   }
-  return `Hora local: ${get('weekday')}, ${get('month')} ${get('day')} de ${get('year')} a las ${get('hour')}:${get('minute')} (${LOCAL_TZ}). Momento del día: ${period}. Última conversación: ${elapsed}.`;
+  return `Hora local: ${get('weekday')}, ${get('month')} ${get('day')} de ${get('year')} a las ${get('hour')}:${get('minute')} (${zone}). Momento del día: ${period}. Última conversación: ${elapsed}.`;
 }
 
 function createLlm({
@@ -113,7 +131,7 @@ function createLlm({
   function systemPrompt(cfg, cloud) {
     const base = personaText();
     const lang = String(cfg.lang || 'es');
-    const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. ${temporalContext({ now: now(), lastTalkAt })} Si pregunta la hora o la fecha, usa esos datos.`];
+    const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. ${temporalContext({ now: now(), lastTalkAt, timeZone: cfg.timeZone })} Si pregunta la hora o la fecha, usa esos datos.`];
     const notes = memoryText();
     if (notes) parts.push(`Notas fijas sobre el usuario (memory.md):\n${notes}`);
     const name = String(cfg.userName || '').trim();
@@ -429,4 +447,4 @@ function createLlm({
   return { chat, cancel, reset, rememberAssistant, rememberComment, reloadPersona, personaText };
 }
 
-module.exports = { createLlm, temporalContext };
+module.exports = { createLlm, temporalContext, resolveTimeZone };

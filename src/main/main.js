@@ -2148,6 +2148,7 @@ function applyMenuAction(id, value) {
         ? { ok: true, message: `${path.basename(exe, path.extname(exe))} quitado de la lista ✓` }
         : { ok: true };
     }
+    case 'time-zone': updateConfig({ timeZone: String(value || '').trim() }); break;
     case 'comments': updateConfig({ comments: { enabled: Boolean(value) } }); break;
     case 'comments-range': updateConfig({ comments: {
       ...(value?.minMinutes != null ? { minMinutes: Number(value.minMinutes) } : {}),
@@ -2434,6 +2435,7 @@ function menuState(extra = {}) {
       },
       locked: Boolean(cfg.position?.locked),
       userName: String(cfg.userName || ''),
+      timeZone: String(cfg.timeZone || ''),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
       gaming: {
         mode: cfg.gaming?.mode === 'off' ? 'off' : 'auto',

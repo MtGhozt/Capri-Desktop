@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createLlm, temporalContext } = require('../src/main/llm');
+const { createLlm, temporalContext, resolveTimeZone } = require('../src/main/llm');
 const { usesLms } = require('../src/main/chat-providers');
 const { createTokenStore } = require('../src/main/spotify');
 
@@ -21,10 +21,30 @@ const bad = (status) => ({ ok: false, status, body: new Response('{}').body });
 
 test('temporal context names Costa Rica time, Spanish day period and elapsed silence', () => {
   const now = new Date('2026-10-29T02:30:00.000Z');
-  const text = temporalContext({ now, lastTalkAt: now.getTime() - 3 * 60 * 60 * 1000 });
+  const text = temporalContext({ now, lastTalkAt: now.getTime() - 3 * 60 * 60 * 1000, timeZone: 'America/Costa_Rica' });
   assert.match(text, /hora local/i);
   assert.match(text, /noche/i);
   assert.match(text, /hace 3 horas/i);
+});
+
+test('an explicit zone changes the hour for the same instant', () => {
+  const now = new Date('2026-10-29T02:30:00.000Z');
+  const madrid = temporalContext({ now, timeZone: 'Europe/Madrid' });
+  const costaRica = temporalContext({ now, timeZone: 'America/Costa_Rica' });
+  assert.match(madrid, /a las 03:30/);
+  assert.match(costaRica, /a las 20:30/);
+  assert.notEqual(madrid, costaRica);
+});
+
+test('an empty zone follows the system zone', () => {
+  const text = temporalContext({ now: new Date(), timeZone: '' });
+  assert.ok(text.includes(`(${resolveTimeZone('')})`));
+});
+
+test('an invalid zone does not throw and falls back to the system zone', () => {
+  const text = temporalContext({ now: new Date(), timeZone: 'Mars/Olympus_Mons' });
+  assert.match(text, /hora local/i);
+  assert.ok(text.includes(`(${resolveTimeZone('')})`));
 });
 
 test('the first minute of a session does not invite a date or time greeting', () => {
