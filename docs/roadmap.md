@@ -25,6 +25,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - **Entender varios comandos y comandos "parecidos" (próxima versión):** hoy "ve a dormir y minimiza todo" se va al cerebro y no hace nada (log 2026-11-04).
   - Capa 1: partir la frase por "y / luego / después / comas" y ejecutar cada parte si es un comando directo (dormir siempre al final). Sin palabras reservadas nuevas.
   - Capa 2: si no es comando directo, el cerebro recibe la lista cerrada de comandos de Capri y responde con la acción que más se parece (misma intención, palabras parecidas, mal transcrito o en otro tiempo verbal: "duérmete", "andate a dormir", "minimizá todo") o "ninguna"; Capri ejecuta solo acciones de la lista y, si no hay, sigue como charla. Funciona también para frases mezcladas (charla + comando).
+- **Idea de la comunidad (0.2.x):** país/zona horaria en Ajustes (hora local correcta, clima, feriados); recordatorios por voz ("mañana a las 8 tengo un evento" → avisar 1–2 h antes), con conocimiento de la fecha y el día.
 
 ### P2 — Que el chat haga cosas en la PC (idea de upstream `cb33e87`)
 
@@ -40,6 +41,12 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - Detección por launcher, apodos de juegos ("cs" = CS2), usar el juego ya abierto.
 - Mandos para hablar sin teclado.
 - Nuevo "Modo juego" real: Capri comenta lo que pasa en la partida (distinto de No molestar).
+- **Pantalla (idea de la comunidad):** mejorar el contexto de pantalla que ya existe para que entienda mejor lo que ve ("¿qué opinás de esto?" sobre un dibujo o modelo).
+
+### Integraciones (después de juegos, idea de la comunidad)
+
+- Leer los últimos 10–20 mensajes de WhatsApp/Discord solo desde las notificaciones de Windows.
+- Escribir o llamar por WhatsApp por voz, siempre confirmando antes de enviar y preguntando cuál contacto si hay nombres repetidos; desactivado mientras se juega online.
 
 ### P4 — Cerebro y voz
 
@@ -52,6 +59,8 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - Tirarla y que rebote/se cuelgue de las ventanas, seguirte entre monitores (upstream 0.5.0).
 - Vínculo que crece con el tiempo y humor que sigue en el chat (enojada si la tirás).
 - Recostarse en el borde de vez en cuando, selector de estilo de ventanas, abrir Roblox por nombre.
+- **Animaciones (idea de la comunidad):** animación de música (sentada en la burbuja con audífonos); animaciones de estados de ánimo; reaccionar si la tirás muy seguido; respuesta especial al hacer clic en su cara. Sentarse en las ventanas ya existe.
+- **Modo zoom/acercamiento (idea de la comunidad):** no es solo agrandar a Capri: una animación nueva donde se acerca a la pantalla y molesta un poco, a modo de juego. Buscamos animador/a o alguien que dibuje; el detalle exacto se confirma con quien la propuso.
 
 ## Descartado
 
