@@ -35,6 +35,7 @@ function voiceStatus(cfg, { running = true, tts = null } = {}) {
   if (String(cfg?.voice?.replyMode || 'blips').toLowerCase() !== 'voice') return '';
   if (String(cfg?.voice?.tts || 'off').toLowerCase() === 'off') return 'Voz apagada: elegí VOZ de nuevo o una carpeta de voz.';
   if (!running) return 'El sidecar de voz no arrancó.';
+  if (tts?.state === 'downloading') return 'Descargando voz…';
   if (tts?.state === 'loading') return 'Cargando voz…';
   if (tts?.engine === 'off') return 'TTS no arrancó: revisá voice.log.';
   if (tts?.state === 'fallback') return 'Sin OmniVoice: habla con Kokoro.';

@@ -23,9 +23,11 @@ from greet import greet_path, read_wav, write_wav
 from heavy import IMPORT_LOCK, import_whisper_model, preload_torch
 from tts import (
     NullTTS,
+    OMNI_MODEL,
     OmniVoiceTTS,
     OmniVoiceUnavailable,
     load_kokoro,
+    model_cached,
     normalize_pcm,
     release_memory,
     resolve_ref,
@@ -49,6 +51,12 @@ LISTEN_TIMEOUT_S = 10.0
 # CPU-only PCs take ~170-180 s on the first Whisper load: 4 min leaves margin without
 # changing which device the loader picks.
 WHISPER_LOAD_S = 240.0
+# faster-whisper's HF repos: the cache folder is what tells a first-time download from a cached load.
+WHISPER_REPOS = {
+    "base": "Systran/faster-whisper-base",
+    "small": "Systran/faster-whisper-small",
+    "medium": "Systran/faster-whisper-medium",
+}
 WAKE_ATTEMPTS = 3
 PREFETCH = 2
 SHORT_PHRASE = 20
@@ -472,6 +480,9 @@ class Engine:
         self._omni_blocked = None
         self._omni_notice_shown = False
         self._want_tts = False
+        self._tts_state = ("off", "off")
+        self._tts_announced = False
+        self._downloads = 0
         self._session_tts = None
         self._tts_lock = threading.Lock()
         self._synth_lock = threading.Lock()
@@ -766,10 +777,15 @@ class Engine:
         timer.daemon = True
         timer.start()
         t0 = time.perf_counter()
+        downloading = not model_cached(root, WHISPER_REPOS.get(name, f"Systran/faster-whisper-{name}"))
+        if downloading:
+            self._set_download(True)
         try:
             model = WhisperModel(name, device=device, compute_type=compute, download_root=root)
         finally:
             timer.cancel()
+            if downloading:
+                self._set_download(False)
         ms = (time.perf_counter() - t0) * 1000
         tag = f"{name} {device}"
         log(f"whisper ready name={name} device={device} {ms:.0f}ms")
@@ -1297,8 +1313,20 @@ class Engine:
                 self.broadcast({"type": "talking_done", "interrupted": False})
 
     def _announce_tts(self, engine: str, state: str) -> None:
+        self._tts_state = (engine, state)
+        self._tts_announced = True
+        if state != "downloading" and getattr(self, "_downloads", 0) > 0:
+            engine, state = "voice", "downloading"
         log(f"tts state engine={engine} state={state}")
         self.broadcast({"type": "tts_state", "engine": engine, "state": state})
+
+    def _set_download(self, on: bool) -> None:
+        """A first-time Hugging Face download: say so, so the long wait is not a frozen bar."""
+        self._downloads = max(0, getattr(self, "_downloads", 0) + (1 if on else -1))
+        if self._downloads:
+            self.broadcast({"type": "tts_state", "engine": "voice", "state": "downloading"})
+        elif getattr(self, "_tts_announced", False):
+            self._announce_tts(*self._tts_state)
 
     def _bind_session_tts(self) -> None:
         with self._tts_lock:
@@ -1447,6 +1475,9 @@ class Engine:
             instruct=self.cfg.get("ttsDesign"),
             notice=lambda msg: self.broadcast({"type": "notice", "message": msg}),
         )
+        downloading = not model_cached(MODELS / "hf" / "hub", OMNI_MODEL)
+        if downloading:
+            self._set_download(True)
         try:
             omni.load(allow_cpu=str(self.cfg.get("tts") or "").lower() == "omnivoice", free_vram=usable)
         except Exception as err:
@@ -1474,6 +1505,9 @@ class Engine:
             log(f"tts engine=kokoro reason=omnivoice-failed:{err} vram_free={free} vram_usable={usable}")
             self._announce_tts("kokoro", "fallback")
             return
+        finally:
+            if downloading:
+                self._set_download(False)
         if not self._want_tts:
             omni.close()
             try:
@@ -1950,6 +1984,8 @@ async def session(ws, engine: Engine) -> None:
         "needed": engine.stream_needed(),
         "message": engine._mic_error or "",
     }))
+    if engine._downloads > 0:
+        await ws.send(json.dumps({"type": "tts_state", "engine": "voice", "state": "downloading"}))
     try:
         async for raw in ws:
             msg = parse_json(raw)

@@ -324,7 +324,7 @@ export class Bubble {
     if (!on && this.meterBar) this.meterBar.style.width = '0%';
   }
 
-  setVoiceLoading(on, progress = null) {
+  setVoiceLoading(on, progress = null, label = null) {
     this.voiceLoading = Boolean(on);
     if (!this.voiceEl) return;
     const pct = Number(progress);
@@ -332,7 +332,10 @@ export class Bubble {
     const hasProgress = this.voiceLoading && Number.isFinite(pct) && pct > 0 && pct <= 100;
     this.voiceEl.hidden = !this.voiceLoading;
     this.voiceEl.classList.toggle('is-indeterminate', this.voiceLoading && !hasProgress);
-    if (this.voiceLabel) this.voiceLabel.textContent = hasProgress ? `Cargando voz ${Math.round(pct)}%` : 'Cargando voz';
+    if (this.voiceLabel) {
+      this.voiceLabel.textContent = label
+        || (hasProgress ? `Cargando voz ${Math.round(pct)}%` : 'Cargando voz');
+    }
     if (this.voiceBar) this.voiceBar.style.width = hasProgress ? `${Math.min(100, pct)}%` : '';
   }
 

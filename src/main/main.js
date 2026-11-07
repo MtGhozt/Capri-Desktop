@@ -1676,11 +1676,12 @@ async function maybeAutoLook() {
         if (speakId) speakQueue?.feed(piece);
       },
       onDone: (payload) => {
+        // text before audio: the bubble answers at once even if TTS takes seconds
+        overlay?.webContents.send('chat:done', payload);
         if (speakId) {
           if (payload?.mood) speakQueue?.setMood?.(payload.mood);
           speakQueue?.flush(speakId);
         }
-        overlay?.webContents.send('chat:done', payload);
       },
       onError: (payload) => {
         if (speakId) speakQueue?.stop(speakId);
@@ -2994,13 +2995,15 @@ function registerIpc() {
             if (speakId) speakQueue?.feed(piece);
           },
           onDone: (payload) => {
+            // the text first: on a weak GPU the voice can take many seconds, and the bubble is not
+            // allowed to look ignored while the audio is generated.
+            overlay?.webContents.send('chat:done', payload);
+            followUp.reply(payload?.text || said, { spoken: Boolean(speakId) });
+            if (payload?.action) void runReplyAction(payload.action);
             if (speakId) {
               if (payload?.mood) speakQueue?.setMood?.(payload.mood);
               speakQueue?.flush(speakId);
             }
-            overlay?.webContents.send('chat:done', payload);
-            followUp.reply(payload?.text || said, { spoken: Boolean(speakId) });
-            if (payload?.action) void runReplyAction(payload.action);
           },
           onError: (payload) => {
             if (speakId) speakQueue?.stop(speakId);

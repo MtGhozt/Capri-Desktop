@@ -6,6 +6,11 @@
 const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
+  '0.2.6': [
+    'Ahora uso la hora de tu país, y la podés elegir en Ajustes.',
+    'Podés pedirme timers y recordatorios por voz, y te esperan aunque cierres Capri.',
+    'La primera vez que bajo mi voz te lo digo claro, y el texto aparece aunque la voz tarde.',
+  ],
   '0.2.5': [
     'Ahora entiendo varios comandos en una frase, y Spotify entiende más frases y reintenta si falla.',
     'Si la GPU no alcanza para clonar voz te aviso, y tu voz personalizada queda en 2 pasos.',

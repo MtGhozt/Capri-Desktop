@@ -53,6 +53,15 @@ class NullTTS(TTSEngine):
         return np.zeros(0, dtype=np.float32), 24000
 
 
+def model_cached(cache_dir: Path, repo_id: str) -> bool:
+    """True when Hugging Face already has this model's snapshot on disk (no first-time download)."""
+    folder = Path(cache_dir) / ("models--" + repo_id.replace("/", "--"))
+    try:
+        return any((folder / "snapshots").iterdir())
+    except OSError:
+        return False
+
+
 def _download(url: str, dest: Path, log) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 1000:

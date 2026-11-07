@@ -718,7 +718,12 @@ async function boot() {
       return;
     }
     if (type === 'tts_state') {
-      bubble.setVoiceLoading(evt.state === 'loading', evt.progress);
+      const downloading = evt.state === 'downloading';
+      bubble.setVoiceLoading(
+        evt.state === 'loading' || downloading,
+        evt.progress,
+        downloading ? 'Descargando voz (solo la primera vez, puede tardar varios minutos)' : null,
+      );
       return;
     }
     if (type === 'notice') {
