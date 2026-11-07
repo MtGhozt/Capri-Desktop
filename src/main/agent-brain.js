@@ -4,9 +4,21 @@
 // Read-only / no-edit flags where the CLI exposes them; OpenCode has no such flag.
 
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const AGENT_TIMEOUT_MS = 45_000;
 const VERSION_TIMEOUT_MS = 15_000;
+const KNOWN_PATH_NOTE = 'Lo encontré fuera del PATH; funciona igual.';
+
+function homeDir(env) {
+  return env.USERPROFILE || env.HOME || '';
+}
+
+function npmKnownPaths(name, env) {
+  const appData = env.APPDATA;
+  return appData ? [path.join(appData, 'npm', `${name}.cmd`)] : [];
+}
 
 const AGENTS = [
   {
@@ -15,6 +27,15 @@ const AGENTS = [
     bin: 'claude',
     args: (prompt) => ['-p', '--permission-mode', 'plan', prompt],
     installHow: 'irm https://claude.ai/install.ps1 | iex',
+    knownPaths: (env) => {
+      const home = homeDir(env);
+      return home
+        ? [
+          path.join(home, '.local', 'bin', 'claude.exe'),
+          path.join(home, '.local', 'bin', 'claude.cmd'),
+        ]
+        : [];
+    },
     note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri.',
     ready: true,
   },
@@ -34,6 +55,7 @@ const AGENTS = [
     bin: 'opencode',
     args: (prompt) => ['run', prompt],
     installHow: 'npm install -g opencode-ai',
+    knownPaths: (env) => npmKnownPaths('opencode', env),
     note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri.',
     ready: true,
   },
@@ -43,6 +65,7 @@ const AGENTS = [
     bin: 'codex',
     args: (prompt) => ['exec', '--sandbox', 'read-only', '--ask-for-approval', 'never', prompt],
     installHow: 'npm install -g @openai/codex',
+    knownPaths: (env) => npmKnownPaths('codex', env),
     note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri. Luego confiá los hooks solo si querés que Codex los ejecute.',
     ready: true,
   },
@@ -52,6 +75,7 @@ const AGENTS = [
     bin: 'gemini',
     args: (prompt) => ['-p', '--approval-mode=plan', prompt],
     installHow: 'npm install -g @google/gemini-cli',
+    knownPaths: (env) => npmKnownPaths('gemini', env),
     note: 'Instalalo desde cualquier ventana de PowerShell; no hace falta estar en la carpeta de Capri.',
     ready: true,
   },
@@ -111,10 +135,13 @@ function detectAgents(opts = {}) {
   }
   const list = AGENTS.map((a) => {
     const bins = a.bins || [a.bin];
+    const env = opts.env || process.env;
+    const exists = opts.existsSync || fs.existsSync;
     let file = null;
     let reportBin = bins[0];
     let reportPath = null;
     let reportVer = 'none';
+    let knownHit = false;
     for (const bin of bins) {
       const found = which(bin, opts);
       if (!found) continue;
@@ -127,8 +154,21 @@ function detectAgents(opts = {}) {
         break;
       }
     }
+    // Native installers often drop the CLI outside PATH; check their usual folders next.
+    if (!file && !reportPath) {
+      for (const candidate of (a.knownPaths ? a.knownPaths(env) : [])) {
+        if (!exists(candidate)) continue;
+        reportPath = candidate;
+        reportVer = versionStatus(candidate, opts);
+        if (reportVer === 'ok') {
+          file = candidate;
+          knownHit = true;
+          break;
+        }
+      }
+    }
     logDetect(
-      `agent detect ${a.id} bin=${reportBin} path=${reportPath || 'none'} version=${reportVer}`,
+      `agent detect ${a.id} bin=${reportBin} path=${reportPath || 'none'} version=${reportVer}${knownHit ? ' via=known-path' : ''}`,
       opts.log,
     );
     const installed = Boolean(file);
@@ -138,9 +178,10 @@ function detectAgents(opts = {}) {
       bin: a.bin,
       installed,
       path: file,
+      viaKnownPath: knownHit,
       ready: a.ready && installed,
       installHow: a.installHow || '',
-      note: a.note || (a.ready ? '' : 'Próximamente'),
+      note: knownHit ? KNOWN_PATH_NOTE : (a.note || (a.ready ? '' : 'Próximamente')),
     };
   });
   if (!opts.execFileSync) {

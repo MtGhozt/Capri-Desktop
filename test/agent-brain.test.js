@@ -15,7 +15,7 @@ test('detectAgents marks PATH hits; all five CLIs are wired when present', () =>
     if ((cmd === 'C:\\bin\\claude.exe' || cmd === 'C:\\bin\\opencode.exe') && bin === '--version') return '1.0';
     throw new Error('not found');
   };
-  const list = detectAgents({ execFileSync, platform: 'win32', log: (m) => logs.push(m) });
+  const list = detectAgents({ execFileSync, platform: 'win32', existsSync: () => false, log: (m) => logs.push(m) });
   const by = Object.fromEntries(list.map((a) => [a.id, a]));
   assert.equal(by.claude.installed, true);
   assert.equal(by.claude.ready, true);
@@ -29,7 +29,7 @@ test('detectAgents marks PATH hits; all five CLIs are wired when present', () =>
   assert.equal(VERSION_TIMEOUT_MS, 15_000);
   assert.match(logs.find((l) => l.includes('claude')) || '', /bin=claude path=C:\\bin\\claude\.exe version=ok/);
   assert.match(logs.find((l) => l.includes('cursor-agent')) || '', /path=none version=none/);
-  detectAgents({ execFileSync, platform: 'win32', log() {} }); // mocks never use the production cache
+  detectAgents({ execFileSync, platform: 'win32', existsSync: () => false, log() {} }); // mocks never use the production cache
   // two scans × (6 PATH checks: cursor-agent+agent fallback + 4 others, + 2 --version)
   assert.equal(calls, 16);
 });
@@ -38,6 +38,7 @@ test('cursor-agent falls back to the agent binary on PATH', () => {
   const logs = [];
   const list = detectAgents({
     platform: 'win32',
+    existsSync: () => false,
     log: (m) => logs.push(m),
     execFileSync: (cmd, [bin]) => {
       if (cmd === 'where' && bin === 'cursor-agent') throw new Error('not found');
@@ -56,6 +57,7 @@ test('cursor-agent falls back to the agent binary on PATH', () => {
 test('detectAgents only marks CLIs found by where on PATH', () => {
   const list = detectAgents({
     platform: 'win32',
+    existsSync: () => false,
     execFileSync: (cmd, [bin]) => {
       if (cmd === 'where' && bin === 'claude') return 'C:\\tools\\claude.cmd\n';
       if (cmd === 'C:\\tools\\claude.cmd' && bin === '--version') return 'claude 1.0';
@@ -66,9 +68,64 @@ test('detectAgents only marks CLIs found by where on PATH', () => {
   assert.equal(list.find((a) => a.id === 'opencode').installed, false);
 });
 
+test('detectAgents finds Claude outside PATH via native install folder', () => {
+  const env = { USERPROFILE: 'C:\\Users\\me', APPDATA: 'C:\\Users\\me\\AppData\\Roaming' };
+  const known = 'C:\\Users\\me\\.local\\bin\\claude.exe';
+  const logs = [];
+  const list = detectAgents({
+    platform: 'win32',
+    env,
+    existsSync: (file) => file === known,
+    log: (m) => logs.push(m),
+    execFileSync: (cmd, [bin]) => {
+      if (cmd === 'where') throw new Error('not found');
+      if (cmd === known && bin === '--version') return '1.0';
+      throw new Error('not found');
+    },
+  });
+  const claude = list.find((a) => a.id === 'claude');
+  assert.equal(claude.installed, true);
+  assert.equal(claude.path, known);
+  assert.equal(claude.viaKnownPath, true);
+  assert.equal(claude.note, 'Lo encontré fuera del PATH; funciona igual.');
+  assert.match(logs.find((l) => l.includes('claude')) || '', /via=known-path/);
+});
+
+test('detectAgents finds npm CLIs in %APPDATA%\\npm outside PATH', () => {
+  const env = { USERPROFILE: 'C:\\Users\\me', APPDATA: 'C:\\Users\\me\\AppData\\Roaming' };
+  const known = 'C:\\Users\\me\\AppData\\Roaming\\npm\\opencode.cmd';
+  const list = detectAgents({
+    platform: 'win32',
+    env,
+    existsSync: (file) => file === known,
+    execFileSync: (cmd, [bin]) => {
+      if (cmd === 'where') throw new Error('not found');
+      if (cmd === known && bin === '--version') return '1.0';
+      throw new Error('not found');
+    },
+  });
+  const opencode = list.find((a) => a.id === 'opencode');
+  assert.equal(opencode.installed, true);
+  assert.equal(opencode.path, known);
+  assert.equal(opencode.viaKnownPath, true);
+});
+
+test('detectAgents leaves Claude uninstalled when neither PATH nor known paths exist', () => {
+  const list = detectAgents({
+    platform: 'win32',
+    env: { USERPROFILE: 'C:\\Users\\me' },
+    existsSync: () => false,
+    execFileSync: () => { throw new Error('not found'); },
+  });
+  const claude = list.find((a) => a.id === 'claude');
+  assert.equal(claude.installed, false);
+  assert.equal(claude.viaKnownPath, false);
+});
+
 test('detectAgents rejects a PATH result that cannot run', () => {
   const list = detectAgents({
     platform: 'win32',
+    existsSync: () => false,
     execFileSync: (cmd, [bin]) => {
       if (cmd === 'where' && bin === 'claude') return 'C:\\tools\\claude.cmd\n';
       throw new Error('not runnable');

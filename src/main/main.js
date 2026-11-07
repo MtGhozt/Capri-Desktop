@@ -2226,6 +2226,7 @@ function applyMenuAction(id, value) {
     case 'hooks-remove': runHooks('uninstall'); break;
     case 'agent-install': return assistants.install(value);
     case 'agent-remove': return assistants.uninstall(value);
+    case 'agents-refresh': return { ok: true, agents: detectAgents({ force: true }) };
     case 'quit': return askQuit({ chat: false });
     case 'quit-answer': return answerQuit(value);
     default: break;

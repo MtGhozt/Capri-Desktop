@@ -1942,7 +1942,7 @@ export class AppMenu {
             row.append(cmdWrap);
           }
           const hint = item.installed
-            ? 'Instalado · clic para activar/apagar'
+            ? (item.viaKnownPath ? item.note : 'Instalado · clic para activar/apagar')
             : `No instalado · copiá el comando${item.id === 'cursor-agent' ? ' · El editor Cursor solo no alcanza.' : ''}`;
           row.append(build('span', 'appmenu__hint appmenu__agent-hint',
             this.agentNote?.startsWith(item.label)
@@ -2161,6 +2161,15 @@ export class AppMenu {
       agentCard.append(row);
     }
     agentCard.append(pickRow(['agent-auto'], (id) => this.act('model-provider', id)));
+    const refreshAgents = build('button', 'appmenu__toggle-btn', 'REVISAR DE NUEVO');
+    refreshAgents.type = 'button';
+    refreshAgents.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      refreshAgents.disabled = true;
+      await this.host.menuAction({ id: 'agents-refresh' }).catch(() => null);
+      await this.refresh();
+    });
+    agentCard.append(refreshAgents);
     agentCard.append(probeBtn(() => ({
       provider: agentIds.includes(active) ? active : 'agent-auto',
     })));
