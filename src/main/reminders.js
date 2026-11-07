@@ -55,7 +55,13 @@ function parseReminderCommand(text, { now = Date.now() } = {}) {
     return { action: 'list' };
   }
   if (/^(?:cancela|cancelar|borra|borrar|elimina|eliminar|quita|quitar)\b.*\b(?:recordatorios?|temporizadores?|timers?|avisos?|alarmas?)\b/.test(said)) {
-    return { action: 'cancel', all: /todos|todas/.test(said) };
+    const all = /todos|todas/.test(said);
+    const match = all ? '' : said
+      .replace(/^(?:cancela|cancelar|borra|borrar|elimina|eliminar|quita|quitar)\b/, '')
+      .replace(/\b(?:el|la|los|las|mi|mis|un|una)?\s*(?:recordatorios?|temporizadores?|timers?|avisos?|alarmas?)\b/, '')
+      .replace(/^\s*(?:de|del|para|que)\b\s*/, '')
+      .trim();
+    return { action: 'cancel', all, match };
   }
   const m = /^(?:pon(?:e|me)?\s+|poner\s+|inicia\s+)?(?:un\s+|una\s+)?(?:temporizador|timer|alarma|aviso|recordatorio|recordame|avisame)\b\s*(?:de\s+|en\s+|para\s+)?(.+)$/.exec(said);
   if (!m) return null;
@@ -104,6 +110,10 @@ function createReminders({
   let items = [];
   let timer = null;
   let seq = 0;
+  let missedAtBoot = 0;
+
+  const fold = (text) => String(text || '')
+    .normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
   const clean = (raw) => {
     const at = Number(raw?.at);
@@ -148,27 +158,55 @@ function createReminders({
     return count;
   }
 
+  // The next pending one, or the first whose text mentions what he said.
+  function cancelOne(match = '') {
+    const needle = fold(match).trim();
+    const target = needle
+      ? list().find((item) => fold(item.text).includes(needle))
+      : list()[0];
+    if (!target) return null;
+    items = items.filter((item) => item.id !== target.id);
+    save();
+    return target;
+  }
+
+  // Startup greeting needs this before start() runs too, so read the file when nothing is cached.
+  function missedCount() {
+    if (missedAtBoot) return missedAtBoot;
+    try {
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      return (Array.isArray(data) ? data : []).filter((item) => Number(item?.at) <= now()).length;
+    } catch {
+      return 0;
+    }
+  }
+
   function tick() {
     const t = now();
     const due = items.filter((item) => item.at <= t);
     if (!due.length) return [];
     items = items.filter((item) => item.at > t);
     save();
-    for (const item of due) {
-      try { fire?.(item, { missed: false }); } catch { /* keep the scheduler alive */ }
-    }
+    const item = due.length === 1
+      ? due[0]
+      : { id: 'due', at: due[0].at, text: due.map((one) => one.text).join(' · '), count: due.length };
+    try { fire?.(item, { missed: false }); } catch { /* keep the scheduler alive */ }
     return due;
   }
 
-  // Startup: pending ones stay scheduled; anything that passed while she was closed is told once
-  // and dropped.
+  // Startup: pending ones stay scheduled; anything that passed while she was closed is told once,
+  // grouped into a single line, and dropped.
   function start() {
     read();
     const t = now();
     const missed = items.filter((item) => item.at <= t);
     items = items.filter((item) => item.at > t);
-    if (missed.length) save();
-    for (const item of missed) {
+    if (missed.length) {
+      missedAtBoot = missed.length;
+      save();
+      const item = missed.length === 1
+        ? missed[0]
+        : { id: 'missed', at: missed[0].at, text: missed.map((one) => one.text).join(' · '), count: missed.length };
       try { fire?.(item, { missed: true }); } catch { /* keep the scheduler alive */ }
     }
     if (!timer && intervalMs > 0) timer = setIntervalFn(tick, intervalMs);
@@ -180,7 +218,7 @@ function createReminders({
     timer = null;
   }
 
-  return { start, stop, add, list, cancelAll, tick, read };
+  return { start, stop, add, list, cancelAll, cancelOne, missedCount, tick, read };
 }
 
 module.exports = {

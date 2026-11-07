@@ -701,12 +701,12 @@ function announce(line, opts) {
   return showLine(line, opts);
 }
 
-function showLine(line, { chat = false, badge = 'CAPRI' } = {}) {
+function showLine(line, { chat = false, badge = 'CAPRI', hold } = {}) {
   if (chat) {
     overlay?.webContents.send('chat:token', line);
     overlay?.webContents.send('chat:done', { text: line });
   } else {
-    sendCommand('line', { badge, text: line });
+    sendCommand('line', { badge, text: line, ...(hold ? { hold } : {}) });
   }
   return line;
 }
@@ -1106,10 +1106,19 @@ function goReminderReply(order, { chat = true } = {}) {
     return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
   }
   if (order.action === 'cancel') {
-    const count = reminders?.cancelAll() || 0;
-    const line = count
-      ? `Listo, cancelé ${count} recordatorio${count === 1 ? '' : 's'}.`
-      : 'No tenía recordatorios para cancelar.';
+    if (order.all) {
+      const count = reminders?.cancelAll() || 0;
+      const line = count
+        ? `Listo, cancelé ${count} recordatorio${count === 1 ? '' : 's'}.`
+        : 'No tenía recordatorios para cancelar.';
+      return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
+    }
+    const done = reminders?.cancelOne(order.match);
+    const line = done
+      ? `Listo, cancelé este recordatorio: ${done.text}.`
+      : order.match
+        ? `No encontré un recordatorio de «${order.match}».`
+        : 'No tenía recordatorios para cancelar.';
     return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
   }
   return null;
@@ -2878,6 +2887,11 @@ function registerIpc() {
   });
   // her hello at boot: the overlay shows it, and it plays from the cached wav if there is one
   greeting = async function greeting({ unlock = false } = {}) {
+    // A missed reminder is this launch's greeting: never replace it with a hello.
+    if (!unlock && (reminders?.missedCount?.() || 0) > 0) {
+      logEvent(voiceLogPath(), `[capri] greeting skipped: ${reminders.missedCount()} missed reminder(s)`);
+      return null;
+    }
     const cfg = config.load();
     if (cfg.behavior?.greetings === false || (unlock && cfg.behavior?.unlockGreeting === false)) return null;
     const now = Date.now();
@@ -3340,14 +3354,20 @@ function main() {
     reminders = createReminders({
       file: path.join(app.getPath('userData'), 'reminders.json'),
       fire: (item, { missed }) => {
-        const line = missed
-          ? `Se me pasó avisarte: ${item.text}`
-          : fillLine(pickLine('recordatorio'), { text: item.text });
+        let line = fillLine(pickLine('recordatorio'), { text: item.text });
+        if (missed) {
+          line = item.count > 1
+            ? `Se me pasaron ${item.count} cosas: ${item.text}`
+            : `Se me pasó avisarte: ${item.text}`;
+        } else if (item.count > 1) {
+          line = `Te recuerdo ${item.count} cosas: ${item.text}`;
+        }
         deliverReminder({
           line,
           noMolestar: Boolean(gameMode?.active?.()),
           speak: (text) => speakLine(text),
-          show: (text) => showLine(text, { badge: 'RECORDATORIO' }),
+          // long enough to read: the bubble auto-hides on its own hold
+          show: (text) => showLine(text, { badge: 'RECORDATORIO', hold: Math.max(6000, readMs(text)) }),
         });
       },
     });

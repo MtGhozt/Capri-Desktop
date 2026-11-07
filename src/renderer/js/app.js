@@ -1118,7 +1118,7 @@ async function boot() {
         break;
       }
       case 'line': // a short notice from a menu action (memory, clip)
-        panel.say({ kind: 'info', badge: cmd.badge, line: cmd.text, hold: 4600 });
+        panel.say({ kind: 'info', badge: cmd.badge, line: cmd.text, hold: cmd.hold ?? 4600 });
         break;
       case 'update-ask': { // GitHub release newer than package.json
         const prevAction = panel.onAction;
