@@ -6,6 +6,11 @@
 const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
+  '0.2.5': [
+    'Ahora entiendo varios comandos en una frase, y Spotify entiende más frases y reintenta si falla.',
+    'Si la GPU no alcanza para clonar voz te aviso, y tu voz personalizada queda en 2 pasos.',
+    'Claude Code se detecta aunque no esté en el PATH, y mis respuestas tienen más contexto.',
+  ],
   '0.2.4': [
     'Groq y Mistral volvieron, y los atajos se editan desde mi menú.',
     'Namida te dice qué suena, Mis apps abre carpetas y ya sé cómo llamarte.',
