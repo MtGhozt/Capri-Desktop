@@ -9,7 +9,7 @@ const TAG = /^\s*\[(burla|emocion|aburrida|seria|calm)\]\s*/i;
 // The whole closed list of things a reply may do. A bare tag takes no value; mic and music take
 // one from their own list. Anything else is text and never runs.
 const ACTION_KINDS = [
-  'open', 'play', 'sleep', 'wake', 'minimize', 'lock', 'mic', 'forget', 'clip', 'quit', 'music',
+  'open', 'play', 'sleep', 'wake', 'minimize', 'lock', 'mic', 'forget', 'clip', 'quit', 'music', 'remind',
 ];
 const PLAIN_ACTIONS = new Set(['sleep', 'wake', 'minimize', 'lock', 'forget', 'clip', 'quit']);
 const MIC_VALUES = ['on', 'off'];
@@ -23,6 +23,9 @@ const ACTION_TAG_HELP = [
   '[sleep], [wake], [minimize], [lock], [mic:on], [mic:off], [forget], [clip], [quit],',
   '[open:<app>], [play:<canción>] o [play:hersong],',
   `[music:${MUSIC_VALUES.join('|')}].`,
+  'Para un recordatorio o una alarma usá [remind:<fecha y hora ISO 8601 en la zona local que te dije>|<texto corto>],',
+  'por ejemplo [remind:2026-11-08T07:00:00-06:00|tengo un evento]. Las horas relativas ("en media hora",',
+  '"mañana a las 8") calculalas desde la hora local de arriba. Al confirmar, repetí siempre la hora local resuelta.',
   'Solo esas se ejecutan; cualquier otra cosa es texto normal.',
   'Nunca digas que ponés, abrís, cerrás o hacés algo si no incluiste la etiqueta correspondiente: sin etiqueta no pasó nada. Si no podés emitirla, no lo prometas.',
 ].join(' ');
@@ -50,6 +53,13 @@ function parseAction(name, value) {
     return { kind, value: text };
   }
   if (PLAIN_ACTIONS.has(kind)) return text ? null : { kind, value: '' };
+  if (kind === 'remind') {
+    const bar = text.indexOf('|');
+    if (bar < 0) return null;
+    const at = Date.parse(text.slice(0, bar).trim());
+    const what = text.slice(bar + 1).trim().slice(0, 200);
+    return Number.isFinite(at) && what ? { kind, value: what, at: new Date(at).toISOString() } : null;
+  }
   const allowed = kind === 'mic' ? MIC_VALUES : MUSIC_VALUES;
   const picked = text.toLowerCase();
   return allowed.includes(picked) ? { kind, value: picked } : null;

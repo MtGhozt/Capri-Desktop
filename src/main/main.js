@@ -38,6 +38,7 @@ const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
 const { planMultiCommand } = require('./multi-command');
 const { isDirectCommand } = require('./direct-match');
+const { createReminders, parseReminderCommand, formatWhen, deliverReminder } = require('./reminders');
 const { isQuitCommand } = require('./quit-command');
 const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
@@ -139,6 +140,7 @@ let previousForeground = null;
 let menuKeyboard = false; // her menu has a text field open (Corregir lo último): it needs the keyboard
 let lastHeard = '';       // the last thing Whisper wrote, before her fixes (Corregir lo último)
 let gameMode = null;
+let reminders = null;
 let gameWork = Promise.resolve();
 let gameWasFolded = false;
 let gameHadLlm = false;
@@ -810,6 +812,13 @@ async function runReplyAction(action) {
       if (!result?.ok) showLine(result?.error || 'No pude poner esa música.', { chat: true, badge: 'MUSIC' });
       return;
     }
+    if (kind === 'remind') {
+      const at = Date.parse(String(action?.at || ''));
+      if (!Number.isFinite(at)) return;
+      // she already answered in her own words: the resolved time is shown, not spoken over her
+      goReminderCreate({ at, text: value }, { chat: true, say: false });
+      return;
+    }
     if (kind === 'sleep') return goSleepReply({ chat: false });
     if (kind === 'wake') return goWakeReply({ chat: false });
     if (kind === 'minimize') return await systemFlow.command('minimiza todo');
@@ -1060,6 +1069,50 @@ async function goClipReply({ chat = true } = {}) {
   if (result.ok) commandReply('clip', { chat, badge: 'CLIP' });
   else announce(clipFailLine(result.error), { chat, badge: 'CLIP' });
   return { ok: result.ok };
+}
+
+// -- timers and reminders -------------------------------------------------------------------
+// Direct "timer 10 minutos", or her hidden [remind:<ISO>|<text>] tag for real dates. The file lives
+// next to config.json; reminders.js checks it every few seconds, so a long wait is just data.
+
+function reminderWhen(at) {
+  return formatWhen(at, { timeZone: config.load().timeZone });
+}
+
+function goReminderCreate(order, { chat = true, say = true } = {}) {
+  const created = reminders?.add({ at: order.at, text: order.text });
+  if (!created) {
+    const line = 'No entendí a qué hora te lo recuerdo.';
+    showLine(line, { chat, badge: 'RECORDATORIO' });
+    return { ok: false, line };
+  }
+  const line = fillLine(pickLine('recordatorioListo'), { when: reminderWhen(created.at) });
+  if (say) {
+    const spoken = Boolean(speakLine(line));
+    followUp.reply(line, { spoken });
+  }
+  showLine(line, { chat, badge: 'RECORDATORIO' });
+  return { ok: true, line };
+}
+
+function goReminderReply(order, { chat = true } = {}) {
+  if (order.action === 'create') return goReminderCreate(order, { chat });
+  if (order.action === 'list') {
+    const pending = reminders?.list() || [];
+    const line = pending.length
+      ? `Tenés ${pending.length} recordatorio${pending.length === 1 ? '' : 's'}: ${pending
+        .map((item) => `${reminderWhen(item.at)}: ${item.text}`).join(' · ')}`
+      : 'No tenés recordatorios pendientes.';
+    return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
+  }
+  if (order.action === 'cancel') {
+    const count = reminders?.cancelAll() || 0;
+    const line = count
+      ? `Listo, cancelé ${count} recordatorio${count === 1 ? '' : 's'}.`
+      : 'No tenía recordatorios para cancelar.';
+    return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
+  }
+  return null;
 }
 
 // -- her apps (Paso 4C) ---------------------------------------------------------------------
@@ -2708,6 +2761,8 @@ async function directCommand(line) {
   if (isWhatsNewCommand(line)) return goWhatsNewReply();
   const powerOrder = await systemFlow.command(line);
   if (powerOrder) return { ok: true };
+  const reminderOrder = parseReminderCommand(line);
+  if (reminderOrder) return goReminderReply(reminderOrder) || { ok: true };
   const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
   if (musicOrder) return musicReply(musicOrder);
   if (isSleepCommand(line)) return goSleepReply();
@@ -3282,6 +3337,22 @@ function main() {
     createTray();
     comments.start();
     armAutoLook();
+    reminders = createReminders({
+      file: path.join(app.getPath('userData'), 'reminders.json'),
+      fire: (item, { missed }) => {
+        const line = missed
+          ? `Se me pasó avisarte: ${item.text}`
+          : fillLine(pickLine('recordatorio'), { text: item.text });
+        deliverReminder({
+          line,
+          noMolestar: Boolean(gameMode?.active?.()),
+          speak: (text) => speakLine(text),
+          show: (text) => showLine(text, { badge: 'RECORDATORIO' }),
+        });
+      },
+    });
+    // the overlay needs a moment before her first line can land in the bubble
+    setTimeout(() => reminders?.start(), 3000);
     windowWatch = startWindowWatch({
       overlay,
       onUpdate: (data) => {
@@ -3365,6 +3436,7 @@ function main() {
     globalShortcut.unregisterAll();
     windowWatch?.stop();
     gameMode?.stop();
+    reminders?.stop();
     comments?.stop();
     voice?.stop();
     lms?.unload();
