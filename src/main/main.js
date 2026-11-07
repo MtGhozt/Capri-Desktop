@@ -68,7 +68,7 @@ const { logEvent, voiceLogPath } = require('./log');
 const { createChatVisible } = require('./chat-visible');
 const { saveClip, openClipsFolder, clipFolderLabel } = require('./clips');
 const { micActive, voiceStatus: ttsStatus } = require('./voice-config');
-const { createFollowUp } = require('./follow-up');
+const { createFollowUp, readMs } = require('./follow-up');
 const {
   SENS_MIN, SENS_MAX, SENS_STEP, thresholdFromPct, pctFromThreshold, wakeSensitivity,
   normalizeAccelerator, acceleratorFromKey, sameCombo, shortcutConflict,
@@ -1565,7 +1565,6 @@ function sayWithoutLlm(text) {
     speakQueue?.feed(line);
     speakQueue?.flush(speakId);
   }
-  llm?.rememberAssistant?.(line);
 }
 
 function armAutoLook() {
@@ -3248,14 +3247,20 @@ function main() {
       maxMs: () => commentRange(config.load().comments?.maxMinutes, 40),
       onLine: (line, kind) => {
         if (!line) return;
-        llm?.rememberAssistant?.(line);
         const spoken = Boolean(speakLine(line));
+        // only the follow-up window may reuse this line; it never becomes history
+        if (spoken && followUpSec(config.load()) > 0) {
+          llm?.rememberComment?.(line, readMs(line) + followUpSec(config.load()) * 1000 + 6000);
+        }
         sendCommand('line', { badge: COMMENT_BADGE[kind] || 'CAPRI', text: line });
         if (spoken) followUp.listenAfter(line);
       },
       onIgnored: (line) => {
         if (!line) return;
         const spoken = Boolean(speakLine(line));
+        if (spoken && followUpSec(config.load()) > 0) {
+          llm?.rememberComment?.(line, readMs(line) + followUpSec(config.load()) * 1000 + 6000);
+        }
         sendCommand('line', { badge: 'CAPRI', text: line });
         if (spoken) followUp.listenAfter(line);
       },

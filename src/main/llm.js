@@ -10,6 +10,8 @@ const { stripReplyTags, createMoodStripper, ACTION_TAG_HELP } = require('./mood-
 const { userContentWithImage } = require('./screen-look');
 
 const HISTORY_LIMIT = 20; // ~10 user+assistant turns
+const HISTORY_IDLE_MS = 10 * 60 * 1000; // after this long, old turns are no context
+const COMMENT_WINDOW_MS = 60 * 1000; // an unprompted line only counts for its follow-up
 const TIMEOUT_MS = 45000;
 const LOCAL_TZ = 'America/Costa_Rica';
 
@@ -48,6 +50,7 @@ function createLlm({
   let persona = null;
   let memory = null;
   let lastTalkAt = null;
+  let pendingComment = null; // last unprompted line, for a follow-up answer only
   // A key the provider already refused is not asked again this session: every message would pay
   // the same wait.
   const deadProviders = new Set();
@@ -91,12 +94,20 @@ function createLlm({
     cancel();
     history = [];
     lastTalkAt = null;
+    pendingComment = null;
     return { ok: true };
   }
 
   function rememberAssistant(text) {
     if (!String(text || '').trim()) return;
     history = [...history, { role: 'assistant', content: String(text).trim() }].slice(-HISTORY_LIMIT);
+  }
+
+  // Unprompted comments stay out of history: only the newest one may answer a follow-up.
+  function rememberComment(text, ttlMs = COMMENT_WINDOW_MS) {
+    const line = String(text || '').trim();
+    if (!line) return;
+    pendingComment = { text: line, at: now().getTime(), ttlMs: Number(ttlMs) || 0 };
   }
 
   function systemPrompt(cfg, cloud) {
@@ -107,6 +118,7 @@ function createLlm({
     if (notes) parts.push(`Notas fijas sobre el usuario (memory.md):\n${notes}`);
     const name = String(cfg.userName || '').trim();
     if (name) parts.push(`El usuario se llama ${name}; llamalo así de vez en cuando, sin abusar.`);
+    parts.push('Si el mensaje es corto, ambiguo o parece dicho a otra persona, no inventes contexto: preguntá brevemente qué quiso decir o respondé algo neutro. Nunca supongas temas (código, juegos, etc.) que el usuario no mencionó en esta charla.');
     parts.push(ACTION_TAG_HELP);
     // her answer is shown in a terminal box and read out loud: markers would be spelled out
     if (cloud) parts.push('Responde en texto plano, sin Markdown, sin asteriscos ni listas; frases cortas para ser leídas en voz alta. Nada de etiquetas de seguridad ni de tu razonamiento.');
@@ -118,8 +130,15 @@ function createLlm({
   // need the question she just asked. Voice uses the same history via chat:send → llm.chat.
   // `image` is a raw JPEG base64 (no data: prefix); history keeps text only.
   function messagesFor(cfg, cloud, user, image) {
+    const at = now().getTime();
+    // A fragment after a long silence is not a continuation: drop the old turns.
+    if (Number.isFinite(lastTalkAt) && at - lastTalkAt > HISTORY_IDLE_MS) history = [];
+    const comment = pendingComment;
+    pendingComment = null;
+    const freshComment = comment && at - comment.at <= comment.ttlMs ? comment.text : null;
     const messages = [{ role: 'system', content: systemPrompt(cfg, cloud) }];
     messages.push(...history);
+    if (freshComment) messages.push({ role: 'assistant', content: freshComment });
     const fg = String(screenContext?.() || '').trim();
     const text = image && fg ? `${user}\n\n(Ventana al frente: ${fg})` : user;
     messages.push({ role: 'user', content: userContentWithImage(text, image) });
@@ -294,6 +313,7 @@ function createLlm({
         { role: 'assistant', content: finalText },
       ].slice(-HISTORY_LIMIT);
       lastTalkAt = now().getTime();
+      pendingComment = null;
       onDone({ text: finalText, mood, action });
     };
 
@@ -406,7 +426,7 @@ function createLlm({
     return result('failed', start);
   }
 
-  return { chat, cancel, reset, rememberAssistant, reloadPersona, personaText };
+  return { chat, cancel, reset, rememberAssistant, rememberComment, reloadPersona, personaText };
 }
 
 module.exports = { createLlm, temporalContext };

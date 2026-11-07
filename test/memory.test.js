@@ -48,6 +48,19 @@ test('persona.md is cached until "reload persona"', () => {
   assert.match(llm.personaText(), /^SECOND PERSONA$/);
 });
 
+test('system prompt warns against inventing context from ambiguous fragments', async () => {
+  const stub = stubFetch();
+  try {
+    const llm = createLlm({ loadConfig: () => ({ lang: 'es' }), personaPath: tempPersona('PERSONA') });
+    await run(llm, '¿por qué no me deja?');
+    const system = stub.bodies[0].messages[0].content;
+    assert.match(system, /no inventes contexto/i);
+    assert.match(system, /código, juegos/i);
+  } finally {
+    stub.restore();
+  }
+});
+
 test('reload persona also works when persona.md is missing', () => {
   const file = path.join(os.tmpdir(), 'capri-missing-persona', 'persona.md');
   const llm = createLlm({ loadConfig: () => ({ lang: 'es' }), personaPath: file });
@@ -69,6 +82,51 @@ test('forget conversation drops the history sent to the LLM', async () => {
     llm.reset();
     await run(llm, 'nueva');
     assert.equal(stub.bodies[2].messages.length, 2); // system, nueva
+  } finally {
+    stub.restore();
+  }
+});
+
+test('history is dropped after ten minutes of silence and kept before', async () => {
+  const stub = stubFetch();
+  try {
+    let t = new Date('2026-10-29T12:00:00.000Z');
+    const llm = createLlm({
+      loadConfig: () => ({ lang: 'es' }), personaPath: tempPersona('PERSONA'), now: () => t,
+    });
+
+    await run(llm, 'hola');
+    t = new Date(t.getTime() + 5 * 60 * 1000);
+    await run(llm, 'sigo acá');
+    assert.equal(stub.bodies[1].messages.length, 4); // system, hola, ok, sigo acá
+
+    t = new Date(t.getTime() + 11 * 60 * 1000);
+    await run(llm, '¿por qué no me deja?');
+    assert.equal(stub.bodies[2].messages.length, 2); // system, fragmento
+  } finally {
+    stub.restore();
+  }
+});
+
+test('unprompted comments never pile up in history', async () => {
+  const stub = stubFetch();
+  try {
+    const llm = createLlm({
+      loadConfig: () => ({ lang: 'es' }), personaPath: tempPersona('PERSONA'),
+      now: () => new Date('2026-10-29T12:00:00.000Z'),
+    });
+    llm.rememberComment('comentario viejo', 60_000);
+    llm.rememberComment('¿sabés qué pasó hoy?', 60_000);
+
+    await run(llm, 'sí, contame');
+    const first = stub.bodies[0].messages;
+    assert.equal(first.length, 3); // system, only the newest comment, user
+    assert.equal(first[1].content, '¿sabés qué pasó hoy?');
+
+    await run(llm, 'otra cosa');
+    const second = stub.bodies[1].messages;
+    assert.equal(second.some((m) => m.content === 'comentario viejo'), false);
+    assert.equal(second.some((m) => m.content === '¿sabés qué pasó hoy?'), false);
   } finally {
     stub.restore();
   }
