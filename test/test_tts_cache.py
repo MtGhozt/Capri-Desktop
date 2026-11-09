@@ -169,6 +169,51 @@ test('an unsupported CUDA compute capability is a GPU reason, not a warning', ()
   assert.match(out, /not supported/);
 });
 
+test('an RTX 4060 (sm_89) runs the sm_86 cubin torch ships', () => {
+  const out = py(
+    'import tts\n'
+    + 'class Cuda:\n'
+    + '    def is_available(self): return True\n'
+    + '    def get_device_capability(self, n=0): return (8, 9)\n'
+    + '    def get_arch_list(self): return ["sm_75", "sm_80", "sm_86", "sm_90", "sm_100", "sm_120"]\n'
+    + 'class Torch:\n'
+    + '    cuda = Cuda()\n'
+    + 'print(tts.cuda_arch_reason(Torch()))',
+  );
+  assert.equal(out, 'None');
+});
+
+test('a GPU from another major version is still rejected', () => {
+  const out = py(
+    'import tts\n'
+    + 'class Cuda:\n'
+    + '    def is_available(self): return True\n'
+    + '    def get_device_capability(self, n=0): return (8, 9)\n'
+    + '    def get_arch_list(self): return ["sm_90"]\n'
+    + 'class Torch:\n'
+    + '    cuda = Cuda()\n'
+    + 'print(tts.cuda_arch_reason(Torch()))',
+  );
+  assert.match(out, /sm_89/);
+  assert.match(out, /not supported/);
+});
+
+test('the fallback notice names CUDA, VRAM and other failures apart', () => {
+  const out = py(
+    'import tts\n'
+    + 'print(tts.fallback_message("omnivoice skipped GPU: sm_89 not supported by torch (sm_86)"))\n'
+    + 'print(tts.fallback_message("omnivoice skipped GPU: vram 1730 MiB < 2000"))\n'
+    + 'print(tts.fallback_message("CUDA out of memory"))\n'
+    + 'print(tts.fallback_message("boom while loading"))',
+  );
+  const [arch, vram, oom, other] = out.split(/\r?\n/);
+  assert.match(arch, /Torch/);
+  assert.match(vram, /memoria/);
+  assert.match(oom, /memoria/);
+  assert.match(other, /log/);
+  assert.doesNotMatch(other, /memoria|GPU/);
+});
+
 test('mood prompts are built once, on first use, not all at boot', () => {
   const out = py(
     'import tempfile; from pathlib import Path; from tts import OmniVoiceTTS\n'

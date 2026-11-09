@@ -26,6 +26,7 @@ from tts import (
     OMNI_MODEL,
     OmniVoiceTTS,
     OmniVoiceUnavailable,
+    fallback_message,
     load_kokoro,
     model_cached,
     normalize_pcm,
@@ -1490,7 +1491,7 @@ class Engine:
                     self._omni_notice_shown = True
                     self.broadcast({
                         "type": "notice",
-                        "message": "Tu GPU no alcanza para clonar voz, uso la voz normal.",
+                        "message": fallback_message(err),
                     })
             with self._tts_lock:
                 self._omni_loading = False

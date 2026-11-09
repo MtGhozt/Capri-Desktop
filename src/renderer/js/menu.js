@@ -924,7 +924,7 @@ export class AppMenu {
       || (String(voice.ttsRef || '').trim() ? `Tu voz (${String(voice.ttsRef).split(/[\\/]/).pop()})` : 'Voz por defecto');
     body.append(build('div', 'appmenu__hint appmenu__voice-source', `Voz activa: ${voiceSource}`));
     if (voice.tts?.state === 'fallback') {
-      body.append(build('div', 'appmenu__hint', 'Tu GPU no alcanza para clonar voz, uso la voz normal.'));
+      body.append(build('div', 'appmenu__hint', 'Uso la voz normal: tu clon no cargó (el motivo está en el log).'));
     }
     if (this.voiceRefForm) {
       const form = build('div', 'appmenu__voice-ref');

@@ -140,18 +140,39 @@ def read_ref_text(txt: Path) -> str:
 
 
 def cuda_arch_reason(torch) -> str | None:
-    """The GPU's compute capability must be one this torch build was compiled for."""
+    """Reject only GPUs no compiled kernel can run.
+
+    Torch lists the cubin arches it ships, often without every minor (an RTX 4060 is sm_89 while
+    cu130 ships sm_86). CUDA keeps binary compatibility forward within a major version, so sm_86
+    covers sm_89; a device minor below every build of its major (or another major) does not.
+    """
     try:
         if not torch.cuda.is_available():
             return None
         major, minor = torch.cuda.get_device_capability(0)
         arch = f"sm_{major}{minor}"
-        archs = [str(name).lower() for name in (torch.cuda.get_arch_list() or [])]
-        if archs and arch not in archs:
+        archs = [str(name).strip().lower() for name in (torch.cuda.get_arch_list() or [])]
+        built = []
+        for name in archs:
+            digits = name.replace("compute_", "").replace("sm_", "").rstrip("a")
+            if len(digits) >= 2 and digits.isdigit():
+                built.append((int(digits[:-1]), int(digits[-1])))
+        if built and not any(built_major == int(major) and built_minor <= int(minor)
+                             for built_major, built_minor in built):
             return f"omnivoice skipped GPU: {arch} not supported by torch ({','.join(archs)})"
     except Exception:
         return None
     return None
+
+
+def fallback_message(err) -> str:
+    """One short Spanish line for a Kokoro fallback: VRAM, CUDA and load errors are not the same."""
+    text = str(err or "").lower()
+    if "not supported by torch" in text:
+        return "Esta versión de Torch no puede usar tu GPU para clonar voz; uso la voz normal."
+    if "vram" in text or "out of memory" in text or " oom" in text:
+        return "La GPU no tiene memoria libre suficiente para clonar voz; uso la voz normal."
+    return "No pude cargar tu clon de voz; uso la voz normal. El motivo está en el log."
 
 
 def verify_ref_transcript(txt: Path, log, label: str) -> str:

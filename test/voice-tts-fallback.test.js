@@ -63,7 +63,7 @@ eng = bare()
 eng._load_omni_bg()
 assert eng._omni_blocked, logs
 assert [n["message"] for n in notices if n.get("type") == "notice"] == [
-    "Tu GPU no alcanza para clonar voz, uso la voz normal."
+    "La GPU no tiene memoria libre suficiente para clonar voz; uso la voz normal."
 ], notices
 assert eng._omni is None and eng._tts is not None, "did not fall back to Kokoro"
 assert any("state=fallback" in line for line in logs), logs
