@@ -7,9 +7,9 @@ const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
   '0.2.8': [
-    'Si configurás ciudad en Ajustes, te digo clima y feriados reales; offline no invento.',
-    'Los eventos te avisan 1 h antes (o lo que pidas), y confirmo hora del evento y del aviso.',
-    'Los recordatorios se editan o borran en Ajustes o por chat («pasá el de las 8 a las 9»).',
+    'Clima/feriados con ciudad en Ajustes; «Iniciar con Windows» volvió a Comportamiento.',
+    'Proveedor del overlay = prioridad de cerebros (↑↓); clip avisa si no hay NVIDIA.',
+    'Recordatorios se editan en su pestaña (zona de Ajustes) o por chat; aviso 1 h antes en eventos.',
     'Al mirar la pantalla uso el monitor de la ventana adelante; la foto no queda en disco.',
   ],
   '0.2.7': [

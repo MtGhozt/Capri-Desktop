@@ -4,12 +4,20 @@
 
 ### Clima y feriados
 
-- **Clima y feriados junto a la hora local:** en Ajustes › Comportamiento, al lado de «País / zona horaria», podés poner una ciudad/país opcional. Capri consulta Open-Meteo (geocoding + forecast) y Nager.Date (feriados), sin API key, con caché corta y fallo silencioso si no hay red. Esos datos van al contexto temporal del modelo solo cuando existen (nunca inventa clima). Preguntas simples («¿va a llover hoy?», «¿mañana es feriado?») se responden por el camino de comandos directos cuando alcanza.
+- **Clima y feriados junto a la hora local:** en Ajustes › Comportamiento, al lado de «País / zona horaria», podés poner una ciudad/país opcional. Capri consulta Open-Meteo (geocoding + forecast) y Nager.Date (feriados), sin API key, con caché corta y fallo silencioso si no hay red. Esos datos van al contexto temporal del modelo solo cuando existen (nunca inventa clima). Preguntas simples («¿va a llover hoy?», «¿mañana es feriado?») se responden por el camino de comandos directos cuando alcanza. Si la ciudad no existe, Ajustes muestra «No encontré esa ciudad»; si resuelve, el nombre canónico (p. ej. San José, Costa Rica). Sin red no spamea errores.
 
 ### Recordatorios
 
 - **Aviso anticipado de eventos:** «mañana a las 8 tengo un evento» puede crear el recordatorio 1–2 h antes (por defecto 1 h; «avisame 2 horas antes» → 2 h) vía la etiqueta `[remind:ISO|texto|minutos]`. La respuesta confirma la hora del evento y la del aviso.
-- **Editar / mover / borrar:** por voz o chat («pasá el de las 8 a las 9», «mové el de tomar agua a mañana») y en Ajustes › Comportamiento › Recordatorios (lista pendiente con editar hora y borrar). Si hay varios que coinciden, pregunta cuál.
+- **Editar / mover / borrar:** por voz o chat («pasá el de las 8 a las 9», «mové el de tomar agua a mañana») y en Ajustes › Recordatorios (lista pendiente con editar hora y borrar). El editor de hora usa la zona de `cfg.timeZone`, no la del reloj de Windows. Si hay varios que coinciden, pregunta cuál.
+
+### Menú y Ajustes
+
+- **«Iniciar con Windows»** vuelve a Comportamiento (había desaparecido en el rediseño 4I) y lee el estado real del login item del SO.
+- Pestañas renombradas: **Memoria y personalidad**, **Oído y voz**; **Recordatorios** tiene su propia entrada en la barra.
+- **Atajos:** chips alineados en una grilla (etiqueta · combo · CAMBIAR).
+- Overlay **Proveedor:** solo cerebros activos en orden de prioridad, con ↑/↓ y «Más proveedores…» → Cerebro.
+- **Guardar clip:** si no hay GPU NVIDIA, aviso «Solo con NVIDIA (ShadowPlay)» en vez de fallar en silencio.
 
 ### Pantalla
 
