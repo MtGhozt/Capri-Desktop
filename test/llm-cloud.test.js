@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { createLlm, temporalContext, resolveTimeZone } = require('../src/main/llm');
-const { usesLms } = require('../src/main/chat-providers');
+const { usesLms, PROVIDERS } = require('../src/main/chat-providers');
 const { createTokenStore } = require('../src/main/spotify');
 
 const KEY = 'sk-test-do-not-log-123';
@@ -121,6 +121,22 @@ test('on LM Studio nothing changes: her old port, and no key', async () => {
   assert.equal(h.calls[0].headers.Authorization, undefined);
   assert.equal(h.calls[0].body.reasoning_effort, 'none');
   assert.equal(h.calls[0].body.model, 'google/gemma-4-e2b');
+});
+
+test('her prompt names the brain powering her, and never "ChatGPT"', async () => {
+  const cases = [
+    ['gemini', 'gemini-flash-lite-latest'],
+    ['xai', 'grok-4-1-fast-non-reasoning'],
+    ['local', 'google/gemma-4-e2b'],
+  ];
+  for (const [id, model] of cases) {
+    const h = harness({ cfg: cfgOf({ provider: id, model }) });
+    await h.say();
+    const prompt = h.calls[0].body.messages[0].content;
+    assert.ok(prompt.includes(PROVIDERS[id].label), id);
+    assert.ok(prompt.includes(model), id);
+    assert.ok(!prompt.includes('ChatGPT'), id);
+  }
 });
 
 test('going to the cloud and back keeps the local model she had', async () => {

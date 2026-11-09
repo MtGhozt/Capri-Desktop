@@ -37,6 +37,13 @@ function isAuthError(err) {
   return err?.status === 401 || err?.status === 403;
 }
 
+// The provider answering right now: the first active brain, else the configured one (same as chat).
+function activeBrain(cfg) {
+  return Array.isArray(cfg.llm?.brains)
+    ? activeBrainIds(cfg.llm)[0]
+    : String(cfg.llm?.provider || 'local');
+}
+
 function temporalContext({ now = new Date(), lastTalkAt = null, timeZone = '' } = {}) {
   const zone = resolveTimeZone(timeZone);
   const parts = new Intl.DateTimeFormat('es-CR', {
@@ -128,10 +135,12 @@ function createLlm({
     pendingComment = { text: line, at: now().getTime(), ttlMs: Number(ttlMs) || 0 };
   }
 
-  function systemPrompt(cfg, cloud) {
+  function systemPrompt(cfg, cloud, id = activeBrain(cfg)) {
     const base = personaText();
     const lang = String(cfg.lang || 'es');
     const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. ${temporalContext({ now: now(), lastTalkAt, timeZone: cfg.timeZone })} Si pregunta la hora o la fecha, usa esos datos.`];
+    const model = isAgent(id) ? '' : ` (modelo ${modelFor(cfg, id)})`;
+    parts.push(`Tu cerebro ahora es ${provider(id).label}${model}. Si te preguntan qué modelo o IA sos, decí eso; seguís siendo Capri, nunca otra IA ni otra empresa.`);
     const notes = memoryText();
     if (notes) parts.push(`Notas fijas sobre el usuario (memory.md):\n${notes}`);
     const name = String(cfg.userName || '').trim();
@@ -147,14 +156,14 @@ function createLlm({
   // Last ~10 turns travel with every request (local and cloud): follow-ups like "sí, cuéntame"
   // need the question she just asked. Voice uses the same history via chat:send → llm.chat.
   // `image` is a raw JPEG base64 (no data: prefix); history keeps text only.
-  function messagesFor(cfg, cloud, user, image) {
+  function messagesFor(cfg, cloud, user, image, id = activeBrain(cfg)) {
     const at = now().getTime();
     // A fragment after a long silence is not a continuation: drop the old turns.
     if (Number.isFinite(lastTalkAt) && at - lastTalkAt > HISTORY_IDLE_MS) history = [];
     const comment = pendingComment;
     pendingComment = null;
     const freshComment = comment && at - comment.at <= comment.ttlMs ? comment.text : null;
-    const messages = [{ role: 'system', content: systemPrompt(cfg, cloud) }];
+    const messages = [{ role: 'system', content: systemPrompt(cfg, cloud, id) }];
     messages.push(...history);
     if (freshComment) messages.push({ role: 'assistant', content: freshComment });
     const fg = String(screenContext?.() || '').trim();
@@ -260,10 +269,7 @@ function createLlm({
     const started = Date.now();
 
     const cfg = loadConfig();
-    const configuredId = String(cfg.llm?.provider || 'local');
-    const id = Array.isArray(cfg.llm?.brains)
-      ? activeBrainIds(cfg.llm)[0]
-      : configuredId;
+    const id = activeBrain(cfg);
     const cloud = isCloud(id);
     const jpeg = image ? String(image) : null;
     let streamed = false;
@@ -297,7 +303,7 @@ function createLlm({
         : null;
       await streamChat(requestFor(target, {
         model: modelFor(cfg, target),
-        messages: messagesFor(cfg, isCloud(target), user, jpeg),
+        messages: messagesFor(cfg, isCloud(target), user, jpeg, target),
         key: apiKey?.(target) || '',
         baseUrl: cfg.llm?.baseUrl,
       }), (piece) => {
@@ -350,7 +356,7 @@ function createLlm({
         const text = await runAgentChat({
           provider: target,
           user,
-          persona: systemPrompt(cfg, false),
+          persona: systemPrompt(cfg, false, target),
           signal,
         });
         const cleaned = stripReplyTags(String(text || ''));
