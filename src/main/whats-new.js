@@ -7,10 +7,10 @@ const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
   '0.2.8': [
-    'Cuando te pido mirar la pantalla, miro el monitor de la ventana que tenés adelante, no el que marca el mouse.',
-    'Si la primera captura sale en negro, la reintento antes de responder; una ventana quieta ya no se descarta.',
-    'La foto de tu pantalla no queda en disco: vive en memoria y se va con la respuesta, como decía el aviso.',
-    'Si la voz falla al instalar, ves el error real y podés copiarlo; no más «Listo» falso ni reintentos de OmniVoice.',
+    'Si configurás ciudad en Ajustes, te digo clima y feriados reales; offline no invento.',
+    'Los eventos te avisan 1 h antes (o lo que pidas), y confirmo hora del evento y del aviso.',
+    'Los recordatorios se editan o borran en Ajustes o por chat («pasá el de las 8 a las 9»).',
+    'Al mirar la pantalla uso el monitor de la ventana adelante; la foto no queda en disco.',
   ],
   '0.2.7': [
     'Volví a Gemini gratis y, si preguntás qué modelo soy, te digo el mío real; tu modelo elegido a mano no se toca.',

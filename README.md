@@ -12,7 +12,7 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 **Versión en el repo:** `0.2.8` (en preparación, sin publicar). **Última etiquetada:** `0.2.7`. El instalador más reciente está en [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
 
-**Novedades recientes:** 0.2.5 sumó varios comandos en una frase y arreglos de Spotify y voz en GPUs débiles; 0.2.6, hora local elegible y recordatorios persistentes; 0.2.7 restaura el Gemini Flash-Lite gratis, hace que los modelos digan cuál los hace funcionar y endurece el aviso hablado de recordatorios; **0.2.8 (en preparación)** corrige «Mirá mi pantalla» para que mire el monitor de la ventana que tenés adelante.
+**Novedades recientes:** 0.2.5 sumó varios comandos en una frase y arreglos de Spotify y voz en GPUs débiles; 0.2.6, hora local elegible y recordatorios persistentes; 0.2.7 restaura el Gemini Flash-Lite gratis, hace que los modelos digan cuál los hace funcionar y endurece el aviso hablado de recordatorios; **0.2.8 (en preparación)** mira el monitor correcto, clima/feriados opcionales, aviso anticipado de eventos y edición de recordatorios.
 
 <img src="docs/media/capri-desktop.png" alt="Capri en el escritorio" width="100%">
 

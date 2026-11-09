@@ -1332,6 +1332,22 @@ button.appmenu__row {
   flex: none;
 }
 
+.appmenu__reminder-row {
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.appmenu__reminder-row .appmenu__hint {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.appmenu__reminder-row .appmenu__input {
+  width: 168px;
+  flex: none;
+}
+
 .appmenu__comment-frequency .appmenu__input {
   width: 72px;
   flex: none;

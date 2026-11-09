@@ -123,6 +123,7 @@ export class AppMenu {
     this.appOpen = null;    // the app being edited
     this.appNote = '';      // what came of the last add / save / delete
     this.gameNote = '';
+    this.reminderNote = '';
     this.appDelete = null;  // BORRAR pressed once: the next press deletes
     this.linkForm = false;  // Añadir enlace open
     this.testText = '';     // Probar comando
@@ -1249,6 +1250,57 @@ export class AppMenu {
     }).format(new Date())} · ${zone}`);
     zoneNow.dataset.setting = 'behavior';
     body.append(zoneNow);
+    const placeRow = build('div', 'appmenu__row appmenu__name-row');
+    placeRow.dataset.setting = 'behavior';
+    placeRow.append(build('span', 'appmenu__label', 'Ciudad / país (clima)'));
+    const placeInput = this.textInput(build, cfg.weatherPlace || '', 'San José, Costa Rica', 80);
+    placeInput.addEventListener('change', () => this.act('weather-place', placeInput.value.trim()));
+    placeRow.append(placeInput);
+    body.append(placeRow);
+    const placeHint = build('div', 'appmenu__hint', 'Opcional. Clima (Open-Meteo) y feriados (Nager.Date); sin red, no inventa.');
+    placeHint.dataset.setting = 'behavior';
+    body.append(placeHint);
+
+    section('RECORDATORIOS', 'behavior');
+    const pending = Array.isArray(cfg.reminders) ? cfg.reminders : [];
+    if (!pending.length) {
+      const empty = build('div', 'appmenu__hint', 'No hay recordatorios pendientes.');
+      empty.dataset.setting = 'behavior';
+      body.append(empty);
+    } else {
+      for (const item of pending) {
+        const row = build('div', 'appmenu__row appmenu__reminder-row');
+        row.dataset.setting = 'behavior';
+        const label = build('span', 'appmenu__label', item.when || '');
+        label.title = item.text || '';
+        row.append(label);
+        const text = build('span', 'appmenu__hint', item.text || '');
+        row.append(text);
+        const whenInput = build('input', 'appmenu__input');
+        whenInput.type = 'datetime-local';
+        whenInput.value = this.reminderInputValue(item.at);
+        whenInput.title = 'Editar hora';
+        whenInput.addEventListener('change', () => {
+          const iso = whenInput.value ? new Date(whenInput.value).toISOString() : '';
+          this.act('reminder-update', { id: item.id, at: iso });
+        });
+        row.append(whenInput);
+        const del = build('button', 'appmenu__toggle-btn', 'Borrar');
+        del.type = 'button';
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.act('reminder-delete', { id: item.id });
+        });
+        row.append(del);
+        body.append(row);
+      }
+    }
+    if (this.reminderNote) {
+      const note = build('div', 'appmenu__hint', this.reminderNote);
+      note.dataset.setting = 'behavior';
+      body.append(note);
+    }
+
     toggle('Comentarios', {
       setting: 'behavior',
       on: cfg.comments?.enabled !== false,
@@ -1601,6 +1653,14 @@ export class AppMenu {
     if (min < 60) return `${min} MIN`;
     const h = Math.round(min / 60);
     return h < 48 ? `${h} H` : `${Math.round(h / 24)} DÍAS`;
+  }
+
+  reminderInputValue(at) {
+    const ms = Number(at);
+    if (!Number.isFinite(ms)) return '';
+    const d = new Date(ms);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   // A text field that keeps its keys to itself (Esc still closes the menu).
@@ -2539,9 +2599,13 @@ export class AppMenu {
       || id === 'model-provider' || id === 'spotify-connect' || id === 'spotify-disconnect' || id === 'drag-lock' || id === 'theme'
       || id === 'startup' || id === 'gaming-mode' || id === 'drone-mode' || id === 'comments' || id === 'comments-range'
       || id === 'greetings' || id === 'unlock-greeting' || id === 'caresses' || id === 'music-dance'
-      || id === 'app-fx' || id === 'scanlines' || id === 'game-list';
+      || id === 'app-fx' || id === 'scanlines' || id === 'game-list'
+      || id === 'time-zone' || id === 'weather-place' || id === 'reminder-update' || id === 'reminder-delete';
     const result = await this.host.menuAction({ id, value });
     if (id === 'game-list' && result?.message) this.gameNote = result.message;
+    if ((id === 'reminder-update' || id === 'reminder-delete') && result?.message) {
+      this.reminderNote = result.message;
+    }
     if (!keep) {
       this.hide();
       return;

@@ -11,7 +11,7 @@ Resumen de lo cerrado (el detalle está en el historial de git y en el CHANGELOG
 - **Fase 5 — Cerebro fácil:** tarjetas de Cerebro (gratis con key, en tu PC, tu propia key), "Probar", keys solo locales y README reescrito para empezar sin código.
 - **Fase 6 — Hecho:** hooks de agentes (Claude Code, Codex, Antigravity, Cursor y OpenCode), "Usar mi agente instalado", ver la pantalla a pedido con consentimiento, detección de juegos con No molestar y proveedores con key.
 - **Fixes 0.2.x — Hecho:** 0.2.2 (aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL experimental, etiquetas de Mis apps); 0.2.4 (Diagnóstico en Acerca de con "Copiar detalles de error" y "Abrir log"); 0.2.5 (varios comandos en una frase, CLIs fuera del PATH, Spotify con más frases y reintentos, voz que cae a Kokoro en GPUs débiles y contexto sin charla vieja); 0.2.6 (hora local elegible, timers y recordatorios persistentes con aviso en burbuja y voz, primera descarga de voz explicada); 0.2.7 publicada (Gemini vuelve a `gemini-flash-lite-latest` y corrige configs guardadas, el modelo dice qué proveedor/modelo lo hace funcionar, la RTX 40 vuelve a clonar voz, el paso de tu voz personalizada queda claro y el aviso hablado de recordatorios es más firme).
-- **En preparación (0.2.8, sin publicar):** "Mirá mi pantalla" captura el monitor de la ventana que tenés adelante (no el del mouse) y reintenta si el primer frame sale negro.
+- **En preparación (0.2.8, sin publicar):** "Mirá mi pantalla" captura el monitor de la ventana que tenés adelante (no el del mouse) y reintenta si el primer frame sale negro; clima/feriados opcionales junto a la hora; aviso 1 h antes en eventos; editar/mover recordatorios por chat y en Ajustes.
 
 Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía corta por opción y leer el estado del juego.
 
@@ -22,7 +22,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - "Mirá mi pantalla" veía el fondo o "Activar Windows" porque capturaba el monitor del mouse, no el de la ventana activa (corregido en 0.2.8; falta probarlo en una PC con dos monitores).
 - Que el wake word no interfiera con audífonos Bluetooth.
 - Actualización con un clic.
-- **Idea de la comunidad (0.2.x):** clima y feriados junto a la hora local; avisar 1–2 h antes de un evento ("mañana a las 8 tengo un evento"), no solo a la hora.
+- ~~**Idea de la comunidad (0.2.x):** clima y feriados junto a la hora local; avisar 1–2 h antes de un evento~~ (en 0.2.8, sin publicar).
 
 ### P2 — Que el chat haga cosas en la PC (idea de upstream `cb33e87`)
 

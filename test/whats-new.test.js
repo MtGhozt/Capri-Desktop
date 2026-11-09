@@ -26,17 +26,16 @@ test('0.2.6 has 2–3 short lines', () => {
   for (const line of lines) assert.ok(line.length < 120);
 });
 
-test('0.2.8 has 2–4 short lines about the screen look and voice install', () => {
+test('0.2.8 has 2–4 short lines about weather, reminders and screen look', () => {
   const lines = notesFor('0.2.8');
   assert.equal(Array.isArray(lines), true);
   assert.ok(lines.length >= 2 && lines.length <= 4);
   for (const line of lines) assert.ok(line.length < 120);
   const all = lines.join(' ');
-  assert.match(all, /monitor/i);
-  assert.match(all, /ventana/i);
-  assert.match(all, /negro/i);
-  assert.match(all, /disco/i);
-  assert.match(all, /error real/i);
+  assert.match(all, /clima|feriados/i);
+  assert.match(all, /1 h antes|aviso/i);
+  assert.match(all, /recordatorios|Ajustes/i);
+  assert.match(all, /pantalla|disco/i);
 });
 
 test('a version with no entry says nothing', () => {

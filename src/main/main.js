@@ -40,8 +40,9 @@ const { planMultiCommand } = require('./multi-command');
 const { isDirectCommand } = require('./direct-match');
 const {
   createReminders, parseReminderCommand, formatWhen, deliverReminder,
-  readsAsReminderRequest, promisesReminder,
+  readsAsReminderRequest, promisesReminder, resolveFireAt, durationText, parseMoveTarget,
 } = require('./reminders');
+const { createWeather } = require('./weather');
 const { isQuitCommand } = require('./quit-command');
 const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
@@ -144,6 +145,7 @@ let menuKeyboard = false; // her menu has a text field open (Corregir lo último
 let lastHeard = '';       // the last thing Whisper wrote, before her fixes (Corregir lo último)
 let gameMode = null;
 let reminders = null;
+let weather = null;
 let gameWork = Promise.resolve();
 let gameWasFolded = false;
 let gameHadLlm = false;
@@ -819,7 +821,11 @@ async function runReplyAction(action) {
       const at = Date.parse(String(action?.at || ''));
       if (!Number.isFinite(at)) return;
       // she already answered in her own words: the resolved time is shown, not spoken over her
-      goReminderCreate({ at, text: value }, { chat: true, say: false });
+      goReminderCreate({
+        at,
+        text: value,
+        noticeMin: Number(action?.noticeMin) || 0,
+      }, { chat: true, say: false });
       return;
     }
     if (kind === 'sleep') return goSleepReply({ chat: false });
@@ -1083,13 +1089,29 @@ function reminderWhen(at) {
 }
 
 function goReminderCreate(order, { chat = true, say = true } = {}) {
-  const created = reminders?.add({ at: order.at, text: order.text });
+  const noticeMin = Math.max(0, Number(order.noticeMin) || 0);
+  const eventAt = Number(order.eventAt) || Number(order.at);
+  const resolved = noticeMin > 0 ? resolveFireAt(eventAt, noticeMin) : { at: Number(order.at), eventAt, noticeMin: 0 };
+  if (!resolved || !Number.isFinite(resolved.at)) {
+    const line = 'No entendí a qué hora te lo recuerdo.';
+    showLine(line, { chat, badge: 'RECORDATORIO' });
+    return { ok: false, line };
+  }
+  const created = reminders?.add({
+    at: resolved.at,
+    text: order.text,
+    eventAt: noticeMin > 0 ? resolved.eventAt : undefined,
+    noticeMin: noticeMin > 0 ? noticeMin : undefined,
+  });
   if (!created) {
     const line = 'No entendí a qué hora te lo recuerdo.';
     showLine(line, { chat, badge: 'RECORDATORIO' });
     return { ok: false, line };
   }
-  const line = fillLine(pickLine('recordatorioListo'), { when: reminderWhen(created.at) });
+  let line = fillLine(pickLine('recordatorioListo'), { when: reminderWhen(created.at) });
+  if (noticeMin > 0) {
+    line = `Listo: el evento es ${reminderWhen(resolved.eventAt)}, te aviso ${durationText(noticeMin)} antes (${reminderWhen(created.at)}).`;
+  }
   if (say) {
     const spoken = Boolean(speakLine(line));
     followUp.reply(line, { spoken });
@@ -1108,6 +1130,29 @@ function goReminderReply(order, { chat = true } = {}) {
       : 'No tenés recordatorios pendientes.';
     return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
   }
+  if (order.action === 'move') {
+    const zone = config.load().timeZone;
+    const hits = reminders?.matches?.(order.match, { timeZone: zone }) || [];
+    if (!hits.length) {
+      const line = order.match
+        ? `No encontré un recordatorio de «${order.match}».`
+        : 'No tenía recordatorios para mover.';
+      return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
+    }
+    if (hits.length > 1) {
+      const line = `¿Cuál de estos? ${hits.map((item) => `${reminderWhen(item.at)}: ${item.text}`).join(' · ')}`;
+      return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
+    }
+    const at = (order.destSaid
+      && (parseMoveTarget(order.destSaid, { timeZone: zone, baseAt: hits[0].at })
+        || parseMoveTarget(`a ${order.destSaid}`, { timeZone: zone, baseAt: hits[0].at })))
+      || order.at;
+    const done = reminders.update(hits[0].id, { at });
+    const line = done
+      ? `Listo, lo pasé a ${reminderWhen(done.at)}: ${done.text}.`
+      : 'No pude mover ese recordatorio.';
+    return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
+  }
   if (order.action === 'cancel') {
     if (order.all) {
       const count = reminders?.cancelAll() || 0;
@@ -1116,7 +1161,16 @@ function goReminderReply(order, { chat = true } = {}) {
         : 'No tenía recordatorios para cancelar.';
       return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
     }
-    const done = reminders?.cancelOne(order.match);
+    const hits = order.match
+      ? (reminders?.matches?.(order.match, { timeZone: config.load().timeZone }) || [])
+      : [];
+    if (order.match && hits.length > 1) {
+      const line = `¿Cuál cancelo? ${hits.map((item) => `${reminderWhen(item.at)}: ${item.text}`).join(' · ')}`;
+      return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
+    }
+    const done = hits.length === 1
+      ? reminders?.remove?.(hits[0].id)
+      : reminders?.cancelOne(order.match);
     const line = done
       ? `Listo, cancelé este recordatorio: ${done.text}.`
       : order.match
@@ -2237,6 +2291,22 @@ function applyMenuAction(id, value) {
         : { ok: true };
     }
     case 'time-zone': updateConfig({ timeZone: String(value || '').trim() }); break;
+    case 'weather-place': updateConfig({ weatherPlace: String(value || '').trim().slice(0, 80) }); break;
+    case 'reminder-update': {
+      const id = String(value?.id || '').trim();
+      const at = Date.parse(String(value?.at || ''));
+      if (!id || !Number.isFinite(at)) return { ok: false, message: 'Hora inválida.' };
+      const done = reminders?.update?.(id, { at });
+      return done
+        ? { ok: true, message: `Pasado a ${reminderWhen(done.at)}.` }
+        : { ok: false, message: 'No encontré ese recordatorio.' };
+    }
+    case 'reminder-delete': {
+      const done = reminders?.remove?.(String(value?.id || value || '').trim());
+      return done
+        ? { ok: true, message: `Borrado: ${done.text}.` }
+        : { ok: false, message: 'No encontré ese recordatorio.' };
+    }
     case 'comments': updateConfig({ comments: { enabled: Boolean(value) } }); break;
     case 'comments-range': updateConfig({ comments: {
       ...(value?.minMinutes != null ? { minMinutes: Number(value.minMinutes) } : {}),
@@ -2524,6 +2594,15 @@ function menuState(extra = {}) {
       locked: Boolean(cfg.position?.locked),
       userName: String(cfg.userName || ''),
       timeZone: String(cfg.timeZone || ''),
+      weatherPlace: String(cfg.weatherPlace || ''),
+      reminders: (reminders?.list?.() || []).map((item) => ({
+        id: item.id,
+        at: item.at,
+        text: item.text,
+        when: reminderWhen(item.at),
+        eventAt: item.eventAt || null,
+        noticeMin: item.noticeMin || 0,
+      })),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
       gaming: {
         mode: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
@@ -2796,8 +2875,17 @@ async function directCommand(line) {
   if (isWhatsNewCommand(line)) return goWhatsNewReply();
   const powerOrder = await systemFlow.command(line);
   if (powerOrder) return { ok: true };
-  const reminderOrder = parseReminderCommand(line);
+  const reminderOrder = parseReminderCommand(line, { timeZone: config.load().timeZone });
   if (reminderOrder) return goReminderReply(reminderOrder) || { ok: true };
+  if (weather) {
+    const weatherLine = await weather.answerDirect(line, {
+      place: config.load().weatherPlace,
+      timeZone: config.load().timeZone,
+    });
+    if (weatherLine) {
+      return { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
+    }
+  }
   const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
   if (musicOrder) return musicReply(musicOrder);
   if (isSleepCommand(line)) return goSleepReply();
@@ -3221,12 +3309,17 @@ function main() {
     });
     if (config.load().lastSeenVersion !== app.getVersion()) config.save({ lastSeenVersion: app.getVersion() });
     userFiles = ensureUserFiles({ userData: app.getPath('userData'), root: ROOT });
+    weather = createWeather();
     llm = createLlm({
       loadConfig: () => config.load(),
       personaPath: userFiles.persona.path,
       memoryPath: userFiles.memory.path,
       apiKey: (id) => llmKey(id),
       runAgentChat: ({ provider, user, persona }) => runAgentAsBrain(provider, user, persona),
+      temporalExtras: (cfg) => weather.contextSnippet({
+        place: cfg.weatherPlace,
+        timeZone: cfg.timeZone,
+      }),
       // what she may tell a cloud provider about your screen, only with the switch on
       screenContext: () => {
         const title = String(lastWindows?.fgTitle || '').trim();

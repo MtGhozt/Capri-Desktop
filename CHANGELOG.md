@@ -2,6 +2,15 @@
 
 ## 0.2.8 (en preparación, sin publicar)
 
+### Clima y feriados
+
+- **Clima y feriados junto a la hora local:** en Ajustes › Comportamiento, al lado de «País / zona horaria», podés poner una ciudad/país opcional. Capri consulta Open-Meteo (geocoding + forecast) y Nager.Date (feriados), sin API key, con caché corta y fallo silencioso si no hay red. Esos datos van al contexto temporal del modelo solo cuando existen (nunca inventa clima). Preguntas simples («¿va a llover hoy?», «¿mañana es feriado?») se responden por el camino de comandos directos cuando alcanza.
+
+### Recordatorios
+
+- **Aviso anticipado de eventos:** «mañana a las 8 tengo un evento» puede crear el recordatorio 1–2 h antes (por defecto 1 h; «avisame 2 horas antes» → 2 h) vía la etiqueta `[remind:ISO|texto|minutos]`. La respuesta confirma la hora del evento y la del aviso.
+- **Editar / mover / borrar:** por voz o chat («pasá el de las 8 a las 9», «mové el de tomar agua a mañana») y en Ajustes › Comportamiento › Recordatorios (lista pendiente con editar hora y borrar). Si hay varios que coinciden, pregunta cuál.
+
 ### Pantalla
 
 - **«Mirá mi pantalla» mira el monitor correcto:** la captura elegía la pantalla más cercana al mouse y, si no encontraba su id, la primera de la lista. Con dos monitores eso podía ser el que solo tiene el fondo y el cartel «Activar Windows». Ahora usa el monitor de la ventana que tenés adelante (el rectángulo ya lo daba el vigilante de ventanas), después el del mouse y por último el de Capri. Si hay varios monitores y ninguno coincide, no manda la captura de otro.
