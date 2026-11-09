@@ -59,6 +59,13 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - **Animaciones (idea de la comunidad):** animación de música (sentada en la burbuja con audífonos); animaciones de estados de ánimo; reaccionar si la tirás muy seguido; respuesta especial al hacer clic en su cara. Sentarse en las ventanas ya existe.
 - **Modo zoom/acercamiento (idea de la comunidad):** no es solo agrandar a Capri: una animación nueva donde se acerca a la pantalla y molesta un poco, a modo de juego. Buscamos animador/a o alguien que dibuje; el detalle exacto se confirma con quien la propuso.
 
+### Ideas de la comunidad (sin fecha, no agendadas)
+
+- **Recordatorios + Google Calendar:** crear eventos y pendientes en el calendario para que también avisen en el celular; los avisos propios de Capri se mantienen.
+- **Capri habla al recordar (chico, puede ir a P1):** que diga el recordatorio en voz alta además de mostrarlo en la burbuja.
+- **Editar un recordatorio:** cambiar la hora o moverlo después de creado.
+- **Música en YouTube:** abrir y poner YouTube / YouTube Music como alternativa a Spotify.
+
 ## Descartado
 
 - Celos que cierran páginas de otras IAs: cierra pestañas del usuario.
