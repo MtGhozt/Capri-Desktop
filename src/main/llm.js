@@ -6,7 +6,7 @@ const {
 } = require('./chat-providers');
 const { modelForProvider } = require('./chat-models');
 const { createStreamCleaner } = require('./chat-text');
-const { stripReplyTags, createMoodStripper, ACTION_TAG_HELP } = require('./mood-tag');
+const { stripReplyTags, createMoodStripper, absorbToolCall, ACTION_TAG_HELP } = require('./mood-tag');
 const { userContentWithImage } = require('./screen-look');
 
 const HISTORY_LIMIT = 20; // ~10 user+assistant turns
@@ -339,9 +339,10 @@ function createLlm({
     const done = (text) => {
       clearTimeout(timer);
       const cleaned = stripReplyTags(text);
-      const finalText = cleaned.text;
-      const mood = replyMood || cleaned.mood || null;
-      const action = replyAction || cleaned.action || null;
+      const leak = absorbToolCall(cleaned.text);
+      const finalText = leak ? leak.text : cleaned.text;
+      const mood = leak ? null : (replyMood || cleaned.mood || null);
+      const action = leak ? leak.action : (replyAction || cleaned.action || null);
       history = [
         ...history,
         { role: 'user', content: user },
@@ -349,7 +350,12 @@ function createLlm({
       ].slice(-HISTORY_LIMIT);
       lastTalkAt = now().getTime();
       pendingComment = null;
-      onDone({ text: finalText, mood, action });
+      onDone({
+        text: finalText,
+        mood,
+        action,
+        ...(leak ? { toolLeak: leak.raw, toolLeakUnknown: leak.unknown } : {}),
+      });
     };
 
     const fail = (err, who = id) => {
@@ -371,9 +377,11 @@ function createLlm({
           signal,
         });
         const cleaned = stripReplyTags(String(text || ''));
-        if (!cleaned.text.trim()) throw Object.assign(new Error('empty'), { code: 'empty' });
+        const leak = absorbToolCall(cleaned.text);
+        if (!cleaned.text.trim() && !leak) throw Object.assign(new Error('empty'), { code: 'empty' });
         streamed = true;
-        onToken(cleaned.text);
+        // tool-call JSON must not hit the bubble/TTS; done() absorbs and onDone replaces
+        if (!leak) onToken(cleaned.text);
         return cleaned.text;
       }
       return ask(target);

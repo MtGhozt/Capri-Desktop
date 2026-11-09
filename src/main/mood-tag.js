@@ -145,6 +145,86 @@ function stripReplyTags(text) {
   return { text: out, mood, action };
 }
 
+const TOOL_LEAK_LINE = 'El modelo devolvió una acción que no entendí.';
+
+function unwrapJsonFence(text) {
+  const raw = String(text || '').trim();
+  const m = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(raw);
+  return m ? m[1].trim() : raw;
+}
+
+function isToolCallShape(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  if (typeof obj.name !== 'string' || !String(obj.name).trim()) return false;
+  const args = obj.parameters !== undefined ? obj.parameters : obj.arguments;
+  return args !== undefined && args !== null && typeof args === 'object' && !Array.isArray(args);
+}
+
+function toolCallsFrom(parsed) {
+  if (Array.isArray(parsed)) return parsed.length && parsed.every(isToolCallShape) ? parsed : null;
+  if (isToolCallShape(parsed)) return [parsed];
+  if (parsed && typeof parsed === 'object' && Array.isArray(parsed.tool_calls)) {
+    return parsed.tool_calls.length && parsed.tool_calls.every(isToolCallShape) ? parsed.tool_calls : null;
+  }
+  return null;
+}
+
+/** Map a leaked tool name/args onto the same action objects [volume:…] tags produce. */
+function actionFromToolCall(call) {
+  const name = String(call?.name || '').trim().toLowerCase();
+  if (!name) return null;
+  const args = (call.parameters !== undefined ? call.parameters : call.arguments) || {};
+  if (ACTION_KINDS.includes(name)) {
+    let value = args.value ?? args.level ?? args.page ?? args.mode ?? args.query
+      ?? args.app ?? args.what ?? args.text ?? '';
+    if (PLAIN_ACTIONS.has(name)) value = '';
+    if (name === 'volume' && args.mute === true) value = 'mute';
+    if (name === 'volume' && args.mute === false) value = 'unmute';
+    if (name === 'theme' && args.dark === true) value = 'dark';
+    if (name === 'theme' && args.dark === false) value = 'light';
+    if (typeof value === 'number') value = String(value);
+    if (name === 'remind' && args.at && args.text) {
+      const notice = args.noticeMin != null ? `|${args.noticeMin}` : '';
+      return parseAction('remind', `${args.at}|${args.text}${notice}`);
+    }
+    return parseAction(name, String(value ?? ''));
+  }
+  const colon = name.indexOf(':');
+  if (colon > 0) return parseAction(name.slice(0, colon), name.slice(colon + 1));
+  const under = name.indexOf('_');
+  if (under > 0 && ACTION_KINDS.includes(name.slice(0, under))) {
+    return parseAction(name.slice(0, under), name.slice(under + 1));
+  }
+  return null;
+}
+
+/**
+ * Whole reply is a leaked tool-call JSON (optionally ```json```-fenced): hide it from the
+ * bubble/TTS. Known Capri actions are returned for runReplyAction; unknown → friendly line.
+ * Prose that merely contains braces is left alone (returns null).
+ */
+function absorbToolCall(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  const body = unwrapJsonFence(raw);
+  if (body[0] !== '{' && body[0] !== '[') return null;
+  let parsed;
+  try { parsed = JSON.parse(body); } catch { return null; }
+  const calls = toolCallsFrom(parsed);
+  if (!calls) return null;
+  let action = null;
+  for (const call of calls) {
+    action = actionFromToolCall(call);
+    if (action) break;
+  }
+  return {
+    raw: body,
+    action,
+    text: action ? '' : TOOL_LEAK_LINE,
+    unknown: !action,
+  };
+}
+
 function couldBeTag(inner) {
   const raw = String(inner || '');
   const colon = raw.indexOf(':');
@@ -232,5 +312,6 @@ function createMoodStripper({ onText, onMood, onAction } = {}) {
 }
 
 module.exports = {
-  MOODS, ACTION_KINDS, ACTION_TAG_HELP, normalizeMood, stripMoodTag, stripReplyTags, createMoodStripper,
+  MOODS, ACTION_KINDS, ACTION_TAG_HELP, TOOL_LEAK_LINE,
+  normalizeMood, stripMoodTag, stripReplyTags, createMoodStripper, absorbToolCall,
 };

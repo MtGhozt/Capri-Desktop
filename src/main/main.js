@@ -3246,7 +3246,11 @@ function registerIpc() {
             // the text first: on a weak GPU the voice can take many seconds, and the bubble is not
             // allowed to look ignored while the audio is generated.
             overlay?.webContents.send('chat:done', payload);
-            followUp.reply(payload?.text || said, { spoken: Boolean(speakId) });
+            followUp.reply(payload?.text || said, { spoken: Boolean(speakId && !payload?.toolLeak) });
+            if (payload?.toolLeakUnknown && payload.toolLeak) {
+              // logEvent already runs redactSecrets
+              logEvent(voiceLogPath(), `[capri] tool-call leak: ${payload.toolLeak}`);
+            }
             if (payload?.action) {
               void runReplyAction(payload.action);
             } else if (reminderAsked && promisesReminder(payload?.text || said)) {
@@ -3256,8 +3260,20 @@ function registerIpc() {
               });
             }
             if (speakId) {
-              if (payload?.mood) speakQueue?.setMood?.(payload.mood);
-              speakQueue?.flush(speakId);
+              if (payload?.toolLeak) {
+                // drop any leaked JSON already fed; speak only the friendly unknown line
+                speakQueue?.stop(speakId);
+                if (payload.text) {
+                  const id = speakQueue?.start();
+                  if (id) {
+                    speakQueue.feed(payload.text);
+                    speakQueue.flush(id);
+                  }
+                }
+              } else {
+                if (payload?.mood) speakQueue?.setMood?.(payload.mood);
+                speakQueue?.flush(speakId);
+              }
             }
           },
           onError: (payload) => {

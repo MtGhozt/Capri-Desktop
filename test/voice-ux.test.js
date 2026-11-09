@@ -60,6 +60,7 @@ test('the reply text is sent before TTS flush, and shown once', () => {
 
   const bubble = read('src', 'renderer', 'js', 'bubble.js');
   const done = bubble.slice(bubble.indexOf('onDone(text) {'), bubble.indexOf('onError(payload) {'));
-  assert.match(done, /this\.replyText = redactSecrets\(text \|\| this\.replyText\)/);
+  // empty string clears a streamed tool-call leak; don't fall back to replyText
+  assert.match(done, /typeof text === 'string' \? text/);
   assert.doesNotMatch(done, /this\.replyText \+=/);
 });

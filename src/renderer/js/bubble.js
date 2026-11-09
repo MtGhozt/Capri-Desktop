@@ -365,7 +365,8 @@ export class Bubble {
   onDone(text) {
     if (!this.busy) return;
     this.stopThink();
-    this.replyText = redactSecrets(text || this.replyText);
+    // empty string is intentional (e.g. absorbed tool-call leak); don't keep streamed junk
+    this.replyText = redactSecrets(typeof text === 'string' ? text : (this.replyText || ''));
     this.busy = false;
     this.armVoiceWatch();
     this.typeToward(this.replyText, { finish: true });
