@@ -39,6 +39,10 @@ from vram import GEMMA_RESERVE_MIB, VRAM_WARN_MIB, llm_has_model, usable_vram_mi
 
 ROOT = Path(__file__).resolve().parent
 MODELS = ROOT / "models"
+# Cross-process: only one OmniVoice load at a time (orphan sidecars / overlapping restarts).
+OMNI_LOCK_FILE = MODELS / ".omnivoice.lock"
+OMNI_LOCK_STALE_S = 120.0
+OMNI_LOCK_WAIT_S = 60.0
 SAMPLE_RATE = 16000
 VAD_FRAME = 512
 MIC_BLOCK = 4096
@@ -85,6 +89,56 @@ WAKE_FOLLOW_S = 6.0
 WAKE_SPEECH_MAX_S = 3.0
 WAKE_SILENCE_MS = 500.0
 WAKE_MIN_SPEECH_MS = 200.0
+
+
+def try_acquire_omni_lock(
+    path: Path = OMNI_LOCK_FILE,
+    *,
+    stale_s: float = OMNI_LOCK_STALE_S,
+    wait_s: float = OMNI_LOCK_WAIT_S,
+    sleep_fn=time.sleep,
+    now=None,
+) -> bool:
+    """Exclusive create of the lock file. Wait for another loader; steal if stale (~2 min)."""
+    clock = now or time.time
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = clock() + max(0.0, wait_s)
+    while True:
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                os.write(fd, f"{os.getpid()}\n{clock()}\n".encode("utf-8"))
+            finally:
+                os.close(fd)
+            return True
+        except FileExistsError:
+            try:
+                age = clock() - path.stat().st_mtime
+            except OSError:
+                age = stale_s + 1
+            if age >= stale_s:
+                try:
+                    path.unlink()
+                    continue
+                except OSError:
+                    pass
+            if clock() >= deadline:
+                return False
+            sleep_fn(0.4)
+        except OSError:
+            if clock() >= deadline:
+                return False
+            sleep_fn(0.4)
+
+
+def release_omni_lock(path: Path = OMNI_LOCK_FILE) -> None:
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 SILERO_URL = (
     "https://github.com/snakers4/silero-vad/raw/v5.1.2/"
     "src/silero_vad/data/silero_vad.onnx"
@@ -480,6 +534,7 @@ class Engine:
         self._omni_loading = False
         self._omni_blocked = None
         self._omni_notice_shown = False
+        self._omni_gen = 0  # bumped on drop / new load; stale threads must not broadcast
         self._want_tts = False
         self._tts_state = ("off", "off")
         self._tts_announced = False
@@ -1375,6 +1430,7 @@ class Engine:
             kokoro = self._tts
             self._omni = None
             self._omni_loading = False
+            self._omni_gen += 1  # in-flight load must not announce fallback/ready
             self._tts = None
             self._session_tts = None
         if omni is None and kokoro is None:
@@ -1393,6 +1449,10 @@ class Engine:
             pass
         log(f"tts unloaded reason={reason} vram_free={free_vram_mib()}")
 
+    def _omni_gen_alive(self, gen: int) -> bool:
+        with self._tts_lock:
+            return gen == self._omni_gen
+
     def start_tts(self) -> None:
         mode = self.reply_mode()
         if mode != "voice":
@@ -1409,15 +1469,6 @@ class Engine:
             self._announce_tts("off", "off")
             return
         self._want_tts = True
-        if self._omni_blocked:
-            # A permanent failure (no torch, unusable GPU): Kokoro until settings change or restart.
-            with self._tts_lock:
-                if self._tts is None:
-                    self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
-            if self._tts_state != ("kokoro", "fallback"):
-                log(f"tts engine=kokoro reason=omnivoice-blocked:{self._omni_blocked} vram_free={free_vram_mib()} vram_usable=n/a")
-                self._announce_tts("kokoro", "fallback")
-            return
         if kind == "kokoro":
             with self._tts_lock:
                 if self._tts is None:
@@ -1428,110 +1479,186 @@ class Engine:
             else:
                 self._announce_tts("kokoro", "ready")
             return
+        # Check+set+spawn under one lock so two start_tts calls never both spawn a load.
         with self._tts_lock:
-            omni_ready = self._omni is not None
-            loading = self._omni_loading
-        if omni_ready:
+            if self._omni is not None:
+                # Clone already up: never take the blocked/Kokoro branch over a live engine.
+                action = "ready"
+                gen = 0
+            elif self._omni_blocked:
+                action = "blocked"
+                gen = 0
+            elif self._omni_loading:
+                action = "loading"
+                gen = 0
+            elif self.cfg.get("sleeping"):
+                action = "sleeping"
+                gen = 0
+            else:
+                self._omni_loading = True
+                self._omni_gen += 1
+                gen = self._omni_gen
+                action = "spawn"
+        if action == "ready":
             self._announce_tts("omnivoice", "ready")
             return
-        if loading:
+        if action == "blocked":
+            # A permanent failure (no torch, unusable GPU): Kokoro until settings change or restart.
+            with self._tts_lock:
+                if self._tts is None:
+                    self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+            if self._tts_state != ("kokoro", "fallback"):
+                log(f"tts engine=kokoro reason=omnivoice-blocked:{self._omni_blocked} vram_free={free_vram_mib()} vram_usable=n/a")
+                self._announce_tts("kokoro", "fallback")
+            return
+        if action == "loading":
             self._announce_tts("omnivoice", "loading")
             return
-        if self.cfg.get("sleeping"):
+        if action == "sleeping":
             # Folded into DORMANT: keep the VRAM free and load again on wake.
             self._want_tts = False
             log(f"tts engine=off reason=sleeping vram_free={free_vram_mib()} vram_usable=n/a")
             self._announce_tts("off", "off")
             return
-        with self._tts_lock:
-            self._omni_loading = True
         log(f"tts engine=omnivoice reason=loading vram_free={free_vram_mib()} vram_usable=n/a")
         self._announce_tts("omnivoice", "loading")
-        threading.Thread(target=self._load_omni_bg, name="capri-omni", daemon=True).start()
+        threading.Thread(target=self._load_omni_bg, args=(gen,), name="capri-omni", daemon=True).start()
 
-    def _load_omni_bg(self) -> None:
-        free, usable, _loaded = self._vram_budget()
-        wav, txt = resolve_ref(ROOT, self.cfg.get("ttsRef"))
-        if wav is not None and txt is not None:
-            verify_ref_transcript(txt, log, "ttsRef")
-        mood_refs = {}
-        for name, raw in dict(self.cfg.get("ttsMoods") or {}).items():
-            key = str(name or "").strip().lower()
-            if not key or not raw:
-                continue
-            m_wav, m_txt = resolve_ref(ROOT, raw)
-            if m_wav is None or m_txt is None or not m_wav.is_file():
-                log(f"tts mood wav missing label={key} path={m_wav}")
-                continue
-            if not verify_ref_transcript(m_txt, log, f"mood:{key}"):
-                continue
-            mood_refs[key] = (m_wav, m_txt)
-        omni = OmniVoiceTTS(
-            MODELS,
-            log,
-            wav,
-            txt,
-            self.cfg.get("ttsSpeed"),
-            tts_steps(self.cfg.get("ttsSteps")),
-            mood_refs=mood_refs,
-            instruct=self.cfg.get("ttsDesign"),
-            notice=lambda msg: self.broadcast({"type": "notice", "message": msg}),
-        )
-        downloading = False
+    def _load_omni_bg(self, gen: int | None = None) -> None:
+        if gen is None:
+            with self._tts_lock:
+                gen = self._omni_gen
+        held_lock = False
         try:
-            # A missing torch/omnivoice must fail before "Descargando voz…": there is nothing to download.
-            import_omnivoice()
-            downloading = not model_cached(MODELS / "hf" / "hub", OMNI_MODEL)
-            if downloading:
-                self._set_download(True)
-            omni.load(allow_cpu=str(self.cfg.get("tts") or "").lower() == "omnivoice", free_vram=usable)
-        except Exception as err:
-            omni.close()
-            log(f"omnivoice unavailable: {err}")
-            # No torch / no usable GPU: permanent for this session, so no retry loop on every reply.
-            if isinstance(err, (OmniVoiceUnavailable, ImportError)):
-                self._omni_blocked = str(err)
-                if not self._omni_notice_shown:
-                    self._omni_notice_shown = True
-                    self.broadcast({
-                        "type": "notice",
-                        "message": fallback_message(err),
-                    })
-            with self._tts_lock:
-                self._omni_loading = False
-            if not self._want_tts:
-                self._announce_tts("off", "off")
+            held_lock = try_acquire_omni_lock()
+            if not held_lock:
+                log("omnivoice lock busy: another sidecar is loading; staying on Kokoro without clone-failure notice")
+                if not self._omni_gen_alive(gen):
+                    log(f"omnivoice load discarded reason=stale-gen gen={gen}")
+                    return
+                with self._tts_lock:
+                    self._omni_loading = False
+                if not self._want_tts:
+                    self._announce_tts("off", "off")
+                    return
+                with self._tts_lock:
+                    if self._tts is None:
+                        self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+                log(f"tts engine=kokoro reason=omnivoice-lock-busy vram_free={free_vram_mib()} vram_usable=n/a")
+                self._announce_tts("kokoro", "ready")
                 return
-            kokoro = self._tts
-            if kokoro is None:
-                kokoro = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
-            with self._tts_lock:
-                self._tts = kokoro
-            log(f"tts engine=kokoro reason=omnivoice-failed:{err} vram_free={free} vram_usable={usable}")
-            self._announce_tts("kokoro", "fallback")
-            return
-        finally:
-            if downloading:
-                self._set_download(False)
-        if not self._want_tts:
-            omni.close()
+            if not self._omni_gen_alive(gen):
+                log(f"omnivoice load discarded reason=stale-gen gen={gen}")
+                return
+            free, usable, _loaded = self._vram_budget()
+            wav, txt = resolve_ref(ROOT, self.cfg.get("ttsRef"))
+            if wav is not None and txt is not None:
+                verify_ref_transcript(txt, log, "ttsRef")
+            mood_refs = {}
+            for name, raw in dict(self.cfg.get("ttsMoods") or {}).items():
+                key = str(name or "").strip().lower()
+                if not key or not raw:
+                    continue
+                m_wav, m_txt = resolve_ref(ROOT, raw)
+                if m_wav is None or m_txt is None or not m_wav.is_file():
+                    log(f"tts mood wav missing label={key} path={m_wav}")
+                    continue
+                if not verify_ref_transcript(m_txt, log, f"mood:{key}"):
+                    continue
+                mood_refs[key] = (m_wav, m_txt)
+            omni = OmniVoiceTTS(
+                MODELS,
+                log,
+                wav,
+                txt,
+                self.cfg.get("ttsSpeed"),
+                tts_steps(self.cfg.get("ttsSteps")),
+                mood_refs=mood_refs,
+                instruct=self.cfg.get("ttsDesign"),
+                notice=lambda msg: self.broadcast({"type": "notice", "message": msg}),
+            )
+            downloading = False
             try:
-                release_memory()
-            except Exception:
-                pass
+                # A missing torch/omnivoice must fail before "Descargando voz…": there is nothing to download.
+                import_omnivoice()
+                downloading = not model_cached(MODELS / "hf" / "hub", OMNI_MODEL)
+                if downloading:
+                    self._set_download(True)
+                omni.load(allow_cpu=str(self.cfg.get("tts") or "").lower() == "omnivoice", free_vram=usable)
+            except Exception as err:
+                omni.close()
+                log(f"omnivoice unavailable: {err}")
+                if not self._omni_gen_alive(gen):
+                    return
+                # No torch / no usable GPU: permanent for this session, so no retry loop on every reply.
+                if isinstance(err, (OmniVoiceUnavailable, ImportError)):
+                    self._omni_blocked = str(err)
+                    if not self._omni_notice_shown:
+                        self._omni_notice_shown = True
+                        self.broadcast({
+                            "type": "notice",
+                            "message": fallback_message(err),
+                        })
+                with self._tts_lock:
+                    if gen != self._omni_gen:
+                        return
+                    self._omni_loading = False
+                if not self._want_tts:
+                    self._announce_tts("off", "off")
+                    return
+                kokoro = self._tts
+                if kokoro is None:
+                    kokoro = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+                with self._tts_lock:
+                    if gen != self._omni_gen:
+                        return
+                    self._tts = kokoro
+                log(f"tts engine=kokoro reason=omnivoice-failed:{err} vram_free={free} vram_usable={usable}")
+                self._announce_tts("kokoro", "fallback")
+                return
+            finally:
+                if downloading:
+                    self._set_download(False)
+            if not self._want_tts:
+                omni.close()
+                try:
+                    release_memory()
+                except Exception:
+                    pass
+                with self._tts_lock:
+                    if gen == self._omni_gen:
+                        self._omni_loading = False
+                log(f"tts unloaded reason=late-load vram_free={free_vram_mib()}")
+                log(f"tts engine=off reason=replyMode={self.reply_mode()} vram_free={free_vram_mib()} vram_usable=n/a")
+                if self._omni_gen_alive(gen):
+                    self._announce_tts("off", "off")
+                return
             with self._tts_lock:
-                self._omni_loading = False
-            log(f"tts unloaded reason=late-load vram_free={free_vram_mib()}")
-            log(f"tts engine=off reason=replyMode={self.reply_mode()} vram_free={free_vram_mib()} vram_usable=n/a")
-            self._announce_tts("off", "off")
-            return
-        with self._tts_lock:
-            self._omni = omni
-            self._omni_loading = False
-            self._session_tts = omni
-        log(f"tts engine=omnivoice reason=ready vram_free={free_vram_mib()} vram_usable={usable}")
-        self._announce_tts("omnivoice", "ready")
-        self._warn_low_vram()
+                if gen != self._omni_gen:
+                    stale = True
+                else:
+                    stale = False
+                    had_notice = self._omni_notice_shown
+                    self._omni = omni
+                    self._omni_loading = False
+                    self._omni_blocked = None
+                    self._session_tts = omni
+            if stale:
+                omni.close()
+                try:
+                    release_memory()
+                except Exception:
+                    pass
+                log(f"omnivoice load discarded reason=stale-gen gen={gen}")
+                return
+            log(f"tts engine=omnivoice reason=ready vram_free={free_vram_mib()} vram_usable={usable}")
+            if had_notice:
+                self.broadcast({"type": "notice", "message": "Ya cargó tu voz."})
+            self._announce_tts("omnivoice", "ready")
+            self._warn_low_vram()
+        finally:
+            if held_lock:
+                release_omni_lock()
 
     def _synth(self, text: str, gain: bool = True, mood: str | None = None) -> tuple[np.ndarray, int]:
         if self._omni_loading and self._omni is None:

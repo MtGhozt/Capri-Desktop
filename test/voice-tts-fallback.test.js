@@ -32,6 +32,8 @@ class FakeOmni:
 
 server.OmniVoiceTTS = FakeOmni
 server.load_kokoro = lambda models, log, speed: FakeEngine()
+server.try_acquire_omni_lock = lambda *a, **k: True
+server.release_omni_lock = lambda *a, **k: None
 
 def bare():
     eng = server.Engine.__new__(server.Engine)
@@ -54,13 +56,16 @@ def bare():
     eng._omni_loading = True
     eng._omni_blocked = None
     eng._omni_notice_shown = False
+    eng._omni_gen = 1
     eng._want_tts = True
+    eng._tts_state = ("off", "off")
+    eng._tts_announced = False
     eng._vram_budget = lambda: (3000, 3000, False)
     eng.broadcast = notices.append
     return eng
 
 eng = bare()
-eng._load_omni_bg()
+eng._load_omni_bg(1)
 assert eng._omni_blocked, logs
 assert [n["message"] for n in notices if n.get("type") == "notice"] == [
     "La GPU no tiene memoria libre suficiente para clonar voz; uso la voz normal."

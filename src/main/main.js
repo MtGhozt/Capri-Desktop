@@ -3370,7 +3370,10 @@ function applyRender() {
 function main() {
   applyRender();
   // E2E needs a parallel instance against a temp userData; never steal the user's Capri.
+  // Packaged Capri and `electron .` share this lock when they share userData (%APPDATA%\capri-desktop).
+  // They can still both point voice.dir at the same folder — the sidecar then uses models/.omnivoice.lock.
   if (!E2E && !app.requestSingleInstanceLock()) {
+    console.warn('[capri] another Capri is already running (single-instance lock); quitting this process');
     app.quit();
     return;
   }

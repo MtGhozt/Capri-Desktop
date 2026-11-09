@@ -256,6 +256,20 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown, missingVc = m
       return;
     }
     logLines(logFile, `[capri] voice sidecar spawn dir=${dir}`);
+    // Packaged Capri and `pnpm start` share requestSingleInstanceLock (same userData), but an
+    // orphaned server.py or a second Electron with another userData can still share this voice
+    // folder — OmniVoice uses models/.omnivoice.lock; warn if a fresh lock is already present.
+    try {
+      const omniLock = path.join(dir, 'models', '.omnivoice.lock');
+      const age = Date.now() - fs.statSync(omniLock).mtimeMs;
+      if (age >= 0 && age < 120_000) {
+        logLines(
+          logFile,
+          `[capri] warning: OmniVoice lock present (${Math.round(age / 1000)}s old) in ${dir} — `
+          + 'another Capri/sidecar may be loading the clone (dev build and installed app must not both run sidecars against the same voice folder)',
+        );
+      }
+    } catch { /* no lock file */ }
     child.stdout.on('data', (buf) => {
       const line = String(buf);
       process.stdout.write(line);
