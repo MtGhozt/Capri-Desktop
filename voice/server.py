@@ -20,7 +20,7 @@ import sounddevice as sd
 import websockets
 
 from greet import greet_path, read_wav, write_wav
-from heavy import IMPORT_LOCK, import_whisper_model, preload_torch
+from heavy import IMPORT_LOCK, import_omnivoice, import_whisper_model, preload_torch
 from tts import (
     NullTTS,
     OMNI_MODEL,
@@ -1410,12 +1410,13 @@ class Engine:
             return
         self._want_tts = True
         if self._omni_blocked:
-            # This GPU could not clone in this session: Kokoro until settings change or restart.
+            # A permanent failure (no torch, unusable GPU): Kokoro until settings change or restart.
             with self._tts_lock:
                 if self._tts is None:
                     self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
-            log(f"tts engine=kokoro reason=omnivoice-blocked:{self._omni_blocked} vram_free={free_vram_mib()} vram_usable=n/a")
-            self._announce_tts("kokoro", "fallback")
+            if self._tts_state != ("kokoro", "fallback"):
+                log(f"tts engine=kokoro reason=omnivoice-blocked:{self._omni_blocked} vram_free={free_vram_mib()} vram_usable=n/a")
+                self._announce_tts("kokoro", "fallback")
             return
         if kind == "kokoro":
             with self._tts_lock:
@@ -1476,18 +1477,21 @@ class Engine:
             instruct=self.cfg.get("ttsDesign"),
             notice=lambda msg: self.broadcast({"type": "notice", "message": msg}),
         )
-        downloading = not model_cached(MODELS / "hf" / "hub", OMNI_MODEL)
-        if downloading:
-            self._set_download(True)
+        downloading = False
         try:
+            # A missing torch/omnivoice must fail before "Descargando voz…": there is nothing to download.
+            import_omnivoice()
+            downloading = not model_cached(MODELS / "hf" / "hub", OMNI_MODEL)
+            if downloading:
+                self._set_download(True)
             omni.load(allow_cpu=str(self.cfg.get("tts") or "").lower() == "omnivoice", free_vram=usable)
         except Exception as err:
             omni.close()
             log(f"omnivoice unavailable: {err}")
-            gpu_reason = isinstance(err, OmniVoiceUnavailable)
-            if gpu_reason:
+            # No torch / no usable GPU: permanent for this session, so no retry loop on every reply.
+            if isinstance(err, (OmniVoiceUnavailable, ImportError)):
                 self._omni_blocked = str(err)
-                if not self._omni_notice_shown and str(self.cfg.get("ttsRef") or "").strip():
+                if not self._omni_notice_shown:
                     self._omni_notice_shown = True
                     self.broadcast({
                         "type": "notice",

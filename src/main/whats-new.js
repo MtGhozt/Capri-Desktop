@@ -10,6 +10,7 @@ const NOTES = {
     'Cuando te pido mirar la pantalla, miro el monitor de la ventana que tenés adelante, no el que marca el mouse.',
     'Si la primera captura sale en negro, la reintento antes de responder; una ventana quieta ya no se descarta.',
     'La foto de tu pantalla no queda en disco: vive en memoria y se va con la respuesta, como decía el aviso.',
+    'Si la voz falla al instalar, ves el error real y podés copiarlo; no más «Listo» falso ni reintentos de OmniVoice.',
   ],
   '0.2.7': [
     'Volví a Gemini gratis y, si preguntás qué modelo soy, te digo el mío real; tu modelo elegido a mano no se toca.',

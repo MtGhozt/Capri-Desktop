@@ -195,6 +195,29 @@ async function ensureVoiceSources({
   return downloadVoiceSources({ destRoot, version, fetchImpl, onProgress });
 }
 
+// Same .venv python the sidecar uses. Catches a silent pip fail or a stale setup.ps1 that exited 0.
+function verifyOmniImports(dir, { spawnSyncImpl = spawnSync } = {}) {
+  const venvPy = path.join(dir, '.venv', 'Scripts', 'python.exe');
+  if (!fs.existsSync(venvPy)) {
+    return { ok: false, message: `No está el Python del sidecar (${venvPy}).` };
+  }
+  try {
+    const res = spawnSyncImpl(venvPy, ['-c', 'import torch, omnivoice'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 120_000,
+    });
+    if (res.status === 0) return { ok: true, exe: venvPy };
+    const detail = String(res.stderr || res.stdout || '').trim() || `exit ${res.status}`;
+    return {
+      ok: false,
+      message: `Torch/OmniVoice no importan con el Python del sidecar: ${detail.slice(0, 400)}`,
+    };
+  } catch (err) {
+    return { ok: false, message: `No se pudo verificar Torch: ${err.message}` };
+  }
+}
+
 function runSetupPs1({
   dir,
   omniVoice = false,
@@ -265,7 +288,9 @@ function createVoiceInstall({
   readVramImpl = readVram,
   env = process.env,
   missingVcImpl = missingVcRuntime,
+  verifyOmniImpl = verifyOmniImports,
   onProgress,
+  onLine,
 } = {}) {
   let setup = null;
   let busy = false;
@@ -295,7 +320,9 @@ function createVoiceInstall({
   }
 
   function pushLine(line) {
-    const lines = [...state.lines, String(line)].slice(-40);
+    const text = String(line);
+    const lines = [...state.lines, text].slice(-40);
+    onLine?.(text);
     emit({ lines });
   }
 
@@ -389,6 +416,24 @@ function createVoiceInstall({
         ok: false,
       });
     }
+    if (useOmni) {
+      pushLine('Verificando torch/omnivoice con el Python del sidecar…');
+      const check = verifyOmniImpl(dest, { spawnSyncImpl });
+      if (!check.ok) {
+        pushLine(check.message);
+        return emit({
+          busy: false,
+          phase: 'error',
+          label: 'Error',
+          error: check.message,
+          lines: [...state.lines].slice(-40),
+          ok: false,
+          dir: dest,
+          omniVoice: useOmni,
+        });
+      }
+      pushLine(`OK: torch/omnivoice importan (${check.exe})`);
+    }
     pushLine('Listo.');
     const needVc = missingVcImpl();
     if (needVc) pushLine(VC_MESSAGE);
@@ -436,6 +481,7 @@ module.exports = {
   isBlockedVoicePath,
   ensureVoiceSources,
   syncManagedVoiceSources,
+  verifyOmniImports,
   runSetupPs1,
   createVoiceInstall,
 };

@@ -8,6 +8,10 @@
 - **Primer frame negro:** un frame plano negro se reintenta hasta tres veces antes de darse por vencido. Un frame quieto ya no se descarta como «repetido»: una ventana estática es una captura válida.
 - **La foto ya no queda en disco:** el aviso de consentimiento decía «no la guardo en disco» y ahora es cierto. La captura vive en memoria para esa respuesta; un `last-capture.jpg` de una versión anterior se borra al arrancar y solo se guarda si activás el guardado de depuración de voz (`voice.debugSave`, apagado por defecto).
 
+### Voz
+
+- **Instalación sin falsos «Listo»:** `setup.ps1` ahora corta cuando un paso de pip sale con error y, al terminar OmniVoice, verifica que `torch` y `omnivoice` importen con el mismo Python que usa el sidecar; si no, muestra el error real. «Ver detalles» se lee mejor, se puede seleccionar y tiene «Copiar detalles», y todo el output queda en `voice.log`. Si OmniVoice falla por falta de torch, Capri avisa una vez que usa la voz normal y deja de reintentar y de mostrar «Descargando voz…».
+
 ## 0.2.7 (etiqueta `v0.2.7`)
 
 ### Cerebro y proveedores

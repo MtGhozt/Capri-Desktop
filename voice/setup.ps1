@@ -28,15 +28,27 @@ $venv = Join-Path $Root '.venv'
 $venvPy = Join-Path $venv 'Scripts\python.exe'
 if (-not (Test-Path $venvPy)) {
   & $python -m venv $venv
+  if ($LASTEXITCODE -ne 0) { throw "No se pudo crear el .venv (exit $LASTEXITCODE)." }
 }
-& $venvPy -m pip install -U pip
-& $venvPy -m pip install -r (Join-Path $Root 'requirements.txt')
+
+# Native commands do not throw on a non-zero exit: a failed pip step used to finish as "Listo".
+function Invoke-Pip {
+  & $venvPy -m pip @args
+  if ($LASTEXITCODE -ne 0) { throw "Falló pip $($args -join ' ') (exit $LASTEXITCODE)." }
+}
+
+Invoke-Pip install -U pip
+Invoke-Pip install -r (Join-Path $Root 'requirements.txt')
 & $venvPy -c "from openwakeword.utils import download_models; download_models()"
+if ($LASTEXITCODE -ne 0) { throw "Falló la descarga del wake word (exit $LASTEXITCODE)." }
 if ($OmniVoice) {
   Write-Host 'Installing pinned PyTorch CUDA (torch/torchaudio 2.11.0+cu130) + OmniVoice. First run downloads k2-fsa/OmniVoice.'
-  & $venvPy -m pip install --upgrade -r (Join-Path $Root 'requirements-torch.txt')
-  & $venvPy -m pip install -r (Join-Path $Root 'requirements-omnivoice.txt')
+  Invoke-Pip install --upgrade -r (Join-Path $Root 'requirements-torch.txt')
+  Invoke-Pip install -r (Join-Path $Root 'requirements-omnivoice.txt')
   & $venvPy -m pip check
+  # The sidecar runs this same python: "Listo" only if torch and omnivoice import here.
+  & $venvPy -c "import torch, omnivoice"
+  if ($LASTEXITCODE -ne 0) { throw "La voz quedó instalada pero torch/omnivoice no importan con $venvPy (ver el error de arriba)." }
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'models') | Out-Null
 Write-Host 'Voice sidecar ready. Models (Whisper, wake word, Kokoro) download on first run into voice/models/.'

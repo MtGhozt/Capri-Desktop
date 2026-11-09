@@ -34,6 +34,21 @@ test('the download message reaches the voice bar, cached loads keep saying Carga
   assert.match(bubble, /label\s*\n?\s*\|\| \(hasProgress \? `Cargando voz/);
 });
 
+test('setup details are readable, selectable and copyable', () => {
+  const menu = read('src', 'renderer', 'js', 'menu.js');
+  assert.match(menu, /'Copiar detalles'/);
+  assert.match(menu, /navigator\.clipboard\.writeText\(install\.lines\.join\('\\n'\)\)/);
+  assert.match(menu, /copy\.textContent = 'Copiado'/);
+  assert.match(menu, /copy\.textContent = 'Copiar detalles'; \}, 1600\)/);
+  assert.match(menu, /clearTimeout\(copy\.resetTimer\)/);
+
+  const css = read('src', 'renderer', 'styles', 'capri.css');
+  const log = css.slice(css.indexOf('.appmenu__voice-log'), css.indexOf('.appmenu__voice-source'));
+  assert.match(log, /user-select: text/);
+  assert.match(log, /font-size: 12px/);
+  assert.match(log, /max-height: 180px/);
+});
+
 test('the reply text is sent before TTS flush, and shown once', () => {
   const main = read('src', 'main', 'main.js');
   const chat = main.slice(main.indexOf("ipcMain.handle('chat:send'"), main.indexOf("ipcMain.on('chat:cancel'"));

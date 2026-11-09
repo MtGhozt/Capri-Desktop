@@ -19,6 +19,7 @@ const {
   isBlockedVoicePath,
   ensureVoiceSources,
   syncManagedVoiceSources,
+  verifyOmniImports,
   createVoiceInstall,
 } = require('../src/main/voice-install');
 
@@ -149,6 +150,114 @@ test('createVoiceInstall cancel is a no-op until setup.ps1 is running', async (t
   const res = await installer.start({ omniVoice: false });
   assert.equal(res.ok, false);
   assert.match(res.error || '', /descargar|network/i);
+});
+
+// A setup that fails must never say "Listo": the RX 6550M case had pip fail silently.
+function fakeSpawn({ code = 0, lines = [] } = {}) {
+  return () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.pid = 1;
+    setImmediate(() => {
+      for (const line of lines) child.stdout.emit('data', `${line}\n`);
+      child.emit('close', code);
+    });
+    return child;
+  };
+}
+
+async function runInstall(t, { code, lines, verifyOmniImpl }) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-setup-src-'));
+  const local = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-setup-local-'));
+  t.after(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(local, { recursive: true, force: true });
+  });
+  const voice = path.join(root, 'voice');
+  fs.mkdirSync(path.join(voice, 'models'), { recursive: true });
+  for (const rel of VOICE_FILES) fs.writeFileSync(path.join(voice, rel), `# ${rel}\n`);
+  const out = [];
+  const installer = createVoiceInstall({
+    root,
+    version: '0.2.8',
+    env: { LOCALAPPDATA: local },
+    readVramImpl: () => null,
+    missingVcImpl: () => false,
+    spawnSyncImpl: () => ({ status: 0, stdout: 'C:\\Python311\\python.exe\n' }),
+    spawnImpl: fakeSpawn({ code, lines }),
+    verifyOmniImpl: verifyOmniImpl || (() => ({ ok: true, exe: 'C:\\fake\\.venv\\Scripts\\python.exe' })),
+    onLine: (line) => out.push(line),
+  });
+  return { res: await installer.start({ omniVoice: true }), lines: out };
+}
+
+test('setup output reaches onLine (and voice.log) line by line', async (t) => {
+  const { res, lines } = await runInstall(t, {
+    code: 0,
+    lines: ['Using C:\\Python311\\python.exe', 'omnivoice imported'],
+  });
+  assert.equal(res.ok, true);
+  assert.ok(lines.includes('Using C:\\Python311\\python.exe'));
+  assert.ok(lines.includes('omnivoice imported'));
+
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(main, /onLine: \(line\) => logEvent\(voiceLogPath\(\), `\[capri\] voice install: \$\{line\}`\)/);
+});
+
+test('a setup step that exits non-zero is an error, never "Listo"', async (t) => {
+  const { res } = await runInstall(t, {
+    code: 1,
+    lines: ["ERROR: Could not find a version that satisfies the requirement torch"],
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.phase, 'error');
+  assert.equal(res.label, 'Error');
+  assert.match(res.error || '', /código 1/);
+  assert.ok(!res.lines.includes('Listo.'));
+});
+
+test('setup.ps1 checks every pip exit and imports torch/omnivoice with the sidecar python', () => {
+  const ps = fs.readFileSync(path.join(__dirname, '..', 'voice', 'setup.ps1'), 'utf8');
+  assert.match(ps, /function Invoke-Pip/);
+  assert.match(ps, /if \(\$LASTEXITCODE -ne 0\) \{ throw/);
+  assert.match(ps, /& \$venvPy -c "import torch, omnivoice"/);
+});
+
+test('post-install torch import failure is an error, never "Listo"', async (t) => {
+  const { res, lines } = await runInstall(t, {
+    code: 0,
+    lines: ['setup finished without throwing'],
+    verifyOmniImpl: () => ({
+      ok: false,
+      message: "Torch/OmniVoice no importan con el Python del sidecar: No module named 'torch'",
+    }),
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.phase, 'error');
+  assert.equal(res.label, 'Error');
+  assert.match(res.error || '', /torch/i);
+  assert.ok(!lines.includes('Listo.'));
+  assert.ok(lines.some((l) => /Verificando torch/i.test(l)));
+});
+
+test('verifyOmniImports uses the voice .venv python', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-omni-check-'));
+  const venvPy = path.join(dir, '.venv', 'Scripts', 'python.exe');
+  fs.mkdirSync(path.dirname(venvPy), { recursive: true });
+  fs.writeFileSync(venvPy, '');
+  let saw;
+  const res = verifyOmniImports(dir, {
+    spawnSyncImpl: (exe, args) => {
+      saw = { exe, args };
+      return { status: 1, stderr: "No module named 'torch'\n", stdout: '' };
+    },
+  });
+  assert.equal(saw.exe, venvPy);
+  assert.deepEqual(saw.args, ['-c', 'import torch, omnivoice']);
+  assert.equal(res.ok, false);
+  assert.match(res.message, /torch/i);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('installer warns about the missing VC++ runtime before and after installing', async (t) => {

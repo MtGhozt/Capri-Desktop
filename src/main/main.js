@@ -3258,6 +3258,8 @@ function main() {
           settingsWindow.webContents.send('voice:install', state);
         }
       },
+      // The same lines "Ver detalles" shows, in voice.log (logEvent redacts secrets).
+      onLine: (line) => logEvent(voiceLogPath(), `[capri] voice install: ${line}`),
     });
     const managedVoiceDir = path.resolve(voiceInstallDir());
     const configuredVoiceDir = String(config.load().voice?.dir || '').trim();

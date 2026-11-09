@@ -168,6 +168,8 @@ def cuda_arch_reason(torch) -> str | None:
 def fallback_message(err) -> str:
     """One short Spanish line for a Kokoro fallback: VRAM, CUDA and load errors are not the same."""
     text = str(err or "").lower()
+    if "no module named 'torch'" in text or "no module named 'omnivoice'" in text:
+        return "Falta Torch en la carpeta de voz; uso la voz normal. Reinstalá la voz desde Ajustes › Oído."
     if "not supported by torch" in text:
         return "Esta versión de Torch no puede usar tu GPU para clonar voz; uso la voz normal."
     if "vram" in text or "out of memory" in text or " oom" in text:

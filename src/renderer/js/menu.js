@@ -909,6 +909,7 @@ export class AppMenu {
       installRow.append(progress);
     }
     if (Array.isArray(install.lines) && install.lines.length) {
+      const detailsRow = build('div', 'appmenu__voice-install-btns');
       const details = build('button', 'appmenu__toggle-btn', this.voiceDetails ? 'Ocultar detalles' : 'Ver detalles');
       details.type = 'button';
       details.addEventListener('click', (e) => {
@@ -916,7 +917,24 @@ export class AppMenu {
         this.voiceDetails = !this.voiceDetails;
         this.render(this.lastState);
       });
-      installRow.append(details);
+      detailsRow.append(details);
+      if (this.voiceDetails) {
+        const copy = build('button', 'appmenu__toggle-btn', 'Copiar detalles');
+        copy.type = 'button';
+        copy.addEventListener('mousedown', (e) => e.preventDefault());
+        copy.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            await navigator.clipboard.writeText(install.lines.join('\n'));
+            copy.textContent = 'Copiado';
+            clearTimeout(copy.resetTimer);
+            copy.resetTimer = setTimeout(() => { copy.textContent = 'Copiar detalles'; }, 1600);
+          } catch { /* no clipboard: the text below is selectable */ }
+        });
+        detailsRow.append(copy);
+      }
+      installRow.append(detailsRow);
       if (this.voiceDetails) installRow.append(build('pre', 'appmenu__voice-log', install.lines.join('\n')));
     }
     body.append(installRow);

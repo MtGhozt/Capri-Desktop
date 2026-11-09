@@ -1875,17 +1875,19 @@ button.appmenu__row {
 
 .appmenu__voice-log {
   margin: 0;
-  max-height: 96px;
+  max-height: 180px;
   overflow: auto;
   padding: 6px 8px;
   border: 1px solid color-mix(in srgb, var(--accent-on) 28%, transparent);
   background: color-mix(in srgb, var(--title) 4%, transparent);
   color: color-mix(in srgb, var(--title) 72%, transparent);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 12px;
+  line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  cursor: text;
 }
 
 .appmenu__voice-source {

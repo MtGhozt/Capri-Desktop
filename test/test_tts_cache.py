@@ -198,15 +198,18 @@ test('a GPU from another major version is still rejected', () => {
   assert.match(out, /not supported/);
 });
 
-test('the fallback notice names CUDA, VRAM and other failures apart', () => {
+test('the fallback notice names Torch, CUDA, VRAM and other failures apart', () => {
   const out = py(
     'import tts\n'
+    + 'print(tts.fallback_message("No module named \'torch\'"))\n'
     + 'print(tts.fallback_message("omnivoice skipped GPU: sm_89 not supported by torch (sm_86)"))\n'
     + 'print(tts.fallback_message("omnivoice skipped GPU: vram 1730 MiB < 2000"))\n'
     + 'print(tts.fallback_message("CUDA out of memory"))\n'
     + 'print(tts.fallback_message("boom while loading"))',
   );
-  const [arch, vram, oom, other] = out.split(/\r?\n/);
+  const [missing, arch, vram, oom, other] = out.split(/\r?\n/);
+  assert.match(missing, /Torch/);
+  assert.match(missing, /Reinstal/);
   assert.match(arch, /Torch/);
   assert.match(vram, /memoria/);
   assert.match(oom, /memoria/);
