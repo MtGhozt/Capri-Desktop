@@ -46,7 +46,7 @@ Overlay sin bordes, siempre encima. Vive en tu escritorio: puedes arrastrarla, a
 ## 2. Inicio rápido (sin código)
 
 1. Bajá el instalador más reciente (`Capri-Setup-*.exe`) desde [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
-2. Si SmartScreen dice *Windows protegió tu PC* → **Más información** → **Ejecutar de todas formas** (el instalador no está firmado con certificado de pago; es normal).
+2. Si SmartScreen dice *Windows protegió tu PC* → **Más información** → **Ejecutar de todas formas**. Aparece porque el instalador **no está firmado** (el certificado de firma es de pago), no porque haya un virus. Para comprobar que la descarga llegó completa, usá `SHA256SUMS.txt`, que está en la misma página de [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
 3. Instala y abre **Capri**. No hace falta Node.js ni admin.
 
 **Menú:** clic derecho sobre ella, o el icono de la bandeja (en Windows 11 a menudo está detrás de **^**).
@@ -130,7 +130,7 @@ Log: `%APPDATA%\capri-desktop\logs\voice.log` — reportá en Discord **#bugs**.
 | **Claves** | Quedan en tu usuario, cifradas. No se suben al repo ni se escriben en logs |
 | **Voz / mic** | Procesamiento local en el sidecar; el audio no se manda a un servicio de voz de Capri |
 
-SmartScreen avisa porque el `.exe` **no está firmado**, no porque haya telemetría oculta.  
+SmartScreen avisa porque el `.exe` **no está firmado**, no porque haya telemetría oculta. El `SHA256SUMS.txt` de cada release trae el hash del instalador: comparalo si querés confirmar que la descarga es la original y llegó entera.  
 Código en este repo; el instalador se genera con `pnpm dist`.
 
 **Logs:** `%APPDATA%\capri-desktop\logs\` (p. ej. `voice.log`).  
