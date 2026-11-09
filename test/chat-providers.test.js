@@ -48,6 +48,10 @@ test('providers: two local, free NVIDIA/Gemini, own-key clouds, and agent CLIs',
   assert.deepEqual(providerOptions().map((p) => p.id), Object.keys(PROVIDERS));
 });
 
+test('Gemini ships on the free flash-lite model', () => {
+  assert.equal(PROVIDERS.gemini.model, 'gemini-flash-lite-latest');
+});
+
 test('vision flag: Gemini/OpenAI yes; agents and plain local Gemma no', () => {
   assert.equal(supportsVision('gemini', 'gemini-flash-lite-latest'), true);
   assert.equal(supportsVision('openai', 'gpt-4o-mini'), true);

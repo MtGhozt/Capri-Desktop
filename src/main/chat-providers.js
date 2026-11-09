@@ -9,7 +9,7 @@ const PROVIDERS = {
   local: { label: 'LM Studio', local: true, url: 'http://localhost:1235/v1', model: 'google/gemma-4-e2b', vision: 'model' },
   ollama: { label: 'Ollama', local: true, url: 'http://localhost:11434/v1', model: 'llama3.2', vision: 'model' },
   nvidia: { label: 'NVIDIA', url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.1-8b-instruct', vision: false },
-  gemini: { label: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-latest', vision: true },
+  gemini: { label: 'Gemini', url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-lite-latest', vision: true },
   openrouter: { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini', vision: true },
   groq: { label: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', vision: false },
   openai: { label: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini', vision: true },

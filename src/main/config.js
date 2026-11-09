@@ -194,6 +194,22 @@ function migrateBrainOrder(llm) {
   return { llm: value, changed: true };
 }
 
+// 5456229 saved 'gemini-flash-latest', which can resolve to a paid/limited model so free keys fail.
+// Only that exact value moves back; a model chosen by hand is left alone.
+function migrateGeminiModel(llm) {
+  const value = { ...(llm || {}) };
+  let changed = false;
+  if (value.models?.gemini === 'gemini-flash-latest') {
+    value.models = { ...value.models, gemini: 'gemini-flash-lite-latest' };
+    changed = true;
+  }
+  if (value.provider === 'gemini' && value.model === 'gemini-flash-latest') {
+    value.model = 'gemini-flash-lite-latest';
+    changed = true;
+  }
+  return { llm: value, changed };
+}
+
 function file() {
   return path.join(app.getPath('userData'), 'config.json');
 }
@@ -301,6 +317,9 @@ function load() {
   const brains = migrateBrainOrder(cache.llm);
   cache.llm = brains.llm;
   if (brains.changed) dirty = true;
+  const geminiModel = migrateGeminiModel(cache.llm);
+  cache.llm = geminiModel.llm;
+  if (geminiModel.changed) dirty = true;
   if (dirty) persist();
   return cache;
 }
@@ -372,4 +391,5 @@ module.exports = {
   migratePublicReply,
   reviveMigratedTts,
   migrateBrainOrder,
+  migrateGeminiModel,
 };

@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { switchProvider, setProviderModel, modelForProvider } = require('../src/main/chat-models');
 const { PROVIDERS } = require('../src/main/chat-providers');
-const { migrateBrainOrder } = require('../src/main/config');
+const { migrateBrainOrder, migrateGeminiModel } = require('../src/main/config');
 
 const providers = {
   local: { model: 'google/gemma-4-e2b', local: true },
@@ -61,4 +61,35 @@ test('brain order migration runs once and preserves a later user reorder', () =>
     migrateBrainOrder({ brains: ['local', 'gemini'], brainOrderMigrated: true }).llm.brains,
     ['local', 'gemini'],
   );
+});
+
+test('saved gemini-flash-latest moves back to flash-lite', () => {
+  const migrated = migrateGeminiModel({
+    provider: 'gemini',
+    model: 'gemini-flash-latest',
+    models: { gemini: 'gemini-flash-latest' },
+  });
+  assert.equal(migrated.changed, true);
+  assert.equal(migrated.llm.model, 'gemini-flash-lite-latest');
+  assert.equal(migrated.llm.models.gemini, 'gemini-flash-lite-latest');
+
+  // a saved model for a provider that is not answering also moves
+  const inactive = migrateGeminiModel({
+    provider: 'xai',
+    model: 'grok-4-1-fast-non-reasoning',
+    models: { gemini: 'gemini-flash-latest' },
+  });
+  assert.equal(inactive.llm.models.gemini, 'gemini-flash-lite-latest');
+  assert.equal(inactive.llm.model, 'grok-4-1-fast-non-reasoning');
+});
+
+test('a hand-picked gemini model is left alone', () => {
+  const custom = migrateGeminiModel({
+    provider: 'gemini',
+    model: 'gemini-2.5-pro',
+    models: { gemini: 'gemini-2.5-pro' },
+  });
+  assert.equal(custom.changed, false);
+  assert.equal(custom.llm.model, 'gemini-2.5-pro');
+  assert.equal(custom.llm.models.gemini, 'gemini-2.5-pro');
 });
