@@ -10,6 +10,7 @@ const { parseNameCommand } = require('./name-command');
 const { isWhatsNewCommand } = require('./whats-new');
 const { parseSystemCommand } = require('./system-command');
 const { parseMusicCommand } = require('./music-command');
+const { parsePcCommand } = require('./pc-actions');
 const { isSleepCommand } = require('./sleep-command');
 const { isQuitCommand } = require('./quit-command');
 const { isClipCommand } = require('./clip-command');
@@ -25,6 +26,7 @@ function isDirectCommand(text, apps = []) {
     || parseNameCommand(text)
     || isWhatsNewCommand(text)
     || parseSystemCommand(text)
+    || parsePcCommand(text)
     || parseMusicCommand(text)
     || isSleepCommand(text)
     || isQuitCommand(text)

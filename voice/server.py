@@ -1223,12 +1223,12 @@ class Engine:
         if rid <= 0:
             rid = self._live_id if self._accept_speak else self._live_id + 1
         if rid < self._live_id:
-            log(f"speak drop stale id={rid} live={self._live_id} {line[:48]!r}")
+            log(f"speak drop stale id={rid} live={self._live_id} {self._speak_preview(line)!r}")
             return
         if rid > self._live_id:
             self._accept_reply(rid, "speak")
         elif not self._accept_speak:
-            log(f"speak drop cut id={rid} {line[:48]!r}")
+            log(f"speak drop cut id={rid} {self._speak_preview(line)!r}")
             return
         name = str(mood or ("seria" if calm else "") or "").strip().lower()
         if name:
@@ -1240,8 +1240,15 @@ class Engine:
         if self._held_phrase:
             line = f"{self._held_phrase} {line}".strip()
             self._held_phrase = ""
-        log(f"speak queued id={rid} n={len(line)} mood={self._reply_mood or 'playful'} {line[:48]!r}")
+        log(f"speak queued id={rid} n={len(line)} mood={self._reply_mood or 'playful'} {self._speak_preview(line)!r}")
         self._speak_q.put(("speak", rid, line))
+
+    def _speak_preview(self, line: str) -> str:
+        # full text only while debugging voice (voice.debugSave); keep logs short otherwise
+        text = str(line or "")
+        if self.cfg.get("debugSave"):
+            return text
+        return text[:48]
 
     def flush_speak(self, reply_id=None) -> None:
         rid = self._as_id(reply_id)
@@ -1256,7 +1263,7 @@ class Engine:
         if self._held_phrase:
             held = self._held_phrase
             self._held_phrase = ""
-            log(f"speak queued id={rid} n={len(held)} {held[:48]!r}")
+            log(f"speak queued id={rid} n={len(held)} {self._speak_preview(held)!r}")
             self._speak_q.put(("speak", rid, held))
         log(f"speak_flush id={rid}")
         self._speak_q.put(("flush", rid, None))

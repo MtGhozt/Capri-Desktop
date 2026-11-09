@@ -170,16 +170,21 @@ function formatBytes(n) {
   return `${Math.round(mb)} MB`;
 }
 
+const NO_BATTERY = 'Esta PC es de escritorio y no tiene batería: decilo claro en una frase, no inventes porcentaje.';
+
 async function infoBattery(deps = {}) {
   const ps = deps.powershell || powershell;
   try {
     const out = await ps(
       'Get-CimInstance Win32_Battery | Select-Object -First 1 EstimatedChargeRemaining, BatteryStatus | ConvertTo-Json -Compress',
     );
-    if (!out) return { line: 'No hay batería (escritorio o no reporta).' };
+    if (!out || out === 'null' || out === '[]') return { line: NO_BATTERY };
     const b = JSON.parse(out);
-    const pct = Number(b.EstimatedChargeRemaining);
-    const charging = [2, 3, 6, 7, 8, 9].includes(Number(b.BatteryStatus));
+    if (!b || typeof b !== 'object' || (Array.isArray(b) && !b.length)) return { line: NO_BATTERY };
+    const row = Array.isArray(b) ? b[0] : b;
+    if (!row || row.EstimatedChargeRemaining == null) return { line: NO_BATTERY };
+    const pct = Number(row.EstimatedChargeRemaining);
+    const charging = [2, 3, 6, 7, 8, 9].includes(Number(row.BatteryStatus));
     if (!Number.isFinite(pct)) return { line: 'No pude leer la batería.' };
     return { line: `Batería: ${Math.round(pct)}% (${charging ? 'cargando' : 'en batería'}).` };
   } catch {
@@ -282,8 +287,42 @@ async function contextSnippet(text, deps = {}) {
     }
   }
   if (!parts.length) return '';
-  parts.push('Usá solo estos datos de la PC; si no están, no inventes. Respondé en carácter (Capri) con esos hechos.');
+  parts.push(
+    'Usá solo estos datos de la PC; si no están, no inventes. Respondé en carácter (Capri) con esos hechos.',
+    'En la respuesta visible escribí cantidades, tamaños e IPs con dígitos (el TTS los lee).',
+  );
   return parts.join(' ');
+}
+
+/** Direct chat/voice orders for volume / theme (before music so "poné modo oscuro" is not a song). */
+function parsePcCommand(text) {
+  const { normalizeCommandText } = require('./command-text');
+  const said = normalizeCommandText(text).replace(/\s+por favor$/, '').trim();
+  if (!said) return null;
+
+  if (/^(?:(?:pon(?:e|me|eme)?|activa|cambia(?:me)?(?: a| al)?|pasa(?: a| al)?) )?(?:el |la )?(?:modo|tema) (?:oscuro|dark)$/.test(said)
+    || /^dark mode$/.test(said)) {
+    return { kind: 'theme', value: 'dark' };
+  }
+  if (/^(?:(?:pon(?:e|me|eme)?|activa|cambia(?:me)?(?: a| al)?|pasa(?: a| al)?) )?(?:el |la )?(?:modo|tema) (?:claro|light)$/.test(said)
+    || /^light mode$/.test(said)) {
+    return { kind: 'theme', value: 'light' };
+  }
+
+  if (/^(?:silencio|silencia|mutea|mute|quita(?: el)? sonido)$/.test(said)) {
+    return { kind: 'volume', value: 'mute' };
+  }
+  if (/^(?:desmutea|unmute|quita(?: el)? silencio|activa(?: el)? sonido|restaura(?: el)? sonido|con sonido)$/.test(said)) {
+    return { kind: 'volume', value: 'unmute' };
+  }
+
+  // numeric set only — "sube/baja el volumen" stays music session volume
+  const set = /^(?:(?:pon(?:e|me|eme)? )?(?:el )?volumen(?: a| al| en)? |volumen(?: a| al)? )(\d{1,3})\s*%?$/.exec(said);
+  if (set) {
+    const n = Number(set[1]);
+    if (Number.isFinite(n) && n >= 0 && n <= 100) return { kind: 'volume', value: String(Math.round(n)) };
+  }
+  return null;
 }
 
 /**
@@ -322,5 +361,7 @@ module.exports = {
   info,
   contextSnippet,
   detectInfoKinds,
+  parsePcCommand,
+  NO_BATTERY,
   powershell,
 };

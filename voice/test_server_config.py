@@ -374,6 +374,14 @@ class LowVramWarningTests(unittest.TestCase):
             engine._warn_low_vram()
         self.assertIn("LM Studio", seen[-1]["message"])
 
+    def test_speak_preview_is_full_only_with_debug_save(self):
+        engine = server.Engine.__new__(server.Engine)
+        long = "x" * 80
+        engine.cfg = {"debugSave": False}
+        self.assertEqual(engine._speak_preview(long), long[:48])
+        engine.cfg = {"debugSave": True}
+        self.assertEqual(engine._speak_preview(long), long)
+
 
 if __name__ == "__main__":
     unittest.main()

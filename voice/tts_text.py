@@ -14,9 +14,13 @@ _STRIKE = re.compile(r"~~([^~]+)~~")
 _TIME = re.compile(r"\b(\d{1,2}):(\d{2})\b")
 _PERCENT = re.compile(r"\b(\d{1,3})\s*%")
 _CELSIUS = re.compile(r"\b(\d{1,3})\s*[°º]\s*C\b", re.I)
+_BYTE_UNIT = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*(GB|MB|TB)\b", re.I)
+_DRIVE = re.compile(r"\b([A-Za-z]):(?!\d)")
+_IPV4 = re.compile(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b")
 _NUM = re.compile(r"\b\d{1,6}\b")
 _SPACE = re.compile(r"\s+")
 _TTS_CHUNK = 80
+_BYTE_WORDS = {"GB": "gigas", "MB": "megas", "TB": "teras"}
 
 _ONES = [
     "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve",
@@ -136,9 +140,20 @@ def clean_for_tts(text: str) -> str:
     raw = raw.replace("\\n", "\n")
     raw = raw.replace("«", " ").replace("»", " ")
     raw = raw.replace("(", " ").replace(")", " ")
-    raw = _strip_emoji(raw)
+    # before emoji strip: ° is a symbol and would be dropped
     raw = _PERCENT.sub(lambda m: f"{m.group(1)} por ciento", raw)
     raw = _CELSIUS.sub(lambda m: f"{m.group(1)} grados", raw)
+    raw = _strip_emoji(raw)
+    # before pause/numbers: keep digits for IPs/sizes; speak units and drive letters
+    raw = _IPV4.sub(lambda m: " punto ".join(m.groups()), raw)
+    raw = _BYTE_UNIT.sub(
+        lambda m: (
+            f"{m.group(1).replace('.', ' coma ').replace(',', ' coma ')} "
+            f"{_BYTE_WORDS.get(m.group(2).upper(), m.group(2))}"
+        ),
+        raw,
+    )
+    raw = _DRIVE.sub(lambda m: f"disco {m.group(1).upper()}", raw)
     raw = _TIME.sub(_time_es, raw)
     raw = pause_for_tts(raw)
     raw = _NUM.sub(lambda m: int_es(int(m.group(0))), raw)

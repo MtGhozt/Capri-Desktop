@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { stripReplyTags, ACTION_KINDS, ACTION_TAG_HELP } = require('../src/main/mood-tag');
 const {
   SETTINGS, SETTINGS_PAGES, allowed, run, detectInfoKinds, contextSnippet,
+  parsePcCommand, NO_BATTERY, info,
 } = require('../src/main/pc-actions');
 
 test('stripReplyTags parses volume / settings / theme / info tags', () => {
@@ -105,7 +106,41 @@ test('detectInfoKinds and contextSnippet feed facts like weather extras', async 
   // IP uses os.networkInterfaces — either a real address or the friendly miss line
   assert.match(snip, /IP local|No encontré una IP/i);
   assert.match(snip, /Usá solo estos datos de la PC/);
+  assert.match(snip, /dígitos/i);
   assert.equal(await contextSnippet('pon música'), '');
+});
+
+test('parsePcCommand takes system mute/theme/volume before music', () => {
+  assert.deepEqual(parsePcCommand('silencio'), { kind: 'volume', value: 'mute' });
+  assert.deepEqual(parsePcCommand('mute'), { kind: 'volume', value: 'mute' });
+  assert.deepEqual(parsePcCommand('desmutea'), { kind: 'volume', value: 'unmute' });
+  assert.deepEqual(parsePcCommand('activá el sonido'), { kind: 'volume', value: 'unmute' });
+  assert.deepEqual(parsePcCommand('poné modo oscuro'), { kind: 'theme', value: 'dark' });
+  assert.deepEqual(parsePcCommand('pon tema claro'), { kind: 'theme', value: 'light' });
+  assert.deepEqual(parsePcCommand('volumen a 30'), { kind: 'volume', value: '30' });
+  assert.deepEqual(parsePcCommand('pon el volumen al 50%'), { kind: 'volume', value: '50' });
+  assert.equal(parsePcCommand('silencia la música'), null); // music owns that phrase
+  assert.equal(parsePcCommand('pon never gonna give you up'), null);
+});
+
+test('desktop with no Win32_Battery gets an explicit no-battery fact', async () => {
+  for (const out of ['', 'null', '[]']) {
+    const got = await info('battery', { powershell: async () => out });
+    assert.equal(got.line, NO_BATTERY, out || '(empty)');
+  }
+});
+
+test('setTheme runs the Personalize registry script', async () => {
+  const cmds = [];
+  const ok = await run(
+    { kind: 'theme', value: 'dark' },
+    { platform: 'win32', powershell: async (cmd) => { cmds.push(cmd); return ''; } },
+  );
+  assert.equal(ok.ok, true);
+  assert.equal(ok.theme, 'dark');
+  assert.ok(cmds[0].includes('AppsUseLightTheme'));
+  assert.ok(cmds[0].includes('SystemUsesLightTheme'));
+  assert.match(cmds[0], /Value 0/);
 });
 
 test('system prompt lists the new PC action kinds', () => {
@@ -116,4 +151,5 @@ test('system prompt lists the new PC action kinds', () => {
       `missing from the prompt: ${kind}`,
     );
   }
+  assert.match(ACTION_TAG_HELP, /dígitos/i);
 });

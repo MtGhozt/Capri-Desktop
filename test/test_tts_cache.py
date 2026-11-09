@@ -115,6 +115,24 @@ test('TTS speaks percent and Celsius, drops guillemets and parentheses', () => {
   assert.match(lines[4], /cien por ciento/i);
 });
 
+test('TTS speaks byte units, drive letters and IPv4 with punto', () => {
+  const out = py(
+    'from tts_text import clean_for_tts; '
+    + 'print(clean_for_tts("Disco: C: libre 15.2 GB de 512 GB.")); '
+    + 'print(clean_for_tts("quedan 800 MB y 1 TB")); '
+    + 'print(clean_for_tts("IP local: 192.168.1.10."))',
+  );
+  const lines = out.split(/\r?\n/);
+  assert.match(lines[0], /disco C/i);
+  assert.match(lines[0], /gigas/i);
+  assert.doesNotMatch(lines[0], /\bGB\b/);
+  assert.match(lines[1], /megas/i);
+  assert.match(lines[1], /teras/i);
+  assert.match(lines[2], /punto/i);
+  assert.doesNotMatch(lines[2], /\d+\.\d+\.\d+\.\d+/);
+  assert.match(lines[2], /ciento noventa y dos punto ciento sesenta y ocho/i);
+});
+
 test('TTS splits long phrases at commas for OmniVoice chunks', () => {
   const out = py(
     'from tts_text import split_for_tts; '

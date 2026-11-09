@@ -71,7 +71,7 @@ test('volume/mute hit the music session, never master media keys', async () => {
     ['Silencia la música', 'mute'],
     ['sube el volumen', 'volumeUp'],
     ['baja el volumen', 'volumeDown'],
-    ['quita el silencio', 'unmute'],
+    ['quita el silencio de la música', 'unmute'],
   ];
   for (const [said, action] of cases) {
     const r = await route(said);
@@ -100,10 +100,16 @@ test('volume uses Spotify API when that player is connected', async () => {
 });
 
 test('volume with no music session says so playfully', async () => {
-  const r = await route('silencio', { volumeOk: false });
+  const r = await route('silencia la música', { volumeOk: false });
   assert.equal(r.result.ok, false);
   assert.match(r.result.error, /reproductor de música/i);
   assert.deepEqual(r.keys, []);
+});
+
+test('plain silencio is not a music mute anymore', async () => {
+  const r = await route('silencio');
+  assert.equal(r.parsed, null);
+  assert.equal(r.result, null);
 });
 
 test('ordinary phrases stay with the model', async () => {

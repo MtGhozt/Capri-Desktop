@@ -45,6 +45,7 @@ const {
 } = require('./reminders');
 const { createWeather, isWeatherOrHolidayQuestion } = require('./weather');
 const pcActions = require('./pc-actions');
+const { parsePcCommand } = pcActions;
 const { isQuitCommand } = require('./quit-command');
 const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
@@ -737,6 +738,33 @@ const MUSIC_LINE = {
   query: 'musicaPlay',
 };
 
+async function pcReply(action, { chat = true } = {}) {
+  try {
+    const result = await pcActions.run(action, {
+      openExternal: (url) => shell.openExternal(url),
+    });
+    const tag = `${action.kind}:${action.value}`;
+    logEvent(voiceLogPath(), `[capri] pc ${tag} ${result?.ok ? 'ok' : `failed: ${result?.line || '?'}`}`);
+    if (!result?.ok) {
+      showLine(result?.line || 'No pude hacer eso en la PC.', { chat, badge: 'PC' });
+      return { ok: false };
+    }
+    let line = 'Listo.';
+    if (action.kind === 'theme') line = action.value === 'dark' ? 'Modo oscuro.' : 'Modo claro.';
+    else if (action.kind === 'volume' && (action.value === 'mute' || action.value === 'unmute')) {
+      line = pickLine('musicaMute');
+    } else if (action.kind === 'volume') {
+      line = pickLine('musicaVolumen');
+    }
+    announce(line, { chat, badge: 'PC' });
+    return { ok: true };
+  } catch (err) {
+    logEvent(voiceLogPath(), `[capri] pc ${action.kind} failed: ${err.message}`);
+    showLine('No pude hacer eso en la PC.', { chat, badge: 'PC' });
+    return { ok: false };
+  }
+}
+
 async function musicReply(parsed, { chat = true } = {}) {
   try {
     const result = await music.command(parsed);
@@ -851,6 +879,10 @@ async function runReplyAction(action) {
       const result = await pcActions.run(
         { kind, value },
         { openExternal: (url) => shell.openExternal(url) },
+      );
+      logEvent(
+        voiceLogPath(),
+        `[capri] pc ${kind}:${value} ${result?.ok ? 'ok' : `failed: ${result?.line || '?'}`}`,
       );
       // she already answered in character; only a friendly line when the PC action failed
       if (result?.ok === false && result.line) {
@@ -2980,6 +3012,9 @@ async function directCommand(line) {
   const reminderOrder = parseReminderCommand(line, { timeZone: config.load().timeZone });
   if (reminderOrder) return goReminderReply(reminderOrder) || { ok: true };
   // Weather/holiday questions go to the LLM with facts in temporalExtras; answerDirect is fallback only.
+  // PC mute/theme/volume before music so "silencio" / "poné modo oscuro" are not music.
+  const pcOrder = parsePcCommand(line);
+  if (pcOrder) return pcReply(pcOrder);
   const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
   if (musicOrder) return musicReply(musicOrder);
   if (isSleepCommand(line)) return goSleepReply();

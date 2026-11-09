@@ -40,6 +40,7 @@ const ACTION_TAG_HELP = [
   'Al confirmar un evento, repetí la hora del evento Y la del aviso. Las horas relativas ("en media hora",',
   '"mañana a las 8") calculalas desde la hora local de arriba.',
   'Si arriba ya hay datos de batería/disco/RAM/IP, usalos (no inventes números). [info:…] es opcional.',
+  'En la respuesta visible escribí cantidades, tamaños e IPs con dígitos (el TTS los lee).',
   'Solo esas se ejecutan; cualquier otra cosa es texto normal.',
   'Nunca digas que ponés, abrís, cerrás o hacés algo si no incluiste la etiqueta correspondiente: sin etiqueta no pasó nada. Si no podés emitirla, no lo prometas.',
 ].join(' ');

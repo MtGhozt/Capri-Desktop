@@ -29,8 +29,9 @@ const PATTERNS = [
   ['previous', new RegExp(`^(?:(?:pon|regresa|vuelve)(?: a)? (?:la |el )?(?:anterior|de antes)${SONG}|(?:la |el )?anterior${SONG}|la de antes)$`)],
   ['volumeUp', /^(?:sube(?: la musica| el volumen)?|subele|mas(?: alto| volumen))$/],
   ['volumeDown', /^(?:baja(?: la musica| el volumen)?|bajale|menos(?: alto| volumen))$/],
-  ['mute', /^(?:silencio|silencia(?: la musica)?|mutea(?: la musica)?|mute|quita(?: el )?sonido)$/],
-  ['unmute', /^(?:desmutea(?: la musica)?|unmute|quita(?: el )?silencio|con sonido|restaura(?: el )?sonido)$/],
+  // system mute/unmute ("silencio", "mute") is pc-actions; music only when she names the music
+  ['mute', /^(?:(?:silencio|silencia|mutea|mute)(?: de)? la musica|quita(?: el )?sonido(?: de)? la musica)$/],
+  ['unmute', /^(?:(?:desmutea|unmute|quita(?: el )?silencio|restaura(?: el )?sonido|activa(?: el )?sonido)(?: de)? la musica)$/],
   ['start', /^(?:pon|ponme|pone|reproduce|reproduceme|toca|quiero|inicia)(?: algo de| un poco de)? musica(?: en namida)?$/],
   ['start', GENERIC_PLAY],
   // before the generic "abre <app>": the player is whatever MÚSICA has chosen, not a fixed app
@@ -57,7 +58,11 @@ function parseMusicCommand(text, { herSong = DEFAULT_HER_SONG } = {}) {
   if (spotify) return { action: 'query', query: spotify[1], player: 'spotify' };
   const playEn = /^play (?!music(?:a)?$)(.+)$/.exec(value);
   if (playEn) return { action: 'query', query: playEn[1].replace(/^en\s+/, '') };
-  const query = new RegExp(`^(?:${PLAY_VERB}) (?:reproducir )?(?!un timer|una alarma|el timer|la alarma)(.+)$`).exec(value);
+  // not a song search: timers, theme/volume/brightness (those are PC commands)
+  const query = new RegExp(
+    `^(?:${PLAY_VERB}) (?:reproducir )?(?!un timer|una alarma|el timer|la alarma`
+    + `|(?:el )?(?:modo|tema) (?:claro|oscuro)|(?:el )?volumen|brillo)(.+)$`,
+  ).exec(value);
   if (query) return { action: 'query', query: query[1].replace(/^en\s+/, '') };
   return null;
 }
