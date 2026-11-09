@@ -23,7 +23,7 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 Detalle y prioridad en [`docs/roadmap.md`](docs/roadmap.md):
 
 - **P1:** wake word sin interferir con audífonos Bluetooth; actualización con un clic.
-- **Siguiente:** 0.2.9/0.3 → P2 (chat que actúa en la PC); 0.3/0.4 → P3 (sentir la PC y juegos).
+- **Siguiente:** 0.2.9 (P2 parte 1: volumen/Configuración/batería-disco-RAM-IP/tema) → resto de P2; 0.3/0.4 → P3 (sentir la PC y juegos).
 
 Nada de esto es de pago: las donaciones, si aparecen, no desbloquean nada.
 

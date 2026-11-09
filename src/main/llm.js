@@ -277,7 +277,8 @@ function createLlm({
     const cfg = loadConfig();
     turnExtras = '';
     if (typeof temporalExtras === 'function') {
-      try { turnExtras = String(await temporalExtras(cfg) || '').trim(); } catch { turnExtras = ''; }
+      // weather + optional PC info for this user line (cfg, user)
+      try { turnExtras = String(await temporalExtras(cfg, user) || '').trim(); } catch { turnExtras = ''; }
     }
     const id = activeBrain(cfg);
     const cloud = isCloud(id);

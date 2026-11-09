@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.9 (en preparación, sin publicar)
+
+### PC (P2 parte 1)
+
+- **Acciones de PC por etiquetas del chat** (mismo mecanismo que `[remind:…]`): `[volume:0–100|up|down|mute|unmute]`, `[settings:<página>]` (`ms-settings:` allowlist: bluetooth, sound, display, wifi, network, notifications, apps, update), `[theme:dark|light]` (AppsUseLightTheme / SystemUsesLightTheme).
+- **Datos de la PC al modelo:** batería, disco libre por unidad, RAM e IP local se inyectan en `turnExtras` / `contextSnippet` (como el clima) cuando la pregunta lo pide, para que Capri responda en carácter.
+- Solo allowlist; PowerShell/Windows async con timeout; fallos → línea amable, sin crash. Windows only.
+
 ## 0.2.8 (en preparación, sin publicar)
 
 ### Clima y feriados

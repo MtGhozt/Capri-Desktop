@@ -44,6 +44,7 @@ const {
   normalizeTimeFormat,
 } = require('./reminders');
 const { createWeather, isWeatherOrHolidayQuestion } = require('./weather');
+const pcActions = require('./pc-actions');
 const { isQuitCommand } = require('./quit-command');
 const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
@@ -844,7 +845,19 @@ async function runReplyAction(action) {
       if (!parsed) return;
       const result = await music.command({ action: parsed });
       if (!result?.ok) showLine(result?.error || 'No pude hacer eso con la música.', { chat: true, badge: 'MUSIC' });
+      return;
     }
+    if (kind === 'volume' || kind === 'settings' || kind === 'theme') {
+      const result = await pcActions.run(
+        { kind, value },
+        { openExternal: (url) => shell.openExternal(url) },
+      );
+      // she already answered in character; only a friendly line when the PC action failed
+      if (result?.ok === false && result.line) {
+        showLine(result.line, { chat: true, badge: 'PC' });
+      }
+    }
+    // [info:…] is allowlisted for the prompt/parser; facts for answers come via turnExtras.contextSnippet
   } catch (err) {
     logEvent(voiceLogPath(), `[capri] reply action ${kind} failed: ${err.message}`);
   }
@@ -3419,10 +3432,19 @@ function main() {
       memoryPath: userFiles.memory.path,
       apiKey: (id) => llmKey(id),
       runAgentChat: ({ provider, user, persona }) => runAgentAsBrain(provider, user, persona),
-      temporalExtras: (cfg) => weather.contextSnippet({
-        place: cfg.weatherPlace,
-        timeZone: cfg.timeZone,
-      }),
+      temporalExtras: async (cfg, user) => {
+        const bits = [];
+        try {
+          bits.push(await weather.contextSnippet({
+            place: cfg.weatherPlace,
+            timeZone: cfg.timeZone,
+          }));
+        } catch { /* offline / bad city: skip */ }
+        try {
+          bits.push(await pcActions.contextSnippet(user));
+        } catch { /* PC probe failed: skip */ }
+        return bits.filter(Boolean).join(' ');
+      },
       // what she may tell a cloud provider about your screen, only with the switch on
       screenContext: () => {
         const title = String(lastWindows?.fgTitle || '').trim();

@@ -63,8 +63,18 @@ test('upgrade: the new version lines, once', () => {
   assert.equal(bootNotes({ version: '0.2.6', lastSeenVersion: '0.2.6' }), null);
 });
 
+test('0.2.9 has short lines about PC volume/settings/info', () => {
+  const lines = notesFor('0.2.9');
+  assert.equal(Array.isArray(lines), true);
+  assert.ok(lines.length >= 2 && lines.length <= 4);
+  for (const line of lines) assert.ok(line.length < 140);
+  const all = lines.join(' ');
+  assert.match(all, /volumen|Configuración|Bluetooth/i);
+  assert.match(all, /batería|disco|RAM|IP/i);
+});
+
 test('an upgrade to a version without notes says nothing', () => {
-  assert.equal(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.8' }), null);
+  assert.equal(bootNotes({ version: '0.2.10', lastSeenVersion: '0.2.9' }), null);
 });
 
 test('"¿qué hay de nuevo?" is recognized, also with the wake word', () => {

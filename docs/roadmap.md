@@ -22,8 +22,8 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ## Siguiente
 
-- **0.2.9 / 0.3 → P2:** que el chat haga cosas en la PC.
-- **0.3 / 0.4 → P3:** sentir la PC y juegos.
+- **0.2.9 (P2 parte 1, en prep):** volumen Windows, `ms-settings:`, batería/disco/RAM/IP vía `turnExtras`, modo oscuro/claro — etiquetas `[volume|settings|theme|info:…]`.
+- **Resto de P2 / 0.3:** ventanas lado a lado, snip, tidy; **0.3 / 0.4 → P3:** sentir la PC y juegos.
 
 ## Próximo, por prioridad
 
@@ -35,9 +35,8 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ### P2 — Que el chat haga cosas en la PC (idea de upstream `cb33e87`)
 
-- Volumen de Windows ("poné 30", "silenciá"), abrir páginas de Configuración (Bluetooth, sonido, actualizaciones).
-- Preguntas rápidas: batería, espacio en disco, RAM, IP local.
-- Ordenar ventanas: "poné Discord a la izquierda y Chrome a la derecha", recortar pantalla, modo oscuro/claro.
+- **Hecho (0.2.9 parte 1):** volumen Windows, páginas de Configuración (Bluetooth, sonido, etc.), batería/disco/RAM/IP al LLM, modo oscuro/claro — vía etiquetas + `pc-actions.js` (allowlist).
+- Ordenar ventanas: "poné Discord a la izquierda y Chrome a la derecha", recortar pantalla.
 - Dos pedidos en una frase (`d6c8070`), buscar archivos por tipo y abrir la carpeta (`3cd5377`).
 
 ### P3 — Sentir la PC y juegos
