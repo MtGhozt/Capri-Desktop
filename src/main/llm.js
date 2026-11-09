@@ -44,7 +44,7 @@ function activeBrain(cfg) {
     : String(cfg.llm?.provider || 'local');
 }
 
-function temporalContext({ now = new Date(), lastTalkAt = null, timeZone = '' } = {}) {
+function temporalContext({ now = new Date(), lastTalkAt = null, timeZone = '', extras = '' } = {}) {
   const zone = resolveTimeZone(timeZone);
   const parts = new Intl.DateTimeFormat('es-CR', {
     timeZone: zone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -63,12 +63,14 @@ function temporalContext({ now = new Date(), lastTalkAt = null, timeZone = '' } 
       elapsed = `hace ${hours} ${hours === 1 ? 'hora' : 'horas'}`;
     }
   }
-  return `Hora local: ${get('weekday')}, ${get('month')} ${get('day')} de ${get('year')} a las ${get('hour')}:${get('minute')} (${zone}). Momento del día: ${period}. Última conversación: ${elapsed}.`;
+  const base = `Hora local: ${get('weekday')}, ${get('month')} ${get('day')} de ${get('year')} a las ${get('hour')}:${get('minute')} (${zone}). Momento del día: ${period}. Última conversación: ${elapsed}.`;
+  const extra = String(extras || '').trim();
+  return extra ? `${base} ${extra}` : base;
 }
 
 function createLlm({
   loadConfig, personaPath, memoryPath, apiKey, screenContext, onFallback, ensureLocal,
-  runAgentChat, localInstalled, now = () => new Date(),
+  runAgentChat, localInstalled, temporalExtras, now = () => new Date(),
 } = {}) {
   let history = [];
   let abort = null;
@@ -76,6 +78,7 @@ function createLlm({
   let memory = null;
   let lastTalkAt = null;
   let pendingComment = null; // last unprompted line, for a follow-up answer only
+  let turnExtras = ''; // weather/holidays for this chat turn only (empty when offline)
   // A key the provider already refused is not asked again this session: every message would pay
   // the same wait.
   const deadProviders = new Set();
@@ -138,7 +141,10 @@ function createLlm({
   function systemPrompt(cfg, cloud, id = activeBrain(cfg)) {
     const base = personaText();
     const lang = String(cfg.lang || 'es');
-    const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. ${temporalContext({ now: now(), lastTalkAt, timeZone: cfg.timeZone })} Si pregunta la hora o la fecha, usa esos datos.`];
+    const when = temporalContext({
+      now: now(), lastTalkAt, timeZone: cfg.timeZone, extras: turnExtras,
+    });
+    const parts = [`${base}\n\nLanguage setting: ${lang}. Always speak Spanish. ${when} Si pregunta la hora o la fecha, usa esos datos. Si hay clima o feriados arriba, usalos; si no, no inventes.`];
     const model = isAgent(id) ? '' : ` (modelo ${modelFor(cfg, id)})`;
     parts.push(`Tu cerebro ahora es ${provider(id).label}${model}. Si te preguntan qué modelo o IA sos, decí eso; seguís siendo Capri, nunca otra IA ni otra empresa.`);
     const notes = memoryText();
@@ -269,6 +275,10 @@ function createLlm({
     const started = Date.now();
 
     const cfg = loadConfig();
+    turnExtras = '';
+    if (typeof temporalExtras === 'function') {
+      try { turnExtras = String(await temporalExtras(cfg) || '').trim(); } catch { turnExtras = ''; }
+    }
     const id = activeBrain(cfg);
     const cloud = isCloud(id);
     const jpeg = image ? String(image) : null;

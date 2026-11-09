@@ -12,6 +12,7 @@ const DEFAULTS = {
   volume: 0.7,
   lang: 'es',        // overlay + Capri's spoken replies; 'auto' follows the system language
   timeZone: '',      // '' = automatic (this PC's zone); an IANA name such as 'Europe/Madrid' overrides it
+  weatherPlace: '',  // optional "City, Country" for Open-Meteo + Nager.Date holidays; '' = off
   displayId: null,   // null = primary display
   wander: true,      // random teleports when idle
   possess: true,     // now and then she dives into the window she sits on and takes it over
