@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   parseReminderCommand, formatWhen, deliverReminder, createReminders,
+  readsAsReminderRequest, promisesReminder,
 } = require('../src/main/reminders');
 const { stripReplyTags } = require('../src/main/mood-tag');
 
@@ -279,4 +280,32 @@ test('overdue reminders at boot are one bubble and one voice line', () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('a skipped greeting leaves the missed reminder bubble alone', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(main, /return \{ skipped: 'missed-reminders' \}/);
+
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  const start = app.indexOf('const hello =');
+  const hello = app.slice(start, app.indexOf('if (config.guide?.welcome)', start));
+  assert.match(hello, /greet\?\.skipped/);
+  assert.ok(hello.indexOf('greet?.skipped') < hello.indexOf('panel.say'),
+    'the skipped check must come before the ONLINE fallback');
+  // the normal greeting still shows her line, or the ONLINE fallback when there is none
+  assert.match(hello, /greet\?\.text \|\| pick\(brain\.t\.online\)/);
+});
+
+test('a reminder phrasing the direct parser misses is noticed, not silently promised', () => {
+  assert.equal(parseReminderCommand('en 3 minutos recordame sacar la basura'), null);
+  assert.equal(readsAsReminderRequest('en 3 minutos recordame sacar la basura'), true);
+  assert.equal(readsAsReminderRequest('dentro de una hora avisame de la reunión'), true);
+  assert.equal(readsAsReminderRequest('¿cómo funcionan los recordatorios?'), false);
+  assert.equal(readsAsReminderRequest('abre Discord'), false);
+  assert.equal(promisesReminder('Listo, te aviso en 3 minutos.'), true);
+  assert.equal(promisesReminder('Los recordatorios se guardan en un archivo.'), false);
+
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(main, /reminderAsked && promisesReminder/);
+  assert.match(main, /No quedó agendado ningún recordatorio/);
 });

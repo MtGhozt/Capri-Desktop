@@ -38,7 +38,10 @@ const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
 const { planMultiCommand } = require('./multi-command');
 const { isDirectCommand } = require('./direct-match');
-const { createReminders, parseReminderCommand, formatWhen, deliverReminder } = require('./reminders');
+const {
+  createReminders, parseReminderCommand, formatWhen, deliverReminder,
+  readsAsReminderRequest, promisesReminder,
+} = require('./reminders');
 const { isQuitCommand } = require('./quit-command');
 const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
@@ -2906,7 +2909,7 @@ function registerIpc() {
     // A missed reminder is this launch's greeting: never replace it with a hello.
     if (!unlock && (reminders?.missedCount?.() || 0) > 0) {
       logEvent(voiceLogPath(), `[capri] greeting skipped: ${reminders.missedCount()} missed reminder(s)`);
-      return null;
+      return { skipped: 'missed-reminders' };
     }
     const cfg = config.load();
     if (cfg.behavior?.greetings === false || (unlock && cfg.behavior?.unlockGreeting === false)) return null;
@@ -2999,6 +3002,7 @@ function registerIpc() {
       llmBusy = true;
       let said = '';
       let outcome = null;
+      const reminderAsked = readsAsReminderRequest(line);
       try {
         outcome = await llm.chat({
           user: line,
@@ -3014,7 +3018,14 @@ function registerIpc() {
             // allowed to look ignored while the audio is generated.
             overlay?.webContents.send('chat:done', payload);
             followUp.reply(payload?.text || said, { spoken: Boolean(speakId) });
-            if (payload?.action) void runReplyAction(payload.action);
+            if (payload?.action) {
+              void runReplyAction(payload.action);
+            } else if (reminderAsked && promisesReminder(payload?.text || said)) {
+              // no [remind:...] tag means nothing was saved: say it instead of letting her promise stand
+              showLine('No quedó agendado ningún recordatorio: repetímelo con la hora.', {
+                chat: true, badge: 'RECORDATORIO',
+              });
+            }
             if (speakId) {
               if (payload?.mood) speakQueue?.setMood?.(payload.mood);
               speakQueue?.flush(speakId);

@@ -75,6 +75,21 @@ function parseReminderCommand(text, { now = Date.now() } = {}) {
   };
 }
 
+// The direct parser above needs the reminder word first ("recordame en 3 minutos"). Phrasings
+// like "en 3 minutos recordame X" reach the model; this notices them so a reply cannot promise a
+// reminder that was never tagged, without adding a second LLM round.
+function readsAsReminderRequest(text) {
+  const said = normalizeCommandText(text);
+  if (!said) return false;
+  if (!/\b(?:recordatorios?|recordame|recorda|avisame|avisa|timer|temporizador|alarma)\b/.test(said)) return false;
+  return /\b(?:en|dentro de|a las|manana|hoy)\b|\b(?:minutos?|mins?|horas?)\b/.test(said);
+}
+
+function promisesReminder(text) {
+  return /\b(?:listo|hecho|agend\w*|program\w*|te aviso|avisar[eé]|te recuerdo|recordar[eé]|qued[oó])/i
+    .test(String(text || ''));
+}
+
 // "hoy a las 14:30", "mañana a las 07:00", "el miércoles 12 de noviembre a las 08:00", in the
 // zone she is using ('' = this PC's).
 function formatWhen(at, { now = new Date(), timeZone = '' } = {}) {
@@ -228,4 +243,5 @@ function createReminders({
 
 module.exports = {
   CHECK_MS, parseReminderCommand, formatWhen, deliverReminder, createReminders,
+  readsAsReminderRequest, promisesReminder,
 };

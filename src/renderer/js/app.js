@@ -1260,6 +1260,7 @@ async function boot() {
   bumpIdle();
   const hello = async () => {
     const greet = await host.greet();
+    if (greet?.skipped) return; // missed reminders own the bubble: no ONLINE fallback over them
     panel.say({ kind: 'info', badge: 'ONLINE', line: greet?.text || pick(brain.t.online), hold: 6000 });
   };
   if (config.guide?.welcome) {
