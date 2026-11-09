@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.2.7 (en preparación, sin publicar)
+
+### Cerebro y proveedores
+
+- **Gemini vuelve a `gemini-flash-lite-latest`:** la 0.2.5 cambió sin querer el modelo por defecto a `gemini-flash-latest`, que puede resolver a uno de pago/limitado y hace fallar las claves gratis. Se restaura el id liviano y, al abrir, un `config.json` que guardó el valor equivocado se corrige solo; un modelo elegido a mano se deja intacto.
+- **Los modelos ya saben qué los hace funcionar:** el prompt del sistema incluye el proveedor activo y su modelo real (LM Studio/Ollama usan el nombre local; los agentes CLI, su etiqueta). Si le preguntás qué IA es, responde eso y sigue siendo Capri; no inventa ser otra empresa.
+
+### Recordatorios
+
+- **Aviso hablado:** cuando vence un recordatorio o timer, además de la burbuja lo dice la voz existente, sin pedirle nada al modelo. Respeta **No molestar** y la voz apagada (nunca la enciende sola), no duplica el aviso y no pisa una respuesta abierta.
+- **Si el TTS falla, la burbuja igual aparece:** el aviso visual y el procesamiento de recordatorios no dependen del audio. Varios recordatorios vencidos al abrir siguen agrupándose en un solo aviso.
+
+## 0.2.6 (etiqueta `v0.2.6`)
+
+### Chat y hora
+
+- **Hora local de tu país:** deja de asumir Costa Rica; usa la zona del sistema o la que elijas en Ajustes, y el modelo recibe esa hora y fecha.
+
+### Recordatorios
+
+- **Timers y recordatorios persistentes:** por voz o chat ("timer 10 minutos", "recordame en 2 horas", fechas con `[remind:…]`), guardados en `reminders.json` y sobreviven a cerrar Capri.
+- Avisan con burbuja y voz; **No molestar** los muestra en silencio. Al arrancar, los vencidos mientras estaba cerrada se cuentan una sola vez y se agrupan en un único aviso; la burbuja queda el tiempo suficiente para leerlo.
+
+### Voz
+
+- **Primera descarga explicada:** la primera vez que baja la voz lo dice claro, y el texto de la respuesta aparece aunque el audio todavía tarde.
+
+## 0.2.5 (etiqueta `v0.2.5`)
+
+### Chat
+
+- **Varios comandos en una frase:** "minimiza todo y ve a dormir" se separa en partes y se ejecuta en orden (dormir siempre al final). La misma escalera de comandos directos se comparte con `chat:send`, y la cadena se corta si una parte pide confirmación.
+- **Etiquetas de acción sin argumentos** (`[sleep]`, `[minimize]`, `[lock]`, `[mic:on]`, `[music:next]`, …) dentro del mecanismo oculto existente, con la lista cerrada en el prompt para que las paráfrasis lleguen a la misma acción.
+- **Contexto más honesto:** una frase suelta después de 10 minutos de silencio no arrastra la charla vieja; los comentarios espontáneos no entran al historial (solo pueden responder a un seguimiento) y el prompt pide no inventar contexto en mensajes ambiguos.
+- **Regresión conocida, corregida en 0.2.7:** el modelo por defecto de Gemini quedó en `gemini-flash-latest`.
+
+### Voz y música
+
+- **GPU débil:** si OmniVoice falla por falta de GPU, avisa una vez y sigue con Kokoro el resto de la sesión (sin reintentar en cada respuesta ni repetir el aviso).
+- **Spotify:** entiende más frases (incluido voseo y "poné reproducir …"), refresca el token vencido y reintenta una vez tras un 401; sin dispositivo activo, abre Spotify, espera y reintenta. Un tema abierto en la app se informa como abierto, no como reproducido.
+
+### Agentes
+
+- **CLIs fuera del PATH:** Claude Code se encuentra en su carpeta de instalación nativa y los CLIs de npm en `%APPDATA%\npm`; la tarjeta explica "Lo encontré fuera del PATH; funciona igual" y cada detección lo registra en `voice.log`.
+
 ## 0.2.4
 
 > [!TIP]

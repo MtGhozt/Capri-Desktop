@@ -10,7 +10,9 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 > Fan art. **No** afiliado a CD PROJEKT RED. Licencia PolyForm Noncommercial — [LICENSE](LICENSE), [CREDITS.md](CREDITS.md).
 
-**Versión actual:** `0.2.4` (`Capri-Setup-0.2.4.exe`).
+**Versión en el repo:** `0.2.7` (en preparación, sin publicar). **Última etiquetada:** `0.2.6`. El instalador más reciente está en [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
+
+**Novedades recientes:** 0.2.5 sumó varios comandos en una frase y arreglos de Spotify y voz en GPUs débiles; 0.2.6, hora local elegible y recordatorios persistentes; **0.2.7 (en preparación)** restaura el Gemini Flash-Lite gratis, hace que los modelos digan cuál los hace funcionar y endurece el aviso hablado de recordatorios.
 
 <img src="docs/media/capri-desktop.png" alt="Capri en el escritorio" width="100%">
 
@@ -24,7 +26,7 @@ Lo que viene; detalle y estado en [`docs/roadmap.md`](docs/roadmap.md):
 - Aviso de **SmartScreen** al instalar y **actualización con un clic**.
 - Arreglo de **“Mirá mi pantalla”** cuando manda una captura vieja o el primer frame vacío.
 
-Después: que el chat haga cosas en la PC (volumen, timers, ordenar ventanas), sentir la PC y los juegos, y voz local gratis. Detalle y prioridad en [`docs/roadmap.md`](docs/roadmap.md).
+Después: que el chat haga cosas en la PC (volumen, ordenar ventanas), sentir la PC y los juegos, y voz local gratis. Detalle y prioridad en [`docs/roadmap.md`](docs/roadmap.md).
 
 Nada de esto es de pago: las donaciones, si aparecen, no desbloquean nada.
 
@@ -43,7 +45,7 @@ Overlay sin bordes, siempre encima. Vive en tu escritorio: puedes arrastrarla, a
 
 ## 2. Inicio rápido (sin código)
 
-1. Baja **`Capri-Setup-0.2.4.exe`** desde [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
+1. Bajá el instalador más reciente (`Capri-Setup-*.exe`) desde [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
 2. Si SmartScreen dice *Windows protegió tu PC* → **Más información** → **Ejecutar de todas formas** (el instalador no está firmado con certificado de pago; es normal).
 3. Instala y abre **Capri**. No hace falta Node.js ni admin.
 
@@ -79,6 +81,7 @@ Log: `%APPDATA%\capri-desktop\logs\voice.log` — reportá en Discord **#bugs**.
 - **Chat** en la burbuja (`TÚ > …`), personalidad cyberpunk corta.
 - **Abrir / cerrar** apps, juegos y sitios que tengas en su lista **APPS** (“abre Discord”, etc.).
 - **Música** (player por defecto **Namida**; **Spotify** opcional): play, pausa, siguiente, “pon \<tema\>”, “pon tu canción”, volumen / mute **solo de la música** (nunca el volumen master del PC).
+- **Timers y recordatorios:** "timer 10 minutos", "recordame en 2 horas" o fechas por chat; sobreviven a cerrar Capri y avisan con burbuja y voz (No molestar los muestra en silencio).
 - **Energía del PC** con confirmación: apagar / reiniciar / suspender.
 - **No molestar:** ante pantalla completa (o apps en la lista) no se despierta sola; opciones **Silenciar en esta app** / **No silenciar nunca** / **Sacar de la lista**; puede mostrar el **dron** ligero.
 - **Formas:** DORMANT, máscara dormida, biochip, teleports, poses; **agarrar y soltar**; **caricias** en la cabeza (se pueden apagar en comportamiento).
@@ -162,12 +165,12 @@ Si algo no arranca, mirá [`docs/SOPORTE.md`](docs/SOPORTE.md) (síntoma → cau
 
 # Capri (English, short)
 
-Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop). **v0.2.4** — download `Capri-Setup-0.2.4.exe` from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases); SmartScreen → *More info* → *Run anyway*.
+Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop). **v0.2.7** in preparation (unpublished); latest tagged: **v0.2.6**. Download the latest installer from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases); SmartScreen → *More info* → *Run anyway*.
 
 **Brain:** LM Studio / Ollama locally, or free NVIDIA/Gemini keys, or OpenRouter, Groq, OpenAI, Mistral, DeepSeek in **Settings → Cerebro**. Keys stay on your PC (`safeStorage`).
 
 **Voice (optional):** not in the public installer. Without the local `voice/` sidecar she uses **typing blips** (default) or silence. With a sidecar: wake (“Hey Capri” / “Capri”), **Ctrl+Alt+V**, Whisper STT on CPU; cloned Capri reference audio is **not** shipped — without it you get blips / Kokoro, not her clone. Mood refs live under `voice/ref/` when you set that up yourself.
 
-**Can do:** text chat, open/close apps, music (Namida/Spotify: play/pause/next/search, music-only volume, “pon tu canción”), PC power with confirm, game-mode drone, drag/drop, head pats, dormant/sleep forms.
+**Can do:** text chat, timers and reminders that survive a restart (bubble + voice), open/close apps, music (Namida/Spotify: play/pause/next/search, music-only volume, “pon tu canción”), PC power with confirm, game-mode drone, drag/drop, head pats, dormant/sleep forms.
 
 **Quit stuck:** **Ctrl+Alt+Shift+Q**, or tray **Salir** twice. Logs: `%APPDATA%\capri-desktop\logs\` (or **Settings → About → Open log**; **Diagnose → Copy report** for Discord). Fan project — not affiliated with CD PROJEKT RED. See [CREDITS.md](CREDITS.md) / [LICENSE](LICENSE).

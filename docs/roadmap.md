@@ -1,4 +1,4 @@
-# Capri — Roadmap (actualizado 2026-11-07)
+# Capri — Roadmap (actualizado 2026-11-08)
 
 Upstream de referencia: mochiiwuff/capri-desktop v0.4.0 (`bde7b42`). Nunca push a upstream. Traer cosas por partes (port manual o cherry-pick), no merge completo.
 
@@ -10,7 +10,8 @@ Resumen de lo cerrado (el detalle está en el historial de git y en el CHANGELOG
 - **Fase 4 — Acciones en la PC:** corrector de lo que oye mal, conversación sin wake word, motor de apps ("abre / cierra X", "abre X y Y"), escaneo de Steam/Epic/GOG/Inicio, animaciones al abrir y cerrar, música con Namida y Spotify, energía con confirmación, modo dron, caja `CAPRI.SYS // MENSAJE`, caricias y saludos.
 - **Fase 5 — Cerebro fácil:** tarjetas de Cerebro (gratis con key, en tu PC, tu propia key), "Probar", keys solo locales y README reescrito para empezar sin código.
 - **Fase 6 — Hecho:** hooks de agentes (Claude Code, Codex, Antigravity, Cursor y OpenCode), "Usar mi agente instalado", ver la pantalla a pedido con consentimiento, detección de juegos con No molestar y proveedores con key.
-- **Fixes 0.2.x — Hecho:** 0.2.2 (aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL experimental, etiquetas de Mis apps); Diagnóstico en Acerca de con "Copiar detalles de error" y "Abrir log" (0.2.4); entender varios comandos y comandos "parecidos" (0.2.5).
+- **Fixes 0.2.x — Hecho:** 0.2.2 (aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL experimental, etiquetas de Mis apps); 0.2.4 (Diagnóstico en Acerca de con "Copiar detalles de error" y "Abrir log"); 0.2.5 (varios comandos en una frase, CLIs fuera del PATH, Spotify con más frases y reintentos, voz que cae a Kokoro en GPUs débiles y contexto sin charla vieja); 0.2.6 (hora local elegible, timers y recordatorios persistentes con aviso en burbuja y voz, primera descarga de voz explicada).
+- **En preparación (0.2.7, sin publicar):** Gemini vuelve a `gemini-flash-lite-latest` y corrige configs guardadas; el modelo sabe y dice qué proveedor/modelo lo hace funcionar; el aviso hablado de recordatorios no se pierde si el TTS falla.
 
 Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía corta por opción y leer el estado del juego.
 
@@ -21,13 +22,12 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - "Mirá mi pantalla" a veces ve el fondo o "Activar Windows" (captura vieja / primer frame vacío).
 - Que el wake word no interfiera con audífonos Bluetooth.
 - Aviso de SmartScreen en el README/instalación; actualización con un clic.
-- **Idea de la comunidad (0.2.x):** país/zona horaria en Ajustes (hora local correcta, clima, feriados); recordatorios por voz ("mañana a las 8 tengo un evento" → avisar 1–2 h antes), con conocimiento de la fecha y el día.
+- **Idea de la comunidad (0.2.x):** clima y feriados junto a la hora local; avisar 1–2 h antes de un evento ("mañana a las 8 tengo un evento"), no solo a la hora.
 
 ### P2 — Que el chat haga cosas en la PC (idea de upstream `cb33e87`)
 
 - Volumen de Windows ("poné 30", "silenciá"), abrir páginas de Configuración (Bluetooth, sonido, actualizaciones).
 - Preguntas rápidas: batería, espacio en disco, RAM, IP local.
-- Timers ("timer 10 minutos") y recordatorios que sobreviven reinicios (upstream 0.5.0).
 - Ordenar ventanas: "poné Discord a la izquierda y Chrome a la derecha", recortar pantalla, modo oscuro/claro.
 - Dos pedidos en una frase (`d6c8070`), buscar archivos por tipo y abrir la carpeta (`3cd5377`).
 
@@ -62,7 +62,6 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 ### Ideas de la comunidad (sin fecha, no agendadas)
 
 - **Recordatorios + Google Calendar:** crear eventos y pendientes en el calendario para que también avisen en el celular; los avisos propios de Capri se mantienen.
-- **Capri habla al recordar (chico, puede ir a P1):** que diga el recordatorio en voz alta además de mostrarlo en la burbuja.
 - **Editar un recordatorio:** cambiar la hora o moverlo después de creado.
 - **Música en YouTube:** abrir y poner YouTube / YouTube Music como alternativa a Spotify.
 
