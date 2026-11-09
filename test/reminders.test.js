@@ -58,6 +58,100 @@ test('her remind tag carries the absolute time and a short text', () => {
   assert.equal(stripReplyTags('[remind:mañana|algo] Nada.').action, null);
 });
 
+test('remind tag accepts advance-notice minutes before the event', () => {
+  const {
+    parseNoticeMinutes, resolveFireAt, DEFAULT_NOTICE_MIN,
+  } = require('../src/main/reminders');
+  assert.equal(parseNoticeMinutes('60'), 60);
+  assert.equal(parseNoticeMinutes('2h'), 120);
+  assert.equal(parseNoticeMinutes(''), 0);
+  assert.equal(parseNoticeMinutes('', { fallback: DEFAULT_NOTICE_MIN }), 60);
+
+  const eventAt = Date.parse('2026-11-08T14:00:00.000Z');
+  assert.deepEqual(resolveFireAt(eventAt, 60), {
+    eventAt, noticeMin: 60, at: eventAt - 60 * MIN,
+  });
+
+  const tagged = stripReplyTags('[remind:2026-11-08T08:00:00-06:00|tengo un evento|60] Ok.');
+  assert.equal(tagged.action.noticeMin, 60);
+  assert.equal(tagged.action.value, 'tengo un evento');
+  assert.equal(tagged.action.at, '2026-11-08T14:00:00.000Z');
+
+  const twoH = stripReplyTags('[remind:2026-11-08T08:00:00-06:00|reunion|2h] Dale.');
+  assert.equal(twoH.action.noticeMin, 120);
+});
+
+test('advance-notice reminders fire before the event and keep eventAt', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-reminders-'));
+  const file = path.join(dir, 'reminders.json');
+  try {
+    const { resolveFireAt } = require('../src/main/reminders');
+    const eventAt = 1000 + 3 * 60 * MIN;
+    const resolved = resolveFireAt(eventAt, 60);
+    const store = createReminders({ file, now: () => 1000, intervalMs: 0 });
+    const item = store.add({
+      at: resolved.at, text: 'tengo un evento', eventAt, noticeMin: 60,
+    });
+    assert.equal(item.at, eventAt - 60 * MIN);
+    assert.equal(item.eventAt, eventAt);
+    assert.equal(item.noticeMin, 60);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('move and edit resolve by clock or text, and ask when ambiguous', () => {
+  const {
+    parseReminderCommand, parseMoveTarget, findMatches,
+  } = require('../src/main/reminders');
+  const now = Date.parse('2026-11-08T12:00:00.000Z');
+  const zone = 'America/Costa_Rica';
+  const eight = parseMoveTarget('a las 8', { now, timeZone: zone });
+  const nine = parseMoveTarget('a las 9', { now, timeZone: zone });
+  assert.ok(eight < nine);
+
+  const move = parseReminderCommand('pasá el de las 8 a las 9', { now, timeZone: zone });
+  assert.equal(move.action, 'move');
+  assert.match(move.match, /8/);
+  assert.equal(move.at, nine);
+
+  const water = parseReminderCommand('mové el de tomar agua a mañana', { now, timeZone: zone });
+  assert.equal(water.action, 'move');
+  assert.match(water.match, /tomar agua/);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-reminders-'));
+  const file = path.join(dir, 'reminders.json');
+  try {
+    const store = createReminders({ file, now: () => now, intervalMs: 0 });
+    store.add({ at: eight, text: 'evento A' });
+    store.add({ at: eight + 24 * 60 * MIN, text: 'evento B' });
+    store.add({ at: nine, text: 'tomar agua' });
+    assert.equal(findMatches(store.list(), 'las 8', { timeZone: zone }).length, 2);
+    assert.equal(findMatches(store.list(), 'tomar agua', { timeZone: zone }).length, 1);
+
+    const updated = store.update(store.list().find((item) => item.text === 'tomar agua').id, {
+      at: eight,
+    });
+    assert.equal(updated.at, eight);
+    assert.equal(store.remove(updated.id).text, 'tomar agua');
+    assert.equal(store.list().length, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('settings menu lists pending reminders with edit and delete actions', () => {
+  const menu = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(menu, /RECORDATORIOS/);
+  assert.match(menu, /reminder-update/);
+  assert.match(menu, /reminder-delete/);
+  assert.match(menu, /datetime-local/);
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(main, /case 'reminder-update'/);
+  assert.match(main, /case 'reminder-delete'/);
+  assert.match(main, /reminders:\s*\(reminders/);
+});
+
 test('confirmation names the resolved local time', () => {
   const now = new Date('2026-11-07T12:00:00.000Z');
   assert.equal(

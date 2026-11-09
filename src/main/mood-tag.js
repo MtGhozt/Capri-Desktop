@@ -24,8 +24,11 @@ const ACTION_TAG_HELP = [
   '[open:<app>], [play:<canción>] o [play:hersong],',
   `[music:${MUSIC_VALUES.join('|')}].`,
   'Para un recordatorio o una alarma usá [remind:<fecha y hora ISO 8601 en la zona local que te dije>|<texto corto>],',
-  'por ejemplo [remind:2026-11-08T07:00:00-06:00|tengo un evento]. Las horas relativas ("en media hora",',
-  '"mañana a las 8") calculalas desde la hora local de arriba. Al confirmar, repetí siempre la hora local resuelta.',
+  'por ejemplo [remind:2026-11-08T07:00:00-06:00|tomar agua] (suena a esa hora).',
+  'Si es un evento/reunión/cita ("mañana a las 8 tengo un evento"), avisá ANTES con un tercer campo en minutos:',
+  '[remind:2026-11-08T08:00:00-06:00|tengo un evento|60] (por defecto 60 = 1 h antes; si dice "avisame 2 horas antes", usá 120).',
+  'Al confirmar un evento, repetí la hora del evento Y la del aviso. Las horas relativas ("en media hora",',
+  '"mañana a las 8") calculalas desde la hora local de arriba.',
   'Solo esas se ejecutan; cualquier otra cosa es texto normal.',
   'Nunca digas que ponés, abrís, cerrás o hacés algo si no incluiste la etiqueta correspondiente: sin etiqueta no pasó nada. Si no podés emitirla, no lo prometas.',
 ].join(' ');
@@ -57,8 +60,27 @@ function parseAction(name, value) {
     const bar = text.indexOf('|');
     if (bar < 0) return null;
     const at = Date.parse(text.slice(0, bar).trim());
-    const what = text.slice(bar + 1).trim().slice(0, 200);
-    return Number.isFinite(at) && what ? { kind, value: what, at: new Date(at).toISOString() } : null;
+    const rest = text.slice(bar + 1);
+    const bar2 = rest.indexOf('|');
+    const what = (bar2 < 0 ? rest : rest.slice(0, bar2)).trim().slice(0, 200);
+    // inline notice parser (avoid requiring reminders.js → llm → mood-tag cycle)
+    let noticeMin = 0;
+    if (bar2 >= 0) {
+      const raw = rest.slice(bar2 + 1).trim().toLowerCase();
+      const asNum = Number(raw);
+      if (Number.isFinite(asNum) && asNum >= 0) noticeMin = Math.round(asNum);
+      else {
+        const m = /^(\d+(?:[.,]\d+)?|media)\s*(h|hs|horas?|m|min|mins|minutos?)?$/.exec(raw);
+        if (m) {
+          const n = m[1] === 'media' ? 0.5 : Number(String(m[1]).replace(',', '.'));
+          if (Number.isFinite(n)) noticeMin = Math.round(/^h/.test(m[2] || 'm') ? n * 60 : n);
+        }
+      }
+    }
+    if (!Number.isFinite(at) || !what) return null;
+    const action = { kind, value: what, at: new Date(at).toISOString() };
+    if (noticeMin > 0) action.noticeMin = noticeMin;
+    return action;
   }
   const allowed = kind === 'mic' ? MIC_VALUES : MUSIC_VALUES;
   const picked = text.toLowerCase();
