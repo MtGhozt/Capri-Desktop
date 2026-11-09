@@ -4,30 +4,34 @@
 
 ### Clima y feriados
 
-- **Clima y feriados junto a la hora local:** en Ajustes › Comportamiento, al lado de «País / zona horaria», podés poner una ciudad/país opcional. Capri consulta Open-Meteo (geocoding + forecast) y Nager.Date (feriados), sin API key, con caché corta y fallo silencioso si no hay red. Esos datos van al contexto temporal del modelo solo cuando existen (nunca inventa clima). Preguntas simples («¿va a llover hoy?», «¿mañana es feriado?») se responden por el camino de comandos directos cuando alcanza. Si la ciudad no existe, Ajustes muestra «No encontré esa ciudad»; si resuelve, el nombre canónico (p. ej. San José, Costa Rica). Sin red no spamea errores.
+- **Clima y feriados junto a la hora local:** en Ajustes › Comportamiento, al lado de «País / zona horaria», podés poner una ciudad/país opcional. Capri consulta Open-Meteo (geocoding + forecast) y Nager.Date (feriados), sin API key, con caché corta y fallo silencioso si no hay red. Esos datos van al contexto temporal del modelo (`temporalExtras`) para que responda en carácter; si el LLM falla o está offline, cae al texto directo sin mostrar `chat:error`. Si la ciudad no existe, Ajustes muestra «No encontré esa ciudad»; si resuelve, el nombre canónico (p. ej. San José, Costa Rica).
+- **Textos de clima en español:** «probabilidad» (no «chance»).
 
 ### Recordatorios
 
-- **Aviso anticipado de eventos:** «mañana a las 8 tengo un evento» puede crear el recordatorio 1–2 h antes (por defecto 1 h; «avisame 2 horas antes» → 2 h) vía la etiqueta `[remind:ISO|texto|minutos]`. La respuesta confirma la hora del evento y la del aviso.
-- **Editar / mover / borrar:** por voz o chat («pasá el de las 8 a las 9», «mové el de tomar agua a mañana») y en Ajustes › Recordatorios (lista pendiente con editar hora y borrar). El editor de hora usa la zona de `cfg.timeZone`, no la del reloj de Windows. Si hay varios que coinciden, pregunta cuál.
+- **Aviso anticipado de eventos:** «mañana a las 8 tengo un evento» puede crear el recordatorio 1–2 h antes (por defecto 1 h; «avisame 2 horas antes» → 2 h) vía `[remind:ISO|texto|minutos]`. Listas/movimientos muestran «evento · aviso» cuando difieren; al mover/editar se mueve `eventAt` y se recalcula `at` con el `noticeMin`.
+- **Editar / mover / borrar:** por voz o chat y en Ajustes › Recordatorios. El editor edita la hora del evento (mantiene el aviso); `datetime-local` usa `cfg.timeZone`. Ajustes abiertos se refrescan al agregar/mover/borrar.
+- **Formato 12h / 24h:** `cfg.timeFormat` (por defecto 24h) en Ajustes › Comportamiento; aplica a `formatWhen` / textos hablados de recordatorios. El input nativo sigue en 24h.
 
 ### Menú y Ajustes
 
-- **«Iniciar con Windows»** vuelve a Comportamiento (había desaparecido en el rediseño 4I) y lee el estado real del login item del SO.
+- **«Iniciar con Windows»** vuelve a Comportamiento y lee el estado real del login item del SO.
 - Pestañas renombradas: **Memoria y personalidad**, **Oído y voz**; **Recordatorios** tiene su propia entrada en la barra.
 - **Atajos:** chips alineados en una grilla (etiqueta · combo · CAMBIAR).
 - Overlay **Proveedor:** solo cerebros activos en orden de prioridad, con ↑/↓ y «Más proveedores…» → Cerebro.
-- **Guardar clip:** si no hay GPU NVIDIA, aviso «Solo con NVIDIA (ShadowPlay)» en vez de fallar en silencio.
+- **Menos lag al clic:** `hasNvidiaGpu` se cachea por sesión; detección de agentes sirve caché y refresca en background; `rebuildTray` va debounced (~300 ms); el menú actualiza en optimista y reconcilia con `getMenu`.
+- **Guardar clip:** con NVIDIA sigue ShadowPlay (Alt+F10 / atajo config). Sin NVIDIA dispara **Win+Alt+G** (Xbox Game Bar, «record last 30 s»; hace falta grabación en segundo plano en Windows).
 
 ### Pantalla
 
-- **«Mirá mi pantalla» mira el monitor correcto:** la captura elegía la pantalla más cercana al mouse y, si no encontraba su id, la primera de la lista. Con dos monitores eso podía ser el que solo tiene el fondo y el cartel «Activar Windows». Ahora usa el monitor de la ventana que tenés adelante (el rectángulo ya lo daba el vigilante de ventanas), después el del mouse y por último el de Capri. Si hay varios monitores y ninguno coincide, no manda la captura de otro.
-- **Primer frame negro:** un frame plano negro se reintenta hasta tres veces antes de darse por vencido. Un frame quieto ya no se descarta como «repetido»: una ventana estática es una captura válida.
-- **La foto ya no queda en disco:** el aviso de consentimiento decía «no la guardo en disco» y ahora es cierto. La captura vive en memoria para esa respuesta; un `last-capture.jpg` de una versión anterior se borra al arrancar y solo se guarda si activás el guardado de depuración de voz (`voice.debugSave`, apagado por defecto).
+- **«Mirá mi pantalla» mira el monitor correcto:** usa el monitor de la ventana adelante, después el del mouse y por último el de Capri.
+- **Primer frame negro:** reintento hasta tres veces; un frame quieto ya no se descarta.
+- **La foto ya no queda en disco:** solo en memoria salvo `voice.debugSave`.
 
 ### Voz
 
-- **Instalación sin falsos «Listo»:** `setup.ps1` ahora corta cuando un paso de pip sale con error y, al terminar OmniVoice, verifica que `torch` y `omnivoice` importen con el mismo Python que usa el sidecar; si no, muestra el error real. «Ver detalles» se lee mejor, se puede seleccionar y tiene «Copiar detalles», y todo el output queda en `voice.log`. Si OmniVoice falla por falta de torch, Capri avisa una vez que usa la voz normal y deja de reintentar y de mostrar «Descargando voz…».
+- **Instalación sin falsos «Listo»:** `setup.ps1` corta en error de pip; verifica imports de OmniVoice; fallback a Kokoro con aviso claro.
+- **TTS más estable:** `%` → «por ciento», `°C` → «grados»; quita «» y paréntesis; OmniVoice fija `torch.manual_seed` y parte frases largas (~80) en comas/punto y coma.
 
 ## 0.2.7 (etiqueta `v0.2.7`)
 

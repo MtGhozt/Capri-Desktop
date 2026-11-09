@@ -7,10 +7,10 @@ const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
   '0.2.8': [
-    'Clima/feriados con ciudad en Ajustes; «Iniciar con Windows» volvió a Comportamiento.',
-    'Proveedor del overlay = prioridad de cerebros (↑↓); clip avisa si no hay NVIDIA.',
-    'Recordatorios se editan en su pestaña (zona de Ajustes) o por chat; aviso 1 h antes en eventos.',
-    'Al mirar la pantalla uso el monitor de la ventana adelante; la foto no queda en disco.',
+    'Clima/feriados en carácter; si el modelo falla, te contesto igual sin cartel de error.',
+    'Recordatorios con aviso previo, editor en Ajustes y formato 12h/24h en Comportamiento.',
+    'Clip: ShadowPlay en NVIDIA, o Win+Alt+G (Xbox Game Bar) si no hay NVIDIA.',
+    'Menú más fluido y voz más estable; al mirar la pantalla uso el monitor de adelante.',
   ],
   '0.2.7': [
     'Volví a Gemini gratis y, si preguntás qué modelo soy, te digo el mío real; tu modelo elegido a mano no se toca.',

@@ -65,17 +65,30 @@ test('overlay Proveedor lists active brains with reorder and Más proveedores', 
   assert.match(main, /case 'model-reorder': return reorderBrains/);
 });
 
-test('Guardar clip shows NVIDIA-only note when hasNvidiaGpu is false', () => {
+test('Guardar clip uses Game Bar when hasNvidiaGpu is false', () => {
   assert.equal(typeof hasNvidiaGpu, 'function');
   const menu = fs.readFileSync(menuPath, 'utf8');
-  assert.match(menu, /Solo con NVIDIA \(ShadowPlay\)/);
-  assert.match(menu, /Solo NVIDIA/);
+  assert.match(menu, /Xbox Game Bar/);
+  assert.match(menu, /Win\+Alt\+G/);
   assert.match(menu, /clips\?\.nvidia/);
   const main = fs.readFileSync(mainPath, 'utf8');
-  assert.match(main, /nvidia:\s*hasNvidiaGpu\(\)/);
+  assert.match(main, /GAME_BAR_CLIP_HOTKEY/);
+  assert.match(main, /Win\+Alt\+G/);
+  assert.match(main, /hasNvidiaGpu\(\)[\s\S]*?saveClip/);
   const help = fs.readFileSync(helpPath, 'utf8');
   assert.match(help, /clip:\s*\{/);
   assert.match(help, /ShadowPlay/);
+  assert.match(help, /Game Bar/);
+});
+
+test('Ajustes exposes timeFormat 12h/24h for reminder clocks', () => {
+  const menu = fs.readFileSync(menuPath, 'utf8');
+  assert.match(menu, /Formato de hora/);
+  assert.match(menu, /time-format/);
+  const main = fs.readFileSync(mainPath, 'utf8');
+  assert.match(main, /case 'time-format'/);
+  assert.match(main, /normalizeTimeFormat/);
+  assert.match(main, /timeFormat:\s*normalizeTimeFormat/);
 });
 
 test('hasNvidiaGpu caches the default probe once per session', () => {

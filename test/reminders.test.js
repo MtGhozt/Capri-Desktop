@@ -197,6 +197,12 @@ test('confirmation names the resolved local time', () => {
     formatWhen(Date.parse('2026-11-08T13:00:00.000Z'), { now, timeZone: 'Europe/Madrid' }),
     'mañana a las 14:00',
   );
+  const twelve = formatWhen(Date.parse('2026-11-08T13:00:00.000Z'), {
+    now, timeZone: 'Europe/Madrid', timeFormat: '12h',
+  });
+  assert.match(twelve, /mañana a las/i);
+  assert.match(twelve, /2:00|14:00/i); // locale may spell 2:00 p. m.
+  assert.doesNotMatch(twelve, /\b14:00\b/);
 });
 
 test('reminders survive a restart', () => {

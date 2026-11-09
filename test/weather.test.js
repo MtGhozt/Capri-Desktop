@@ -169,6 +169,8 @@ test('weather fallback still works when the LLM path would throw', async () => {
     main.indexOf('chat:cancel'),
   );
   assert.match(chatSend, /weatherFallbackLine/);
+  assert.match(chatSend, /mayWeatherFallback/);
+  assert.match(chatSend, /if \(!mayWeatherFallback\) overlay\?\.webContents\.send\('chat:error'/);
   assert.doesNotMatch(chatSend, /weather\.answerDirect\(/);
 });
 

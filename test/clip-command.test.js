@@ -51,6 +51,10 @@ test('parses the default NVIDIA hotkey', () => {
   assert.deepEqual(parseHotkey('Alt+F10'), { mods: ['Alt'], key: 'F10' });
 });
 
+test('parses Xbox Game Bar Win+Alt+G', () => {
+  assert.deepEqual(parseHotkey('Win+Alt+G'), { mods: ['Super', 'Alt'], key: 'G' });
+});
+
 test('parses a combo with several modifiers in order', () => {
   assert.deepEqual(parseHotkey('Ctrl+Shift+F9'), { mods: ['Control', 'Shift'], key: 'F9' });
   assert.deepEqual(parseHotkey('ctrl + alt + k'), { mods: ['Control', 'Alt'], key: 'K' });

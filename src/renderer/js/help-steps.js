@@ -168,11 +168,11 @@ export const HELP_STEPS = {
   clip: {
     title: 'Guardar clip',
     section: 'behavior',
-    note: 'Solo con GPU NVIDIA (ShadowPlay / Instant Replay). En otras GPUs el atajo no hace nada.',
+    note: 'NVIDIA usa ShadowPlay (Alt+F10). Sin NVIDIA, Win+Alt+G (Xbox Game Bar; grabación en segundo plano).',
     steps: [
       'Con NVIDIA: Alt+F10 (o el atajo de Instant Replay) guarda el clip reciente.',
       'Activá Instant Replay en la app de NVIDIA si todavía no está.',
-      'Sin NVIDIA este botón queda avisado; no hay grabador propio por ahora.',
+      'Sin NVIDIA: Win+Alt+G pide a Xbox Game Bar el «record last 30 s»; hace falta grabación en segundo plano en Windows.',
     ],
   },
   memory: {

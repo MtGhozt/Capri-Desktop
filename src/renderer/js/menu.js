@@ -487,19 +487,12 @@ export class AppMenu {
       ));
     row('Corregir lo último', hearing.fixes?.length ? `${hearing.fixes.length} CORRECCIONES` : 'OÍDO', 'fixes',
       () => { this.hide(); this.host.openSettings('hearing'); });
-    const clipOk = state.clips?.nvidia !== false;
+    const clipNvidia = state.clips?.nvidia !== false;
     row(
       'Guardar clip',
-      clipOk ? (state.clips?.hotkey || 'ALT+F10') : 'Solo NVIDIA',
+      clipNvidia ? (state.clips?.hotkey || 'ALT+F10') : 'Win+Alt+G · Game Bar',
       'clip-save',
-      clipOk
-        ? () => this.act('clip-save')
-        : (anchor) => {
-          this.helpOpen = this.helpOpen === 'clip' ? null : 'clip';
-          this.helpAnchor = anchor;
-          this.renderQuick(this.lastState);
-          requestAnimationFrame(() => this.placeSubmenu());
-        },
+      () => this.act('clip-save'),
     );
     row('Hacer algo', '', 'do-something', () => this.act('do-something'));
     row('Comportamiento', cfg.locked ? 'FIJO' : 'NORMAL', 'behavior',
@@ -1345,10 +1338,10 @@ export class AppMenu {
     const clipNvidia = state.clips?.nvidia !== false;
     action('Guardar clip', {
       setting: 'behavior',
-      hotkey: clipNvidia ? state.clips.hotkey : '',
-      value: clipNvidia ? '' : 'Solo con NVIDIA (ShadowPlay)',
+      hotkey: state.clips?.hotkey || (clipNvidia ? 'Alt+F10' : 'Win+Alt+G'),
+      value: clipNvidia ? '' : 'Xbox Game Bar (grabación en segundo plano en Windows)',
       help: 'clip',
-      onClick: clipNvidia ? () => this.act('clip-save') : undefined,
+      onClick: () => this.act('clip-save'),
     });
     action('Abrir carpeta de clips', {
       setting: 'behavior',
@@ -1366,14 +1359,25 @@ export class AppMenu {
     nameRow.append(nameInput);
     body.append(nameRow);
     const zone = resolvedTimeZone(cfg.timeZone);
+    const hour12 = String(cfg.timeFormat || '24h') === '12h';
     selector('País / zona horaria', {
       setting: 'behavior',
       options: TIME_ZONE_OPTIONS,
       current: validTimeZone(cfg.timeZone),
       onChange: (id) => this.act('time-zone', id),
     });
+    selector('Formato de hora', {
+      setting: 'behavior',
+      options: [
+        { id: '24h', label: '24 H' },
+        { id: '12h', label: '12 H' },
+      ],
+      current: hour12 ? '12h' : '24h',
+      onChange: (id) => this.act('time-format', id),
+    });
     const zoneNow = build('div', 'appmenu__hint', `${new Intl.DateTimeFormat('es', {
-      timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+      timeZone: zone, weekday: 'long', day: 'numeric', month: 'long',
+      hour: '2-digit', minute: '2-digit', hour12,
     }).format(new Date())} · ${zone}`);
     zoneNow.dataset.setting = 'behavior';
     body.append(zoneNow);
@@ -1798,6 +1802,7 @@ export class AppMenu {
   }
 
   // Mirrors reminders.formatDateTimeLocal / parseDateTimeLocal (renderer cannot require main).
+  // Always 24h clock for the native datetime-local value; spoken/list labels use cfg.timeFormat.
   reminderInputValue(at, timeZone = '') {
     const ms = Number(at);
     if (!Number.isFinite(ms)) return '';
@@ -2775,6 +2780,7 @@ export class AppMenu {
       case 'app-fx': cfg.fx = { ...(cfg.fx || {}), apps: Boolean(value) }; return true;
       case 'scanlines': cfg.fx = { ...(cfg.fx || {}), scanlines: Boolean(value) }; return true;
       case 'time-zone': cfg.timeZone = value; return true;
+      case 'time-format': cfg.timeFormat = value === '12h' ? '12h' : '24h'; return true;
       case 'weather-place': cfg.weatherPlace = value; return true;
       case 'music-player': cfg.music = { ...(cfg.music || {}), player: value }; return true;
       default: return false;
@@ -2795,7 +2801,7 @@ export class AppMenu {
       || id === 'startup' || id === 'gaming-mode' || id === 'drone-mode' || id === 'comments' || id === 'comments-range'
       || id === 'greetings' || id === 'unlock-greeting' || id === 'caresses' || id === 'music-dance'
       || id === 'app-fx' || id === 'scanlines' || id === 'game-list'
-      || id === 'time-zone' || id === 'weather-place' || id === 'reminder-update' || id === 'reminder-delete';
+      || id === 'time-zone' || id === 'time-format' || id === 'weather-place' || id === 'reminder-update' || id === 'reminder-delete';
     if (keep && this.open && this.optimisticAct(id, value)) {
       this.render(this.lastState);
     }

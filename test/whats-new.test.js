@@ -26,16 +26,16 @@ test('0.2.6 has 2–3 short lines', () => {
   for (const line of lines) assert.ok(line.length < 120);
 });
 
-test('0.2.8 has 2–4 short lines about weather, menu cleanup and screen look', () => {
+test('0.2.8 has 2–4 short lines about weather, reminders, clip and polish', () => {
   const lines = notesFor('0.2.8');
   assert.equal(Array.isArray(lines), true);
   assert.ok(lines.length >= 2 && lines.length <= 4);
   for (const line of lines) assert.ok(line.length < 120);
   const all = lines.join(' ');
-  assert.match(all, /clima|feriados|Iniciar con Windows/i);
-  assert.match(all, /prioridad|NVIDIA|Proveedor/i);
-  assert.match(all, /recordatorios/i);
-  assert.match(all, /pantalla|disco/i);
+  assert.match(all, /clima|feriados/i);
+  assert.match(all, /12h|24h|recordatorios/i);
+  assert.match(all, /Game Bar|NVIDIA|ShadowPlay|Win\+Alt\+G/i);
+  assert.match(all, /menú|voz|pantalla/i);
 });
 
 test('a version with no entry says nothing', () => {

@@ -257,13 +257,18 @@ function parseDateTimeLocal(value, timeZone = '') {
   }, timeZone);
 }
 
-function formatWhen(at, { now = new Date(), timeZone = '' } = {}) {
+function normalizeTimeFormat(value) {
+  return String(value || '').toLowerCase() === '12h' ? '12h' : '24h';
+}
+
+function formatWhen(at, { now = new Date(), timeZone = '', timeFormat = '24h' } = {}) {
   const zone = resolveTimeZone(timeZone);
+  const hour12 = normalizeTimeFormat(timeFormat) === '12h';
   const day = (date) => new Intl.DateTimeFormat('en-CA', {
     timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(date);
   const time = new Intl.DateTimeFormat('es-CR', {
-    timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: zone, hour: '2-digit', minute: '2-digit', hour12,
   }).format(new Date(at));
   const today = day(now);
   if (day(new Date(at)) === today) return `hoy a las ${time}`;
@@ -445,6 +450,6 @@ function createReminders({
 
 module.exports = {
   CHECK_MS, DEFAULT_NOTICE_MIN, parseReminderCommand, parseNoticeMinutes, resolveFireAt,
-  parseMoveTarget, findMatches, formatWhen, formatDateTimeLocal, parseDateTimeLocal,
+  parseMoveTarget, findMatches, formatWhen, normalizeTimeFormat, formatDateTimeLocal, parseDateTimeLocal,
   deliverReminder, createReminders, readsAsReminderRequest, promisesReminder, durationText,
 };

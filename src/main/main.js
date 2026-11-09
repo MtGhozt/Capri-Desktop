@@ -41,6 +41,7 @@ const { isDirectCommand } = require('./direct-match');
 const {
   createReminders, parseReminderCommand, formatWhen, deliverReminder,
   readsAsReminderRequest, promisesReminder, resolveFireAt, durationText, parseMoveTarget,
+  normalizeTimeFormat,
 } = require('./reminders');
 const { createWeather, isWeatherOrHolidayQuestion } = require('./weather');
 const { isQuitCommand } = require('./quit-command');
@@ -1024,7 +1025,12 @@ function goMicReply(on, { chat = true } = {}) {
   return { ok: true };
 }
 
+const GAME_BAR_CLIP_HOTKEY = 'Win+Alt+G';
+
 function clipFailLine(error) {
+  if (!hasNvidiaGpu()) {
+    return `No pude disparar Xbox Game Bar (Win+Alt+G). Activá la grabación en segundo plano en Windows.${error ? ` (${error})` : ''}`;
+  }
   return `No pude disparar el atajo del clip. Revisá NVIDIA o el atajo en config.${error ? ` (${error})` : ''}`;
 }
 
@@ -1076,7 +1082,10 @@ function goFixReply(order, { chat = true } = {}) {
 
 async function goClipReply({ chat = true } = {}) {
   const cfg = config.load();
-  const result = await saveClip(cfg.clips?.saveHotkey || 'Alt+F10');
+  const hotkey = hasNvidiaGpu()
+    ? (cfg.clips?.saveHotkey || 'Alt+F10')
+    : GAME_BAR_CLIP_HOTKEY;
+  const result = await saveClip(hotkey);
   if (result.ok) commandReply('clip', { chat, badge: 'CLIP' });
   else announce(clipFailLine(result.error), { chat, badge: 'CLIP' });
   return { ok: result.ok };
@@ -1087,7 +1096,11 @@ async function goClipReply({ chat = true } = {}) {
 // next to config.json; reminders.js checks it every few seconds, so a long wait is just data.
 
 function reminderWhen(at) {
-  return formatWhen(at, { timeZone: config.load().timeZone });
+  const cfg = config.load();
+  return formatWhen(at, {
+    timeZone: cfg.timeZone,
+    timeFormat: normalizeTimeFormat(cfg.timeFormat),
+  });
 }
 
 // Event clock first; when there is advance notice, also name the fire time.
@@ -2341,6 +2354,7 @@ function applyMenuAction(id, value) {
         : { ok: true };
     }
     case 'time-zone': updateConfig({ timeZone: String(value || '').trim() }); break;
+    case 'time-format': updateConfig({ timeFormat: normalizeTimeFormat(value) }); break;
     case 'weather-place': {
       const place = String(value || '').trim().slice(0, 80);
       updateConfig({ weatherPlace: place });
@@ -2654,6 +2668,7 @@ function menuState(extra = {}) {
       locked: Boolean(cfg.position?.locked),
       userName: String(cfg.userName || ''),
       timeZone: String(cfg.timeZone || ''),
+      timeFormat: normalizeTimeFormat(cfg.timeFormat),
       weatherPlace: String(cfg.weatherPlace || ''),
       reminders: (reminders?.list?.() || []).map((item) => ({
         id: item.id,
@@ -2772,7 +2787,7 @@ function menuState(extra = {}) {
       })),
     },
     clips: {
-      hotkey: cfg.clips?.saveHotkey || 'Alt+F10',
+      hotkey: hasNvidiaGpu() ? (cfg.clips?.saveHotkey || 'Alt+F10') : GAME_BAR_CLIP_HOTKEY,
       folder: clipFolderLabel(cfg),
       nvidia: hasNvidiaGpu(),
     },

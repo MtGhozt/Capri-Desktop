@@ -12,6 +12,7 @@ const DEFAULTS = {
   volume: 0.7,
   lang: 'es',        // overlay + Capri's spoken replies; 'auto' follows the system language
   timeZone: '',      // '' = automatic (this PC's zone); an IANA name such as 'Europe/Madrid' overrides it
+  timeFormat: '24h', // '24h' | '12h' — reminder / spoken clocks in Ajustes › Comportamiento
   weatherPlace: '',  // optional "City, Country" for Open-Meteo + Nager.Date holidays; '' = off
   displayId: null,   // null = primary display
   wander: true,      // random teleports when idle
