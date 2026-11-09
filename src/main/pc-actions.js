@@ -316,7 +316,14 @@ function parsePcCommand(text) {
     return { kind: 'volume', value: 'unmute' };
   }
 
-  // numeric set only — "sube/baja el volumen" stays music session volume
+  // master volume ±10% (music session keeps phrases that name "la música")
+  if (/^(?:(?:sube|subi)(?:le)?(?: el volumen)?|mas(?: alto| volumen))$/.test(said)) {
+    return { kind: 'volume', value: 'up' };
+  }
+  if (/^(?:(?:baja|baje)(?:le)?(?: el volumen)?|menos(?: alto| volumen))$/.test(said)) {
+    return { kind: 'volume', value: 'down' };
+  }
+
   const set = /^(?:(?:pon(?:e|me|eme)? )?(?:el )?volumen(?: a| al| en)? |volumen(?: a| al)? )(\d{1,3})\s*%?$/.exec(said);
   if (set) {
     const n = Number(set[1]);

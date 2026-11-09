@@ -69,8 +69,8 @@ test('volume/mute hit the music session, never master media keys', async () => {
   const { VOLUME_SCRIPT } = require('../src/main/music');
   const cases = [
     ['Silencia la música', 'mute'],
-    ['sube el volumen', 'volumeUp'],
-    ['baja el volumen', 'volumeDown'],
+    ['sube el volumen de la música', 'volumeUp'],
+    ['baja el volumen de la música', 'volumeDown'],
     ['quita el silencio de la música', 'unmute'],
   ];
   for (const [said, action] of cases) {
@@ -87,7 +87,7 @@ test('volume/mute hit the music session, never master media keys', async () => {
 
 test('volume uses Spotify API when that player is connected', async () => {
   const calls = [];
-  const r = await route('sube el volumen', {
+  const r = await route('sube el volumen de la música', {
     cfg: { music: { player: 'spotify' } },
     spotify: {
       volume: async (action) => { calls.push(action); return { ok: true, player: 'spotify', volume: 60 }; },
@@ -97,6 +97,14 @@ test('volume uses Spotify API when that player is connected', async () => {
   assert.deepEqual(calls, ['volumeUp']);
   assert.deepEqual(r.volumes, []); // API handled it
   assert.deepEqual(r.keys, []);
+});
+
+test('plain sube/baja el volumen is not a music volume order', async () => {
+  for (const said of ['sube el volumen', 'baja el volumen', 'más volumen', 'menos volumen']) {
+    const r = await route(said);
+    assert.equal(r.parsed, null, said);
+    assert.equal(r.result, null, said);
+  }
 });
 
 test('volume with no music session says so playfully', async () => {

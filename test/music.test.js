@@ -12,19 +12,25 @@ test('parses media commands without matching ordinary phrases', () => {
   assert.deepEqual(parseMusicCommand('pausa la música'), { action: 'pause' });
   assert.deepEqual(parseMusicCommand('sigue'), { action: 'play' });
   assert.deepEqual(parseMusicCommand('la siguiente'), { action: 'next' });
-  assert.deepEqual(parseMusicCommand('baja el volumen'), { action: 'volumeDown' });
+  assert.deepEqual(parseMusicCommand('baja el volumen de la música'), { action: 'volumeDown' });
   assert.deepEqual(parseMusicCommand('silencia la música'), { action: 'mute' });
   assert.equal(parseMusicCommand('silencio'), null); // system mute → pc-actions
+  assert.equal(parseMusicCommand('baja el volumen'), null); // system master → pc-actions
   assert.deepEqual(parseMusicCommand('qué está sonando'), { action: 'nowPlaying' });
   assert.equal(parseMusicCommand('la siguiente pregunta'), null);
 });
 
-test('plain mute/unmute are not music; theme/volume are not song searches', () => {
-  for (const said of ['mute', 'silencio', 'silenciá', 'quitá el sonido', 'desmutea', 'activá el sonido']) {
+test('plain mute/unmute/volume are not music; theme/volume set are not song searches', () => {
+  for (const said of [
+    'mute', 'silencio', 'silenciá', 'quitá el sonido', 'desmutea', 'activá el sonido',
+    'subí el volumen', 'sube el volumen', 'bajá el volumen', 'más volumen', 'menos volumen',
+  ]) {
     assert.equal(parseMusicCommand(said), null, said);
   }
   assert.deepEqual(parseMusicCommand('muteá la música'), { action: 'mute' });
   assert.deepEqual(parseMusicCommand('desmutea la música'), { action: 'unmute' });
+  assert.deepEqual(parseMusicCommand('sube el volumen de la música'), { action: 'volumeUp' });
+  assert.deepEqual(parseMusicCommand('sube la música'), { action: 'volumeUp' });
   for (const said of ['poné modo oscuro', 'pon tema claro', 'pon el volumen a 30', 'pon brillo']) {
     assert.equal(parseMusicCommand(said), null, said);
   }

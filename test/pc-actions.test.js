@@ -119,8 +119,32 @@ test('parsePcCommand takes system mute/theme/volume before music', () => {
   assert.deepEqual(parsePcCommand('pon tema claro'), { kind: 'theme', value: 'light' });
   assert.deepEqual(parsePcCommand('volumen a 30'), { kind: 'volume', value: '30' });
   assert.deepEqual(parsePcCommand('pon el volumen al 50%'), { kind: 'volume', value: '50' });
+  assert.deepEqual(parsePcCommand('subí el volumen'), { kind: 'volume', value: 'up' });
+  assert.deepEqual(parsePcCommand('sube el volumen'), { kind: 'volume', value: 'up' });
+  assert.deepEqual(parsePcCommand('más volumen'), { kind: 'volume', value: 'up' });
+  assert.deepEqual(parsePcCommand('bajá el volumen'), { kind: 'volume', value: 'down' });
+  assert.deepEqual(parsePcCommand('menos volumen'), { kind: 'volume', value: 'down' });
   assert.equal(parsePcCommand('silencia la música'), null); // music owns that phrase
+  assert.equal(parsePcCommand('sube el volumen de la música'), null);
   assert.equal(parsePcCommand('pon never gonna give you up'), null);
+});
+
+test('system volume up/down runs CapriAudio ±10', async () => {
+  const cmds = [];
+  const up = await run(
+    { kind: 'volume', value: 'up' },
+    { platform: 'win32', powershell: async (cmd) => { cmds.push(cmd); return '55'; } },
+  );
+  assert.equal(up.ok, true);
+  assert.equal(up.level, 55);
+  assert.ok(cmds[0].includes('Level + 10'));
+  cmds.length = 0;
+  const down = await run(
+    { kind: 'volume', value: 'down' },
+    { platform: 'win32', powershell: async (cmd) => { cmds.push(cmd); return '45'; } },
+  );
+  assert.equal(down.ok, true);
+  assert.ok(cmds[0].includes('Level - 10'));
 });
 
 test('desktop with no Win32_Battery gets an explicit no-battery fact', async () => {

@@ -27,8 +27,9 @@ const PATTERNS = [
   ['play', new RegExp(`^(?:sigue|seguir|continua|reanuda|resume|despausa|despauza|despausala|despauzala|quita (?:la )?pausa|dale play|play)${SONG}$`)],
   ['next', new RegExp(`^(?:(?:pasa|pon|cambia|salta)(?: a)? (?:la |el )?(?:siguiente|otra|proxima)${SONG}|(?:la |el )?(?:siguiente|proxima)${SONG}|(?:pasa|cambia|salta)${SONG}|otra (?:cancion|rola)|skip)$`)],
   ['previous', new RegExp(`^(?:(?:pon|regresa|vuelve)(?: a)? (?:la |el )?(?:anterior|de antes)${SONG}|(?:la |el )?anterior${SONG}|la de antes)$`)],
-  ['volumeUp', /^(?:sube(?: la musica| el volumen)?|subele|mas(?: alto| volumen))$/],
-  ['volumeDown', /^(?:baja(?: la musica| el volumen)?|bajale|menos(?: alto| volumen))$/],
+  // system master volume is pc-actions; music session only when she names the music
+  ['volumeUp', /^(?:(?:sube|subi)(?:le)?(?: (?:el )?volumen)?(?: de)? la musica|mas(?: alto| volumen)(?: de)? la musica)$/],
+  ['volumeDown', /^(?:(?:baja|baje)(?:le)?(?: (?:el )?volumen)?(?: de)? la musica|menos(?: alto| volumen)(?: de)? la musica)$/],
   // system mute/unmute ("silencio", "mute") is pc-actions; music only when she names the music
   ['mute', /^(?:(?:silencio|silencia|mutea|mute)(?: de)? la musica|quita(?: el )?sonido(?: de)? la musica)$/],
   ['unmute', /^(?:(?:desmutea|unmute|quita(?: el )?silencio|restaura(?: el )?sonido|activa(?: el )?sonido)(?: de)? la musica)$/],
