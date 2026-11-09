@@ -119,6 +119,7 @@ test('reminder datetime-local uses cfg.timeZone, not the PC clock', () => {
   assert.equal(formatDateTimeLocal(back, 'Europe/Madrid'), '2026-11-08T16:00');
   assert.equal(formatDateTimeLocal(back, 'America/Costa_Rica'), '2026-11-08T09:00');
   const menu = fs.readFileSync(menuPath, 'utf8');
-  assert.match(menu, /reminderInputValue\(item\.at,\s*cfg\.timeZone\)/);
+  assert.match(menu, /reminderInputValue\(editAt,\s*cfg\.timeZone\)/);
+  assert.match(menu, /item\.eventAt\s*\|\|\s*item\.at/);
   assert.match(menu, /reminderInputToIso\(whenInput\.value,\s*cfg\.timeZone\)/);
 });

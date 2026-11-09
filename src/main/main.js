@@ -42,7 +42,7 @@ const {
   createReminders, parseReminderCommand, formatWhen, deliverReminder,
   readsAsReminderRequest, promisesReminder, resolveFireAt, durationText, parseMoveTarget,
 } = require('./reminders');
-const { createWeather } = require('./weather');
+const { createWeather, isWeatherOrHolidayQuestion } = require('./weather');
 const { isQuitCommand } = require('./quit-command');
 const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
@@ -1088,6 +1088,48 @@ function reminderWhen(at) {
   return formatWhen(at, { timeZone: config.load().timeZone });
 }
 
+// Event clock first; when there is advance notice, also name the fire time.
+function reminderLabel(item) {
+  const fireAt = Number(item?.at);
+  const eventAt = Number(item?.eventAt);
+  const noticeMin = Number(item?.noticeMin) || 0;
+  if (Number.isFinite(eventAt) && noticeMin > 0 && eventAt !== fireAt) {
+    return `${reminderWhen(eventAt)} · aviso ${reminderWhen(fireAt)}`;
+  }
+  return reminderWhen(Number.isFinite(eventAt) ? eventAt : fireAt);
+}
+
+function applyReminderEventMove(item, eventAt) {
+  const noticeMin = Number(item?.noticeMin) || 0;
+  if (Number.isFinite(Number(item?.eventAt)) && noticeMin > 0) {
+    const resolved = resolveFireAt(eventAt, noticeMin);
+    if (!resolved) return null;
+    return reminders?.update?.(item.id, {
+      eventAt: resolved.eventAt,
+      at: resolved.at,
+      noticeMin,
+    });
+  }
+  return reminders?.update?.(item.id, { at: eventAt });
+}
+
+function refreshSettingsMenu() {
+  if (!settingsWindow || settingsWindow.isDestroyed()) return;
+  try { settingsWindow.webContents.send('settings:refresh'); } catch { /* closed */ }
+}
+
+async function weatherFallbackLine(line) {
+  if (!weather || !isWeatherOrHolidayQuestion(line)) return null;
+  try {
+    return await weather.answerDirect(line, {
+      place: config.load().weatherPlace,
+      timeZone: config.load().timeZone,
+    });
+  } catch {
+    return null;
+  }
+}
+
 function goReminderCreate(order, { chat = true, say = true } = {}) {
   const noticeMin = Math.max(0, Number(order.noticeMin) || 0);
   const eventAt = Number(order.eventAt) || Number(order.at);
@@ -1108,7 +1150,7 @@ function goReminderCreate(order, { chat = true, say = true } = {}) {
     showLine(line, { chat, badge: 'RECORDATORIO' });
     return { ok: false, line };
   }
-  let line = fillLine(pickLine('recordatorioListo'), { when: reminderWhen(created.at) });
+  let line = fillLine(pickLine('recordatorioListo'), { when: reminderLabel(created) });
   if (noticeMin > 0) {
     line = `Listo: el evento es ${reminderWhen(resolved.eventAt)}, te aviso ${durationText(noticeMin)} antes (${reminderWhen(created.at)}).`;
   }
@@ -1117,6 +1159,7 @@ function goReminderCreate(order, { chat = true, say = true } = {}) {
     followUp.reply(line, { spoken });
   }
   showLine(line, { chat, badge: 'RECORDATORIO' });
+  refreshSettingsMenu();
   return { ok: true, line };
 }
 
@@ -1126,7 +1169,7 @@ function goReminderReply(order, { chat = true } = {}) {
     const pending = reminders?.list() || [];
     const line = pending.length
       ? `Tenés ${pending.length} recordatorio${pending.length === 1 ? '' : 's'}: ${pending
-        .map((item) => `${reminderWhen(item.at)}: ${item.text}`).join(' · ')}`
+        .map((item) => `${reminderLabel(item)}: ${item.text}`).join(' · ')}`
       : 'No tenés recordatorios pendientes.';
     return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
   }
@@ -1140,22 +1183,26 @@ function goReminderReply(order, { chat = true } = {}) {
       return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
     }
     if (hits.length > 1) {
-      const line = `¿Cuál de estos? ${hits.map((item) => `${reminderWhen(item.at)}: ${item.text}`).join(' · ')}`;
+      const line = `¿Cuál de estos? ${hits.map((item) => `${reminderLabel(item)}: ${item.text}`).join(' · ')}`;
       return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
     }
-    const at = (order.destSaid
-      && (parseMoveTarget(order.destSaid, { timeZone: zone, baseAt: hits[0].at })
-        || parseMoveTarget(`a ${order.destSaid}`, { timeZone: zone, baseAt: hits[0].at })))
+    const hit = hits[0];
+    const baseAt = Number(hit.eventAt) || hit.at;
+    const eventAt = (order.destSaid
+      && (parseMoveTarget(order.destSaid, { timeZone: zone, baseAt })
+        || parseMoveTarget(`a ${order.destSaid}`, { timeZone: zone, baseAt })))
       || order.at;
-    const done = reminders.update(hits[0].id, { at });
+    const done = applyReminderEventMove(hit, eventAt);
+    refreshSettingsMenu();
     const line = done
-      ? `Listo, lo pasé a ${reminderWhen(done.at)}: ${done.text}.`
+      ? `Listo, lo pasé a ${reminderLabel(done)}: ${done.text}.`
       : 'No pude mover ese recordatorio.';
     return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
   }
   if (order.action === 'cancel') {
     if (order.all) {
       const count = reminders?.cancelAll() || 0;
+      refreshSettingsMenu();
       const line = count
         ? `Listo, cancelé ${count} recordatorio${count === 1 ? '' : 's'}.`
         : 'No tenía recordatorios para cancelar.';
@@ -1165,12 +1212,13 @@ function goReminderReply(order, { chat = true } = {}) {
       ? (reminders?.matches?.(order.match, { timeZone: config.load().timeZone }) || [])
       : [];
     if (order.match && hits.length > 1) {
-      const line = `¿Cuál cancelo? ${hits.map((item) => `${reminderWhen(item.at)}: ${item.text}`).join(' · ')}`;
+      const line = `¿Cuál cancelo? ${hits.map((item) => `${reminderLabel(item)}: ${item.text}`).join(' · ')}`;
       return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
     }
     const done = hits.length === 1
       ? reminders?.remove?.(hits[0].id)
       : reminders?.cancelOne(order.match);
+    refreshSettingsMenu();
     const line = done
       ? `Listo, cancelé este recordatorio: ${done.text}.`
       : order.match
@@ -2302,13 +2350,17 @@ function applyMenuAction(id, value) {
       const id = String(value?.id || '').trim();
       const at = Date.parse(String(value?.at || ''));
       if (!id || !Number.isFinite(at)) return { ok: false, message: 'Hora inválida.' };
-      const done = reminders?.update?.(id, { at });
+      const current = (reminders?.list?.() || []).find((item) => item.id === id);
+      if (!current) return { ok: false, message: 'No encontré ese recordatorio.' };
+      const done = applyReminderEventMove(current, at);
+      refreshSettingsMenu();
       return done
-        ? { ok: true, message: `Pasado a ${reminderWhen(done.at)}.` }
+        ? { ok: true, message: `Pasado a ${reminderLabel(done)}.` }
         : { ok: false, message: 'No encontré ese recordatorio.' };
     }
     case 'reminder-delete': {
       const done = reminders?.remove?.(String(value?.id || value || '').trim());
+      refreshSettingsMenu();
       return done
         ? { ok: true, message: `Borrado: ${done.text}.` }
         : { ok: false, message: 'No encontré ese recordatorio.' };
@@ -2605,7 +2657,7 @@ function menuState(extra = {}) {
         id: item.id,
         at: item.at,
         text: item.text,
-        when: reminderWhen(item.at),
+        when: reminderLabel(item),
         eventAt: item.eventAt || null,
         noticeMin: item.noticeMin || 0,
       })),
@@ -2884,15 +2936,7 @@ async function directCommand(line) {
   if (powerOrder) return { ok: true };
   const reminderOrder = parseReminderCommand(line, { timeZone: config.load().timeZone });
   if (reminderOrder) return goReminderReply(reminderOrder) || { ok: true };
-  if (weather) {
-    const weatherLine = await weather.answerDirect(line, {
-      place: config.load().weatherPlace,
-      timeZone: config.load().timeZone,
-    });
-    if (weatherLine) {
-      return { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
-    }
-  }
+  // Weather/holiday questions go to the LLM with facts in temporalExtras; answerDirect is fallback only.
   const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
   if (musicOrder) return musicReply(musicOrder);
   if (isSleepCommand(line)) return goSleepReply();
@@ -3095,6 +3139,10 @@ function registerIpc() {
       if (usesLms(config.load().llm?.provider)) {
         const boot = await lms.whenReady();
         if (boot === 'failed') {
+          const weatherLine = await weatherFallbackLine(line);
+          if (weatherLine) {
+            return { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
+          }
           overlay.webContents.send('chat:error', { kind: 'offline', text: 'No pude despertar LM Studio. Revisa que esté instalado y vuelve a intentarlo.' });
           return { ok: false };
         }
@@ -3146,9 +3194,19 @@ function registerIpc() {
         // who answered and how it went, with no key and no text of the answer (Paso 4K)
         if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome} image=${hadImage}: ${outcome.ms}ms`);
       }
+      if (outcome?.outcome === 'failed') {
+        const weatherLine = await weatherFallbackLine(line);
+        if (weatherLine) {
+          return { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
+        }
+      }
       return { ok: true };
     } catch (err) {
       logEvent(voiceLogPath(), `[capri] chat failed: ${err?.message || err}`);
+      const weatherLine = await weatherFallbackLine(line);
+      if (weatherLine) {
+        return { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
+      }
       resetOverlayInput('chat-error');
       return { ok: false };
     } finally {

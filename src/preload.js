@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('host', {
   onLlmBoot: on('llm:boot'),
   onVoice: on('voice:event'),
   onVoiceInstall: on('voice:install'),
+  onSettingsRefresh: on('settings:refresh'),
   interruptVoice: () => ipcRenderer.send('voice:interrupt'),
   pttStart: () => ipcRenderer.send('voice:ptt-start'),
   pttStop: () => ipcRenderer.send('voice:ptt-stop'),

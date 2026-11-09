@@ -1344,7 +1344,8 @@ button.appmenu__row {
 }
 
 .appmenu__reminder-row .appmenu__input {
-  width: 168px;
+  width: 220px;
+  min-width: 220px;
   flex: none;
 }
 

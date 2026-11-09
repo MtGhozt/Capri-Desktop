@@ -160,6 +160,15 @@ export class AppMenu {
         if (this.open && this.settingsMode && this.lastState) this.render(this.lastState);
       });
     }
+    if (typeof this.host.onSettingsRefresh === 'function') {
+      this.host.onSettingsRefresh(async () => {
+        if (!this.open || !this.settingsMode) return;
+        try {
+          const state = await this.host.getMenu({ folded: this.folded(), light: false });
+          this.render(state);
+        } catch { /* settings closed mid-refresh */ }
+      });
+    }
 
     this.el.addEventListener('click', (e) => e.stopPropagation());
     this.el.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -1382,8 +1391,12 @@ export class AppMenu {
         row.append(text);
         const whenInput = build('input', 'appmenu__input');
         whenInput.type = 'datetime-local';
-        whenInput.value = this.reminderInputValue(item.at, cfg.timeZone);
-        whenInput.title = 'Editar hora';
+        // Edit the event clock; main recomputes fire time from noticeMin.
+        const editAt = item.eventAt || item.at;
+        whenInput.value = this.reminderInputValue(editAt, cfg.timeZone);
+        whenInput.title = item.noticeMin
+          ? `Hora del evento (aviso ${item.noticeMin} min antes)`
+          : 'Editar hora';
         whenInput.addEventListener('change', () => {
           const iso = whenInput.value
             ? this.reminderInputToIso(whenInput.value, cfg.timeZone)

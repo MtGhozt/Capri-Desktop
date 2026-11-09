@@ -114,6 +114,8 @@ test('direct rain and holiday questions use real data', async () => {
     at: new Date('2026-11-08T18:00:00.000Z'),
   });
   assert.match(rain, /sí apunta a lluvia/i);
+  assert.match(rain, /probabilidad/i);
+  assert.doesNotMatch(rain, /chance/i);
 
   const dry = await weather.answerDirect('¿va a llover mañana?', {
     place: 'San José',
@@ -130,6 +132,44 @@ test('direct rain and holiday questions use real data', async () => {
   assert.match(holiday, /es feriado: Feriado de prueba/);
 
   assert.equal(await weather.answerDirect('abre Discord', { place: 'San José' }), null);
+});
+
+test('weather fallback still works when the LLM path would throw', async () => {
+  const weather = createWeather({
+    now: () => Date.parse('2026-11-08T18:00:00.000Z'),
+    fetchImpl: mockFetch([
+      ['geocoding-api.open-meteo.com', GEO],
+      ['api.open-meteo.com', FORECAST],
+      ['date.nager.at', HOLIDAYS],
+    ]),
+  });
+  // Primary path feeds facts via temporalExtras; answerDirect remains the offline fallback.
+  const snippet = await weather.contextSnippet({
+    place: 'San José',
+    timeZone: 'America/Costa_Rica',
+    at: new Date('2026-11-08T18:00:00.000Z'),
+  });
+  assert.match(snippet, /en carácter/i);
+  const fallback = await weather.answerDirect('¿va a llover hoy?', {
+    place: 'San José',
+    timeZone: 'America/Costa_Rica',
+    at: new Date('2026-11-08T18:00:00.000Z'),
+  });
+  assert.match(fallback, /lluvia/i);
+
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(main, /weatherFallbackLine/);
+  assert.match(main, /outcome\?\.outcome === 'failed'/);
+  assert.match(main, /temporalExtras/);
+  // Direct short-circuit removed from chat:send; fallback helper only.
+  const chatSend = main.slice(
+    main.indexOf('chat:send'),
+    main.indexOf('chat:cancel'),
+  );
+  assert.match(chatSend, /weatherFallbackLine/);
+  assert.doesNotMatch(chatSend, /weather\.answerDirect\(/);
 });
 
 test('weather cache avoids a second network hit within the TTL', async () => {

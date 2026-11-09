@@ -16,7 +16,6 @@ const { isClipCommand } = require('./clip-command');
 const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
 const { parseReminderCommand } = require('./reminders');
-const { isWeatherOrHolidayQuestion } = require('./weather');
 const { isWakeCommand } = require('./wake-command');
 const { parseAppCommand, planAppCommand } = require('./app-command');
 
@@ -34,7 +33,6 @@ function isDirectCommand(text, apps = []) {
     || isUnmuteCommand(text)
     || isForgetCommand(text)
     || parseReminderCommand(text)
-    || isWeatherOrHolidayQuestion(text)
     || isWakeCommand(text)
     || planAppCommand(parseAppCommand(text, apps)),
   );

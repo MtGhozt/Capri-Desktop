@@ -140,6 +140,45 @@ test('move and edit resolve by clock or text, and ask when ambiguous', () => {
   }
 });
 
+test('findMatches uses eventAt hour when there is advance notice', () => {
+  const { findMatches, resolveFireAt } = require('../src/main/reminders');
+  const zone = 'America/Costa_Rica';
+  // 08:00 local CR = 14:00 UTC; aviso 2h → fire 06:00 local
+  const eventAt = Date.parse('2026-11-08T14:00:00.000Z');
+  const resolved = resolveFireAt(eventAt, 120);
+  const items = [{
+    id: '1', at: resolved.at, eventAt, noticeMin: 120, text: 'tengo un evento',
+  }];
+  assert.equal(findMatches(items, 'las 8', { timeZone: zone }).length, 1);
+  assert.equal(findMatches(items, 'las 6', { timeZone: zone }).length, 0);
+});
+
+test('moving a reminder with noticeMin keeps the offset', () => {
+  const { resolveFireAt } = require('../src/main/reminders');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-reminders-'));
+  const file = path.join(dir, 'reminders.json');
+  try {
+    const eventAt = Date.parse('2026-11-08T14:00:00.000Z');
+    const first = resolveFireAt(eventAt, 60);
+    const store = createReminders({ file, now: () => eventAt - 3 * 60 * MIN, intervalMs: 0 });
+    const item = store.add({
+      at: first.at, text: 'reunion', eventAt, noticeMin: 60,
+    });
+    const movedEvent = eventAt + 60 * MIN;
+    const next = resolveFireAt(movedEvent, item.noticeMin);
+    const done = store.update(item.id, {
+      eventAt: next.eventAt, at: next.at, noticeMin: item.noticeMin,
+    });
+    assert.equal(done.noticeMin, 60);
+    assert.equal(done.eventAt, movedEvent);
+    assert.equal(done.at, movedEvent - 60 * MIN);
+    // clean must not drop eventAt after the edit
+    assert.equal(store.list()[0].eventAt, movedEvent);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('settings menu lists pending reminders with edit and delete actions', () => {
   const menu = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(menu, /RECORDATORIOS/);

@@ -193,7 +193,7 @@ function createWeather({
       `Clima en ${where}: ${Math.round(weather.currentTemp)}°C, ${weatherLabel(weather.currentCode)}`,
     ];
     if (today && Number.isFinite(today.precip)) {
-      bits.push(`hoy chance de lluvia ${Math.round(today.precip)}%`);
+      bits.push(`hoy probabilidad de lluvia ${Math.round(today.precip)}%`);
     }
     if (today && Number.isFinite(today.tmax) && Number.isFinite(today.tmin)) {
       bits.push(`máx ${Math.round(today.tmax)}°C / mín ${Math.round(today.tmin)}°C`);
@@ -226,7 +226,7 @@ function createWeather({
     const merged = [...(days || []), ...(nextYear || [])];
     const holiday = formatHolidayLine(merged, { fromDate: localDay });
     if (holiday) parts.push(holiday);
-    parts.push('Usá solo estos datos de clima/feriados; si no están, no inventes.');
+    parts.push('Usá solo estos datos de clima/feriados; si no están, no inventes. Respondé en carácter (Capri) con esos hechos, sin inventar.');
     return parts.filter(Boolean).join(' ');
   }
 
@@ -281,7 +281,7 @@ function createWeather({
     if (/\b(llueve|llover|lluvia|va\s+a\s+llover)\b/.test(said)) {
       const rain = willRain(day.code, day.precip);
       const when = askTomorrow ? 'Mañana' : 'Hoy';
-      const prob = Number.isFinite(day.precip) ? ` (chance ${Math.round(day.precip)}%)` : '';
+      const prob = Number.isFinite(day.precip) ? ` (probabilidad ${Math.round(day.precip)}%)` : '';
       return rain
         ? `${when} sí apunta a lluvia en ${loc.name}${prob}.`
         : `${when} no parece que llueva en ${loc.name}${prob}.`;

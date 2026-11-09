@@ -167,9 +167,11 @@ function findMatches(items, match, { now = Date.now(), timeZone = '' } = {}) {
   const clock = parseClockToken(needle) || (
     /^\d{1,2}(?::\d{2})?$/.test(needle) ? parseClockToken(`a las ${needle}`) : null
   );
+  // Match the event clock when there is advance notice (eventAt), else the fire time.
+  const clockAt = (item) => Number(item.eventAt) || Number(item.at);
   if (clock) {
     return pending.filter((item) => {
-      const p = zonedParts(item.at, timeZone);
+      const p = zonedParts(clockAt(item), timeZone);
       return p.hour === clock.hour && p.minute === clock.minute;
     });
   }
@@ -178,7 +180,7 @@ function findMatches(items, match, { now = Date.now(), timeZone = '' } = {}) {
   // "el de las 8" after stripping may leave "las 8" already handled; also try hour-only words
   const hourWord = WORD_HOUR[needle];
   if (hourWord != null) {
-    return pending.filter((item) => zonedParts(item.at, timeZone).hour === hourWord);
+    return pending.filter((item) => zonedParts(clockAt(item), timeZone).hour === hourWord);
   }
   return [];
 }
@@ -305,7 +307,8 @@ function createReminders({
     const item = { id: String(raw?.id || `r${at}-${++seq}`), at, text };
     const eventAt = Number(raw?.eventAt);
     const noticeMin = Number(raw?.noticeMin);
-    if (Number.isFinite(eventAt) && eventAt > at) item.eventAt = eventAt;
+    // Keep eventAt whenever present so an edit that recomputes `at` cannot drop it.
+    if (Number.isFinite(eventAt)) item.eventAt = eventAt;
     if (Number.isFinite(noticeMin) && noticeMin > 0) item.noticeMin = noticeMin;
     return item;
   };
