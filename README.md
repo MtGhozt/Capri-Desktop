@@ -12,7 +12,7 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 **Versión en el repo:** `0.2.8` (en preparación, sin publicar). **Última etiquetada:** `0.2.7`. El instalador más reciente está en [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
 
-**Novedades recientes:** 0.2.5 sumó varios comandos en una frase y arreglos de Spotify y voz en GPUs débiles; 0.2.6, hora local elegible y recordatorios persistentes; 0.2.7 restaura el Gemini Flash-Lite gratis, hace que los modelos digan cuál los hace funcionar y endurece el aviso hablado de recordatorios; **0.2.8 (en preparación)** mira el monitor correcto, clima/feriados opcionales, aviso anticipado de eventos y edición de recordatorios.
+**Novedades recientes:** 0.2.7 (etiquetada) restaura Gemini Flash-Lite gratis, el modelo dice qué lo hace funcionar y endurece el aviso hablado de recordatorios; **0.2.8 (en preparación)** mira el monitor correcto, clima/feriados, aviso anticipado y edición de recordatorios, y limpia Ajustes (startup, prioridad de cerebros, clip NVIDIA).
 
 <img src="docs/media/capri-desktop.png" alt="Capri en el escritorio" width="100%">
 
@@ -20,12 +20,10 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 ## Próximamente
 
-Lo que viene; detalle y estado en [`docs/roadmap.md`](docs/roadmap.md):
+Detalle y prioridad en [`docs/roadmap.md`](docs/roadmap.md):
 
-- **Wake word** que no interfiera con **audífonos Bluetooth**.
-- **Actualización con un clic** desde la app.
-
-Después: que el chat haga cosas en la PC (volumen, ordenar ventanas), sentir la PC y los juegos, y voz local gratis. Detalle y prioridad en [`docs/roadmap.md`](docs/roadmap.md).
+- **P1:** wake word sin interferir con audífonos Bluetooth; actualización con un clic.
+- **Siguiente:** 0.2.9/0.3 → P2 (chat que actúa en la PC); 0.3/0.4 → P3 (sentir la PC y juegos).
 
 Nada de esto es de pago: las donaciones, si aparecen, no desbloquean nada.
 
@@ -58,7 +56,7 @@ La primera vez, si no hay LM Studio/Ollama local ni clave en la nube, Capri pued
 
 **Clic derecho → Ajustes… → Cerebro.** Grupos: **Gratis** (LM Studio, OpenRouter), **Gratis con límite** (Gemini, Groq) y **De pago** (OpenAI, Anthropic, DeepSeek, Mistral, xAI); más abajo **Agentes instalados** si hay CLIs. Pegá la Key si hace falta, tocá **Probar** y pasá a **Activo**. Las claves quedan cifradas en tu PC (`safeStorage`; no van al repo ni a los logs).
 
-**Compartir pantalla / memoria con la nube** está **apagado** por defecto. Personalidad y memoria: **Ajustes → Memoria → Abrir personalidad / Abrir memoria**.
+**Compartir pantalla / memoria con la nube** está **apagado** por defecto. Personalidad y memoria: **Ajustes → Memoria y personalidad**. Prioridad de cerebros: en Cerebro o en el overlay (**Proveedor** ↑/↓).
 
 ---
 
@@ -67,9 +65,9 @@ La primera vez, si no hay LM Studio/Ollama local ni clave en la nube, Capri pued
 El instalador público **no** trae Python ni los modelos. Flujo actual:
 
 1. Instalá **Python 3.11** ([python.org 3.11.9](https://www.python.org/downloads/release/python-3119/), marcá **Add python.exe to PATH**).
-2. En Capri: **Ajustes → Oído → Instalar voz** (barra de progreso + **Ver detalles**). No hace falta PowerShell a mano.
-3. **OmniVoice** solo con GPU NVIDIA. **Respuesta:** `VOZ` / `BLIPS` / `SILENCIO`.
-4. Hablar: **«Hey Capri»**, **Tecla para hablar** (Ajustes → Oído; por defecto `Ctrl+Alt+V`), chat con `Ctrl+Alt+T`. Si «Hey Capri» no arranca por DLL: **Instalar VC++ x64**.
+2. En Capri: **Ajustes → Oído y voz → Instalar voz** (barra de progreso + **Ver detalles** / copiar). No hace falta PowerShell a mano.
+3. **OmniVoice** solo con GPU NVIDIA (si no, Kokoro / blips). **Respuesta:** `VOZ` / `BLIPS` / `SILENCIO`.
+4. Hablar: **«Hey Capri»**, **Tecla para hablar** (Ajustes → Oído y voz; por defecto `Ctrl+Alt+V`), chat con `Ctrl+Alt+T`. Si «Hey Capri» no arranca por DLL: **Instalar VC++ x64**.
 
 Log: `%APPDATA%\capri-desktop\logs\voice.log` — reportá en Discord **#bugs**. Detalle de desarrollo: [`docs/voz.md`](docs/voz.md).
 
@@ -77,14 +75,18 @@ Log: `%APPDATA%\capri-desktop\logs\voice.log` — reportá en Discord **#bugs**.
 
 ## 5. Qué puede hacer (hoy)
 
-- **Chat** en la burbuja (`TÚ > …`), personalidad cyberpunk corta.
-- **Abrir / cerrar** apps, juegos y sitios que tengas en su lista **APPS** (“abre Discord”, etc.).
-- **Música** (player por defecto **Namida**; **Spotify** opcional): play, pausa, siguiente, “pon \<tema\>”, “pon tu canción”, volumen / mute **solo de la música** (nunca el volumen master del PC).
-- **Timers y recordatorios:** "timer 10 minutos", "recordame en 2 horas" o fechas por chat; sobreviven a cerrar Capri y avisan con burbuja y voz (No molestar los muestra en silencio).
-- **Energía del PC** con confirmación: apagar / reiniciar / suspender.
-- **No molestar:** ante pantalla completa (o apps en la lista) no se despierta sola; opciones **Silenciar en esta app** / **No silenciar nunca** / **Sacar de la lista**; puede mostrar el **dron** ligero.
-- **Formas:** DORMANT, máscara dormida, biochip, teleports, poses; **agarrar y soltar**; **caricias** en la cabeza (se pueden apagar en comportamiento).
-- Comentarios ocasionales, saludo al arrancar / al desbloquear (configurables).
+- **Chat** en la burbuja (`TÚ > …`), personalidad cyberpunk corta; varios comandos en una frase.
+- **Cerebro:** LM Studio / Ollama, keys en la nube, agentes CLI; prioridad de fallback en Ajustes o en el overlay.
+- **Voz (opcional):** wake «Hey Capri», STT, OmniVoice (NVIDIA) o Kokoro; clone propio en Ajustes → Oído y voz.
+- **Hora local**, y si configurás ciudad: **clima** y **feriados** (sin inventar si no hay red).
+- **Timers y recordatorios** persistentes (burbuja + voz); aviso anticipado en eventos; editar/mover/borrar por chat o **Ajustes → Recordatorios**.
+- **Mirá mi pantalla** a pedido (con consentimiento); la foto no queda en disco.
+- **Agentes** (Claude Code, Cursor, OpenCode, …): hooks locales; Capri avisa cuando trabajan o piden permiso.
+- **Mis apps:** abrir / cerrar programas, juegos y enlaces de su lista.
+- **Música** (Namida por defecto; Spotify opcional): play, pausa, siguiente, “pon \<tema\>”, “pon tu canción”; volumen solo de la música.
+- **No molestar** en pantalla completa (o lista de apps); dron ligero opcional.
+- **Energía del PC** con confirmación; **Diagnóstico** en Acerca de (copiar reporte / abrir log).
+- **Formas:** DORMANT, máscara, biochip, poses; caricias y saludos configurables; «Iniciar con Windows».
 
 <img src="docs/media/capri-drone.png" alt="Dron en No molestar" width="480">
 <img src="docs/media/capri-star.png" alt="Momento estrella" width="480">
@@ -129,7 +131,7 @@ Log: `%APPDATA%\capri-desktop\logs\voice.log` — reportá en Discord **#bugs**.
 | **Claves** | Quedan en tu usuario, cifradas. No se suben al repo ni se escriben en logs |
 | **Voz / mic** | Procesamiento local en el sidecar; el audio no se manda a un servicio de voz de Capri |
 
-SmartScreen avisa porque el `.exe` **no está firmado**, no porque haya telemetría oculta. El `SHA256SUMS.txt` de cada release trae el hash del instalador: comparalo si querés confirmar que la descarga es la original y llegó entera.  
+SmartScreen avisa porque el `.exe` **no está firmado**, no porque haya telemetría oculta. El `SHA256SUMS.txt` de cada release trae el hash del instalador: comparalo si querés confirmar que la descarga es la original y llegó entera.
 Código en este repo; el instalador se genera con `pnpm dist`.
 
 **Logs:** `%APPDATA%\capri-desktop\logs\` (p. ej. `voice.log`).  
@@ -143,9 +145,9 @@ Si algo no arranca, mirá [`docs/SOPORTE.md`](docs/SOPORTE.md) (síntoma → cau
 
 | Problema | Qué probar |
 | --- | --- |
-| **No detecta el mic** | Ajustes → Oído → Micrófono **ACTIVO**; elige dispositivo. Sin «Instalar voz» no hay lista útil. |
-| **«Hey Capri» no arranca** | Ajustes → Oído → **Instalar VC++ x64**; reiniciá. Log: `voice.log` → Discord **#bugs**. |
-| **Wake word flojo** | Sensibilidad de la palabra en Oído; «Pausa antes de cortar»; revisá `voice.log`. |
+| **No detecta el mic** | Ajustes → Oído y voz → Micrófono **ACTIVO**; elige dispositivo. Sin «Instalar voz» no hay lista útil. |
+| **«Hey Capri» no arranca** | Ajustes → Oído y voz → **Instalar VC++ x64**; reiniciá. Log: `voice.log` → Discord **#bugs**. |
+| **Wake word flojo** | Sensibilidad de la palabra en Oído y voz; «Pausa antes de cortar»; revisá `voice.log`. |
 | **Aviso de VRAM** | LM Studio + OmniVoice pelean GPU: bajá el modelo local, usá key en la nube, o **BLIPS**. |
 | **No cierra / overlay trabado** | `Ctrl+Alt+Shift+Q`, o **Salir** dos veces en la bandeja. Menú pegado: bandeja → Cerrar menú. |
 | **Invisible / transparente** | Ajustes → Apariencia → Pantalla: volvé a **Automático (recomendado)** (evitar **OpenGL (experimental)** si falla). |
@@ -170,6 +172,6 @@ Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [m
 
 **Voice (optional):** not in the public installer. Without the local `voice/` sidecar she uses **typing blips** (default) or silence. With a sidecar: wake (“Hey Capri” / “Capri”), **Ctrl+Alt+V**, Whisper STT on CPU; cloned Capri reference audio is **not** shipped — without it you get blips / Kokoro, not her clone. Mood refs live under `voice/ref/` when you set that up yourself.
 
-**Can do:** text chat, timers and reminders that survive a restart (bubble + voice), open/close apps, music (Namida/Spotify: play/pause/next/search, music-only volume, “pon tu canción”), PC power with confirm, game-mode drone, drag/drop, head pats, dormant/sleep forms.
+**Can do:** text chat, optional voice (OmniVoice/Kokoro), timers/reminders (incl. advance notice + edit), local time/weather/holidays, look-at-screen with consent, agent hooks, Mis apps, music (Namida/Spotify), No molestar, brain priority, Diagnose, PC power with confirm.
 
 **Quit stuck:** **Ctrl+Alt+Shift+Q**, or tray **Salir** twice. Logs: `%APPDATA%\capri-desktop\logs\` (or **Settings → About → Open log**; **Diagnose → Copy report** for Discord). Fan project — not affiliated with CD PROJEKT RED. See [CREDITS.md](CREDITS.md) / [LICENSE](LICENSE).

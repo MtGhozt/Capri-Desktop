@@ -10,19 +10,28 @@ Resumen de lo cerrado (el detalle está en el historial de git y en el CHANGELOG
 - **Fase 4 — Acciones en la PC:** corrector de lo que oye mal, conversación sin wake word, motor de apps ("abre / cierra X", "abre X y Y"), escaneo de Steam/Epic/GOG/Inicio, animaciones al abrir y cerrar, música con Namida y Spotify, energía con confirmación, modo dron, caja `CAPRI.SYS // MENSAJE`, caricias y saludos.
 - **Fase 5 — Cerebro fácil:** tarjetas de Cerebro (gratis con key, en tu PC, tu propia key), "Probar", keys solo locales y README reescrito para empezar sin código.
 - **Fase 6 — Hecho:** hooks de agentes (Claude Code, Codex, Antigravity, Cursor y OpenCode), "Usar mi agente instalado", ver la pantalla a pedido con consentimiento, detección de juegos con No molestar y proveedores con key.
-- **Fixes 0.2.x — Hecho:** 0.2.2 (aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL experimental, etiquetas de Mis apps); 0.2.4 (Diagnóstico en Acerca de con "Copiar detalles de error" y "Abrir log"); 0.2.5 (varios comandos en una frase, CLIs fuera del PATH, Spotify con más frases y reintentos, voz que cae a Kokoro en GPUs débiles y contexto sin charla vieja); 0.2.6 (hora local elegible, timers y recordatorios persistentes con aviso en burbuja y voz, primera descarga de voz explicada); 0.2.7 publicada (Gemini vuelve a `gemini-flash-lite-latest` y corrige configs guardadas, el modelo dice qué proveedor/modelo lo hace funcionar, la RTX 40 vuelve a clonar voz, el paso de tu voz personalizada queda claro y el aviso hablado de recordatorios es más firme).
-- **En preparación (0.2.8, sin publicar):** "Mirá mi pantalla" captura el monitor de la ventana que tenés adelante (no el del mouse) y reintenta si el primer frame sale negro; clima/feriados opcionales junto a la hora; aviso 1 h antes en eventos; editar/mover recordatorios por chat y en Ajustes.
+- **Fixes 0.2.x — Hecho:** 0.2.2 (aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL experimental, etiquetas de Mis apps); 0.2.4 (Diagnóstico en Acerca de con "Copiar detalles de error" y "Abrir log"); 0.2.5 (varios comandos en una frase, CLIs fuera del PATH, Spotify con más frases y reintentos, voz que cae a Kokoro en GPUs débiles y contexto sin charla vieja); 0.2.6 (hora local elegible, timers y recordatorios persistentes con aviso en burbuja y voz, primera descarga de voz explicada); **0.2.7 publicada** (`v0.2.7`: Gemini vuelve a `gemini-flash-lite-latest` y corrige configs guardadas, el modelo dice qué proveedor/modelo lo hace funcionar, CUDA forward-compatible para clonar voz, voz personalizada en 2 pasos claros, aviso hablado de recordatorios más firme si falla el TTS).
+- **En preparación (0.2.8, sin publicar):** verificado en el historial local:
+  - Pantalla: "Mirá mi pantalla" usa el monitor de la ventana activa (no el del mouse); reintenta frame negro; la captura no se guarda en disco salvo `voice.debugSave`.
+  - Voz: instalación con detalles copiables, sin «Listo» falso; OmniVoice verifica imports y no reintenta en loop si falta torch.
+  - Clima/feriados opcionales (Open-Meteo + Nager.Date) junto a la hora; ciudad resuelta o «No encontré esa ciudad»; offline sin spam.
+  - Recordatorios: aviso 1–2 h antes en eventos (`[remind:…|…|min]`); editar/mover/borrar por chat y pestaña Recordatorios (zona de Ajustes).
+  - Ajustes/menú: «Iniciar con Windows» de vuelta; pestañas Memoria y personalidad / Oído y voz; Proveedor del overlay = prioridad ↑/↓; clip avisa si no hay NVIDIA; Atajos alineados.
 
 Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía corta por opción y leer el estado del juego.
+
+## Siguiente
+
+- **0.2.9 / 0.3 → P2:** que el chat haga cosas en la PC.
+- **0.3 / 0.4 → P3:** sentir la PC y juegos.
 
 ## Próximo, por prioridad
 
 ### P1 — Estabilidad (versiones chicas de fixes)
 
-- "Mirá mi pantalla" veía el fondo o "Activar Windows" porque capturaba el monitor del mouse, no el de la ventana activa (corregido en 0.2.8; falta probarlo en una PC con dos monitores).
+- Probar el fix de "Mirá mi pantalla" en una PC con dos monitores (código ya en 0.2.8).
 - Que el wake word no interfiera con audífonos Bluetooth.
 - Actualización con un clic.
-- ~~**Idea de la comunidad (0.2.x):** clima y feriados junto a la hora local; avisar 1–2 h antes de un evento~~ (en 0.2.8, sin publicar).
 
 ### P2 — Que el chat haga cosas en la PC (idea de upstream `cb33e87`)
 
@@ -38,6 +47,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - Mandos para hablar sin teclado.
 - Nuevo "Modo juego" real: Capri comenta lo que pasa en la partida (distinto de No molestar).
 - **Pantalla (idea de la comunidad):** mejorar el contexto de pantalla que ya existe para que entienda mejor lo que ve ("¿qué opinás de esto?" sobre un dibujo o modelo).
+- **Grabar clips sin NVIDIA (sin fecha):** que Capri grabe los últimos segundos en cualquier GPU, o usar la grabación de Windows (Win+Alt+R) como alternativa a ShadowPlay.
 
 ### Integraciones (después de juegos, idea de la comunidad)
 
@@ -62,7 +72,6 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 ### Ideas de la comunidad (sin fecha, no agendadas)
 
 - **Recordatorios + Google Calendar:** crear eventos y pendientes en el calendario para que también avisen en el celular; los avisos propios de Capri se mantienen.
-- **Editar un recordatorio:** cambiar la hora o moverlo después de creado.
 - **Música en YouTube:** abrir y poner YouTube / YouTube Music como alternativa a Spotify.
 
 ## Descartado
