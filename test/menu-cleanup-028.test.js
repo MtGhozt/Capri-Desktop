@@ -78,6 +78,24 @@ test('Guardar clip shows NVIDIA-only note when hasNvidiaGpu is false', () => {
   assert.match(help, /ShadowPlay/);
 });
 
+test('hasNvidiaGpu caches the default probe once per session', () => {
+  const src = fs.readFileSync(
+    require('node:path').join(__dirname, '..', 'src', 'main', 'voice-install.js'),
+    'utf8',
+  );
+  assert.match(src, /nvidiaGpuCached/);
+  assert.match(src, /if \(nvidiaGpuCached !== undefined\) return nvidiaGpuCached/);
+  assert.equal(hasNvidiaGpu({ readVramImpl: () => null }), false);
+  assert.equal(hasNvidiaGpu({ readVramImpl: () => ({ usedMiB: 1, totalMiB: 8 }) }), true);
+});
+
+test('rebuildTray is debounced on config bursts', () => {
+  const main = fs.readFileSync(mainPath, 'utf8');
+  assert.match(main, /trayRebuildTimer/);
+  assert.match(main, /setTimeout\(\(\) => \{[\s\S]*?rebuildTray\(true\);[\s\S]*?\}, 300\)/);
+  assert.match(main, /rebuildTray\(true\)/);
+});
+
 test('resolvePlace reports label, notFound, or offline without inventing', async () => {
   const ok = createWeather({
     fetchImpl: async () => ({

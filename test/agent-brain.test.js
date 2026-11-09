@@ -6,6 +6,17 @@ const {
   AGENTS, VERSION_TIMEOUT_MS, detectAgents, pickAuto, openAgentIds, runAgent, wrapPrompt,
 } = require('../src/main/agent-brain');
 
+test('detectAgents serves cache immediately and refreshes in the background after TTL', () => {
+  const src = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'src', 'main', 'agent-brain.js'),
+    'utf8',
+  );
+  assert.match(src, /refreshAgentsAsync/);
+  assert.match(src, /setImmediate/);
+  assert.match(src, /if \(now - agentsCacheAt >= AGENTS_CACHE_MS\) refreshAgentsAsync\(\)/);
+  assert.match(src, /return agentsCache/);
+});
+
 test('detectAgents marks PATH hits; all five CLIs are wired when present', () => {
   let calls = 0;
   const logs = [];

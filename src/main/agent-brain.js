@@ -125,12 +125,24 @@ function logDetect(msg, log) {
 // `where`/`which` per CLI is slow on cold PATH; cache so menu:get does not stall the first paint.
 let agentsCache = null;
 let agentsCacheAt = 0;
+let agentsRefreshQueued = false;
 const AGENTS_CACHE_MS = 60_000;
+
+function refreshAgentsAsync() {
+  if (agentsRefreshQueued) return;
+  agentsRefreshQueued = true;
+  setImmediate(() => {
+    try { detectAgents({ force: true }); } catch { /* PATH oddities */ }
+    agentsRefreshQueued = false;
+  });
+}
 
 function detectAgents(opts = {}) {
   const now = Date.now();
   // custom which (tests) always bypasses; production PATH scans are cached
-  if (!opts.force && !opts.execFileSync && agentsCache && now - agentsCacheAt < AGENTS_CACHE_MS) {
+  if (!opts.force && !opts.execFileSync && agentsCache) {
+    // Menus: serve stale immediately; refresh in the background after TTL.
+    if (now - agentsCacheAt >= AGENTS_CACHE_MS) refreshAgentsAsync();
     return agentsCache;
   }
   const list = AGENTS.map((a) => {

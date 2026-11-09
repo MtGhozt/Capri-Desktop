@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from heavy import import_omnivoice, import_torch
-from tts_text import clean_for_tts
+from tts_text import clean_for_tts, split_for_tts
 
 KOKORO_ONNX_URL = (
     "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
@@ -29,6 +29,8 @@ DEFAULT_TTS_STEPS = 16
 DEFAULT_REF = Path("ref") / "capri_ref_short.wav"
 # Public installs ship no clone wav: OmniVoice voice-design (instruct) instead.
 DEFAULT_TTS_DESIGN = "voz femenina joven, juguetona, español latino, clara"
+# Fixed seed per generate: same text → same timbre (OmniVoice sampling otherwise drifts).
+OMNI_SEED = 42
 
 
 class SlowCpuTTS(RuntimeError):
@@ -486,6 +488,27 @@ class OmniVoiceTTS(TTSEngine):
         self.log(f"omnivoice warmup {ms:.0f}ms device={self.device} samples={pcm.size} sr={sr}")
         return ms
 
+    def _generate_chunk(self, kwargs: dict) -> np.ndarray:
+        try:
+            torch = import_torch()
+            torch.manual_seed(OMNI_SEED)
+        except Exception:
+            pass
+        try:
+            audio = self._model.generate(**kwargs)
+        except TypeError:
+            fallback = dict(kwargs)
+            fallback.pop("generation_config", None)
+            for drop in ("num_step", "guidance_scale", "class_temperature", "position_temperature"):
+                fallback.pop(drop, None)
+            try:
+                torch = import_torch()
+                torch.manual_seed(OMNI_SEED)
+            except Exception:
+                pass
+            audio = self._model.generate(**fallback)
+        return np.asarray(audio[0] if isinstance(audio, (list, tuple)) else audio, dtype=np.float32).reshape(-1)
+
     def speak(self, text: str, *, mood: str | None = None, calm: bool = False) -> tuple[np.ndarray, int]:
         cleaned = clean_for_tts(text)
         if not cleaned or self._model is None:
@@ -500,8 +523,7 @@ class OmniVoiceTTS(TTSEngine):
             return np.zeros(0, dtype=np.float32), 24000
         t0 = time.perf_counter()
         # Safer / more deterministic: greedy class sampling, no position jitter.
-        kwargs = {
-            "text": cleaned,
+        base = {
             "speed": self.speed,
             "num_step": self.steps,
             "guidance_scale": 2.0,
@@ -509,12 +531,12 @@ class OmniVoiceTTS(TTSEngine):
             "position_temperature": 0.0,
         }
         if self._design:
-            kwargs["instruct"] = self.instruct
+            base["instruct"] = self.instruct
         else:
-            kwargs["voice_clone_prompt"] = prompt
+            base["voice_clone_prompt"] = prompt
         try:
             from omnivoice.models.omnivoice import OmniVoiceGenerationConfig
-            kwargs["generation_config"] = OmniVoiceGenerationConfig(
+            base["generation_config"] = OmniVoiceGenerationConfig(
                 num_step=self.steps,
                 guidance_scale=2.0,
                 class_temperature=0.0,
@@ -522,18 +544,16 @@ class OmniVoiceTTS(TTSEngine):
             )
         except Exception:
             pass
-        try:
-            audio = self._model.generate(**kwargs)
-        except TypeError:
-            kwargs.pop("generation_config", None)
-            for drop in ("num_step", "guidance_scale", "class_temperature", "position_temperature"):
-                kwargs.pop(drop, None)
-            audio = self._model.generate(**kwargs)
-        pcm = np.asarray(audio[0] if isinstance(audio, (list, tuple)) else audio, dtype=np.float32).reshape(-1)
+        chunks = split_for_tts(cleaned)
+        parts = [self._generate_chunk({**base, "text": piece}) for piece in chunks]
+        pcm = np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
         ms = (time.perf_counter() - t0) * 1000
         tag = "first phrase" if self._first else "phrase"
         self._first = False
-        self.log(f"omnivoice {tag} {ms:.0f}ms device={self.device} chars={len(cleaned)} steps={self.steps} mood={key}")
+        self.log(
+            f"omnivoice {tag} {ms:.0f}ms device={self.device} chars={len(cleaned)} "
+            f"chunks={len(chunks)} steps={self.steps} mood={key}"
+        )
         return pcm, 24000
 
 

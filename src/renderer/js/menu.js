@@ -559,14 +559,36 @@ export class AppMenu {
             btn.disabled = disabled;
             btn.addEventListener('click', async (e) => {
               e.stopPropagation();
+              // Optimistic swap, then reconcile with getMenu after main finishes.
+              const chain = [...brains];
+              const from = chain.findIndex((b) => b.id === option.id);
+              const to = direction === 'up' ? from - 1 : from + 1;
+              if (from >= 0 && to >= 0 && to < chain.length) {
+                [chain[from], chain[to]] = [chain[to], chain[from]];
+                if (this.lastState?.model) this.lastState.model.brainChain = chain;
+                this.quickOptions = {
+                  ...this.quickOptions,
+                  options: [
+                    ...chain.map((brain, i) => ({
+                      id: brain.id,
+                      label: `${i + 1}. ${brain.label}${i === 0 ? ' · activo' : ''}`,
+                      reorder: true,
+                    })),
+                    { id: '__more__', label: 'Más proveedores…' },
+                  ],
+                  current: chain[0]?.id || this.quickOptions.current,
+                };
+                this.renderQuick(this.lastState);
+                requestAnimationFrame(() => this.placeSubmenu());
+              }
               await this.host.menuAction({ id: 'model-reorder', value: { id: option.id, direction } });
               const next = await this.host.getMenu({ folded: this.folded(), light: true });
               this.lastState = next;
-              const chain = next.model?.brainChain || [];
+              const confirmed = next.model?.brainChain || [];
               this.quickOptions = {
                 ...this.quickOptions,
                 options: [
-                  ...chain.map((brain, i) => ({
+                  ...confirmed.map((brain, i) => ({
                     id: brain.id,
                     label: `${i + 1}. ${brain.label}${i === 0 ? ' · activo' : ''}`,
                     reorder: true,
@@ -2733,6 +2755,32 @@ export class AppMenu {
     this.act('render', id);
   }
 
+  // Patch lastState so toggles/selectors flip before menuAction + getMenu round-trip.
+  optimisticAct(id, value) {
+    if (!this.lastState?.cfg) return false;
+    const cfg = this.lastState.cfg;
+    switch (id) {
+      case 'mic': cfg.mic = Boolean(value); return true;
+      case 'mic-device': cfg.micDevice = value; return true;
+      case 'reply-mode': cfg.replyMode = value; return true;
+      case 'theme': cfg.theme = value; return true;
+      case 'drag-lock': cfg.locked = value === 'locked' || value === true; return true;
+      case 'startup': this.lastState.login = Boolean(value); return true;
+      case 'drone-mode': cfg.gaming = { ...(cfg.gaming || {}), drone: Boolean(value) }; return true;
+      case 'comments': cfg.comments = { ...(cfg.comments || {}), enabled: Boolean(value) }; return true;
+      case 'greetings': cfg.behavior = { ...(cfg.behavior || {}), greetings: Boolean(value) }; return true;
+      case 'unlock-greeting': cfg.behavior = { ...(cfg.behavior || {}), unlockGreeting: Boolean(value) }; return true;
+      case 'caresses': cfg.behavior = { ...(cfg.behavior || {}), caresses: Boolean(value) }; return true;
+      case 'music-dance': cfg.behavior = { ...(cfg.behavior || {}), musicDance: Boolean(value) }; return true;
+      case 'app-fx': cfg.fx = { ...(cfg.fx || {}), apps: Boolean(value) }; return true;
+      case 'scanlines': cfg.fx = { ...(cfg.fx || {}), scanlines: Boolean(value) }; return true;
+      case 'time-zone': cfg.timeZone = value; return true;
+      case 'weather-place': cfg.weatherPlace = value; return true;
+      case 'music-player': cfg.music = { ...(cfg.music || {}), player: value }; return true;
+      default: return false;
+    }
+  }
+
   async act(id, value) {
     if (id === 'forget' && !this.confirmForget) {
       this.confirmForget = true;
@@ -2748,6 +2796,9 @@ export class AppMenu {
       || id === 'greetings' || id === 'unlock-greeting' || id === 'caresses' || id === 'music-dance'
       || id === 'app-fx' || id === 'scanlines' || id === 'game-list'
       || id === 'time-zone' || id === 'weather-place' || id === 'reminder-update' || id === 'reminder-delete';
+    if (keep && this.open && this.optimisticAct(id, value)) {
+      this.render(this.lastState);
+    }
     const result = await this.host.menuAction({ id, value });
     if (id === 'game-list' && result?.message) this.gameNote = result.message;
     if ((id === 'reminder-update' || id === 'reminder-delete') && result?.message) {

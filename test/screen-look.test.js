@@ -355,7 +355,8 @@ test('click-through is logged only when it changes, not on every hover', () => {
     'utf8',
   );
   assert.match(main, /let lastThrough = null;/);
-  assert.match(main, /if \(through !== lastThrough\) \{\s*lastThrough = through;\s*logEvent\(voiceLogPath\(\), `\[capri\] click-through/);
+  assert.match(main, /if \(through === lastThrough\) return;/);
+  assert.match(main, /reason !== 'hover-on' && reason !== 'hover-off'/);
 });
 
 test('look captures the display with the foreground window, not the mouse', () => {

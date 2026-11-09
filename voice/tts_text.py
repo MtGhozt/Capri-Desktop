@@ -12,8 +12,11 @@ _HEADING = re.compile(r"^\s{0,3}#{1,6}\s*", re.M)
 _LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 _STRIKE = re.compile(r"~~([^~]+)~~")
 _TIME = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+_PERCENT = re.compile(r"\b(\d{1,3})\s*%")
+_CELSIUS = re.compile(r"\b(\d{1,3})\s*[°º]\s*C\b", re.I)
 _NUM = re.compile(r"\b\d{1,6}\b")
 _SPACE = re.compile(r"\s+")
+_TTS_CHUNK = 80
 
 _ONES = [
     "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve",
@@ -93,6 +96,34 @@ def pause_for_tts(text: str) -> str:
     return raw
 
 
+def split_for_tts(text: str, limit: int = _TTS_CHUNK) -> list[str]:
+    """Split long phrases at commas/semicolons (then spaces) for stable OmniVoice chunks."""
+    raw = _SPACE.sub(" ", str(text or "")).strip()
+    if not raw:
+        return []
+    if len(raw) <= limit:
+        return [raw]
+    out: list[str] = []
+    buf = raw
+    while len(buf) > limit:
+        window = buf[:limit]
+        brk = -1
+        for sep in (";", ",", ". ", " "):
+            at = window.rfind(sep)
+            if at >= limit // 3:
+                brk = at + len(sep)
+                break
+        if brk <= 0:
+            brk = limit
+        piece = buf[:brk].strip(" ,;")
+        if piece:
+            out.append(piece)
+        buf = buf[brk:].lstrip(" ,;")
+    if buf.strip():
+        out.append(buf.strip())
+    return out
+
+
 def clean_for_tts(text: str) -> str:
     raw = str(text or "")
     raw = _MD_FENCE.sub(" ", raw)
@@ -103,7 +134,11 @@ def clean_for_tts(text: str) -> str:
     raw = _ITALIC.sub(r"\1", raw)
     raw = _HEADING.sub("", raw)
     raw = raw.replace("\\n", "\n")
+    raw = raw.replace("«", " ").replace("»", " ")
+    raw = raw.replace("(", " ").replace(")", " ")
     raw = _strip_emoji(raw)
+    raw = _PERCENT.sub(lambda m: f"{m.group(1)} por ciento", raw)
+    raw = _CELSIUS.sub(lambda m: f"{m.group(1)} grados", raw)
     raw = _TIME.sub(_time_es, raw)
     raw = pause_for_tts(raw)
     raw = _NUM.sub(lambda m: int_es(int(m.group(0))), raw)

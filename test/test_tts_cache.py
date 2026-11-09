@@ -97,6 +97,41 @@ test('TTS turns colon, dash, ellipsis and newlines into pauses', () => {
   assert.match(lines[2], /Hola\.\s+mundo/i);
 });
 
+test('TTS speaks percent and Celsius, drops guillemets and parentheses', () => {
+  const out = py(
+    'from tts_text import clean_for_tts; '
+    + 'print(clean_for_tts("lluvia 80%")); '
+    + 'print(clean_for_tts("hace 24°C")); '
+    + 'print(clean_for_tts("son 19 °C")); '
+    + 'print(clean_for_tts("«hola» (choom)")); '
+    + 'print(clean_for_tts("probabilidad 100%"))',
+  );
+  const lines = out.split(/\r?\n/);
+  assert.match(lines[0], /ochenta por ciento/i);
+  assert.match(lines[1], /veinticuatro grados/i);
+  assert.match(lines[2], /diecinueve grados/i);
+  assert.match(lines[3], /hola choom/i);
+  assert.doesNotMatch(lines[3], /[«»()]/);
+  assert.match(lines[4], /cien por ciento/i);
+});
+
+test('TTS splits long phrases at commas for OmniVoice chunks', () => {
+  const out = py(
+    'from tts_text import split_for_tts; '
+    + 'parts = split_for_tts('
+    + '"Hola choom, hoy apunta a lluvia leve, probabilidad alta, máx veintisiete, '
+    + 'mín diecinueve, y mañana sigue igual en San José."'
+    + ', 80); '
+    + 'print(len(parts)); '
+    + 'print("|".join(parts)); '
+    + 'print(all(len(p) <= 90 for p in parts))',
+  );
+  const lines = out.split(/\r?\n/);
+  assert.ok(Number(lines[0]) >= 2);
+  assert.match(lines[1], /,/); // kept as separate spoken chunks, not one blob
+  assert.equal(lines[2], 'True');
+});
+
 test('missing mood prompt falls back to the playful default', () => {
   const out = py(
     'from tts import pick_mood_prompt; '

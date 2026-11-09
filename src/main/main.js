@@ -349,8 +349,10 @@ function setClickThrough(on, reason = 'state') {
   if (!overlay || overlay.isDestroyed()) return;
   // ¿Salir? / open menu: never re-enable ignoreMouseEvents (hover can stay false after Win+L).
   const through = (quitSolid || menuGuard?.menuOpen) ? false : clickThrough;
-  if (through !== lastThrough) {
-    lastThrough = through;
+  // Hover can flip dozens of times/sec at the hit edge — only act (and log) on real changes.
+  if (through === lastThrough) return;
+  lastThrough = through;
+  if (reason !== 'hover-on' && reason !== 'hover-off' && reason !== 'heartbeat') {
     logEvent(voiceLogPath(), `[capri] click-through ${through ? 'on' : 'off'} reason=${reason}`);
   }
   if (through) overlay.setIgnoreMouseEvents(true, { forward: true });
@@ -2006,7 +2008,7 @@ function updateConfig(patch) {
   overlay?.webContents.send('capri:config', cfg);
   voice?.applyConfig();
   if ('comments' in patch) comments?.refresh();
-  rebuildTray();
+  rebuildTray(); // debounced: settings click bursts rebuild once
   return cfg;
 }
 
@@ -2793,8 +2795,21 @@ function menuState(extra = {}) {
   };
 }
 
-function rebuildTray() {
+let trayRebuildTimer = null;
+function rebuildTray(immediate = false) {
   if (!tray) return;
+  if (!immediate) {
+    if (trayRebuildTimer) clearTimeout(trayRebuildTimer);
+    trayRebuildTimer = setTimeout(() => {
+      trayRebuildTimer = null;
+      rebuildTray(true);
+    }, 300);
+    return;
+  }
+  if (trayRebuildTimer) {
+    clearTimeout(trayRebuildTimer);
+    trayRebuildTimer = null;
+  }
   const s = menuState();
   const t = s.labels;
 
@@ -2917,7 +2932,7 @@ function createTray() {
   tray = new Tray(icon);
   tray.setToolTip(`Capri — ${talkCombo || talkHotkey(config.load())} escucha / detiene`);
   tray.on('click', () => sendCommand('status'));
-  rebuildTray();
+  rebuildTray(true);
 }
 
 // The direct-command ladder, from a chat/voice line to her reply: null when it's for the model.
@@ -2993,7 +3008,7 @@ function registerIpc() {
   ipcMain.handle('demo:window', (_e, open) => demoWindow(open));
   // right-clicking her: the same menu as the tray icon (which Windows often hides behind the ^ by the clock)
   ipcMain.on('menu:open', () => {
-    if (!trayMenu) rebuildTray();
+    if (!trayMenu) rebuildTray(true);
     try {
       trayMenu?.popup({ window: overlay });
     } catch (err) {
@@ -3153,6 +3168,7 @@ function registerIpc() {
       let said = '';
       let outcome = null;
       const reminderAsked = readsAsReminderRequest(line);
+      const mayWeatherFallback = isWeatherOrHolidayQuestion(line);
       try {
         outcome = await llm.chat({
           user: line,
@@ -3184,7 +3200,8 @@ function registerIpc() {
           onError: (payload) => {
             if (speakId) speakQueue?.stop(speakId);
             followUp.reply('', {});
-            overlay?.webContents.send('chat:error', payload);
+            // Weather/holiday: suppress chat:error; fallback line is shown below instead.
+            if (!mayWeatherFallback) overlay?.webContents.send('chat:error', payload);
           },
         });
       } finally {
@@ -3198,6 +3215,9 @@ function registerIpc() {
         const weatherLine = await weatherFallbackLine(line);
         if (weatherLine) {
           return { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
+        }
+        if (mayWeatherFallback) {
+          overlay?.webContents.send('chat:error', { kind: 'offline', text: 'No pude consultar el clima ahora.' });
         }
       }
       return { ok: true };

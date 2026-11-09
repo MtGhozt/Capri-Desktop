@@ -45,8 +45,14 @@ function bundledVoiceDir(root) {
   return hasVoiceSources(dir) ? dir : null;
 }
 
+// nvidia-smi is spawnSync; menuState/status call this often — once per session is enough.
+let nvidiaGpuCached;
 function hasNvidiaGpu({ readVramImpl = readVram } = {}) {
-  return Boolean(readVramImpl?.());
+  // Tests inject a mock; never pin the session cache to that result.
+  if (readVramImpl !== readVram) return Boolean(readVramImpl?.());
+  if (nvidiaGpuCached !== undefined) return nvidiaGpuCached;
+  nvidiaGpuCached = Boolean(readVramImpl?.());
+  return nvidiaGpuCached;
 }
 
 function findPython311({ spawnSyncImpl = spawnSync } = {}) {
