@@ -9,8 +9,14 @@
 
 ### Recordatorios
 
-- **Aviso hablado:** cuando vence un recordatorio o timer, además de la burbuja lo dice la voz existente, sin pedirle nada al modelo. Respeta **No molestar** y la voz apagada (nunca la enciende sola), no duplica el aviso y no pisa una respuesta abierta.
+- **Aviso hablado (ya desde la 0.2.6):** cuando vence un recordatorio o timer, además de la burbuja lo dice la voz existente, sin pedirle nada al modelo. Respeta **No molestar** y la voz apagada (nunca la enciende sola), no duplica el aviso y no pisa una respuesta abierta. La 0.2.7 no agrega la función: endurece los fallos.
 - **Si el TTS falla, la burbuja igual aparece:** el aviso visual y el procesamiento de recordatorios no dependen del audio. Varios recordatorios vencidos al abrir siguen agrupándose en un solo aviso.
+
+### Voz
+
+- **GPU compatible vuelve a clonar voz:** el chequeo de arquitectura CUDA comparaba `sm_89` (RTX 4060) contra una lista exacta y rechazaba placas que sí pueden correr OmniVoice. Ahora acepta la compatibilidad binaria dentro de la misma versión mayor; una GPU realmente incompatible sigue cayendo a Kokoro.
+- **El aviso de fallback dice el motivo real:** distingue Torch/arquitectura, VRAM/OOM y otros errores de carga, en vez de culpar siempre a la GPU.
+- **Tu voz personalizada, en 2 pasos:** elegís el .wav (5–15 s), escribís en el panel qué dice palabra por palabra (o cargás un .txt) y «Guardar voz» se activa recién con audio y texto.
 
 ## 0.2.6 (etiqueta `v0.2.6`)
 

@@ -6,7 +6,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { NOTES, notesFor, bootNotes, isWhatsNewCommand } = require('../src/main/whats-new');
 
-test('0.2.7 has 2–3 short lines, Gemini, identity and spoken reminders', () => {
+test('0.2.7 has 2–3 short lines, Gemini, identity and the reminder/voice corrections', () => {
   const lines = notesFor('0.2.7');
   assert.equal(Array.isArray(lines), true);
   assert.ok(lines.length >= 2 && lines.length <= 3);
@@ -15,6 +15,8 @@ test('0.2.7 has 2–3 short lines, Gemini, identity and spoken reminders', () =>
   assert.match(all, /Gemini/);
   assert.match(all, /voz alta/i);
   assert.match(all, /modelo/i);
+  assert.match(all, /desde la 0\.2\.6/);
+  assert.match(all, /GPU compatible/);
 });
 
 test('0.2.6 has 2–3 short lines', () => {
