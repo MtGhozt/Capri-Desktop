@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const { PROVIDERS } = require('../src/main/chat-providers');
 const { needsModelSetup, SETUP_HINT } = require('../src/main/setup');
 
-test('Gemini default model is the flash-latest id', () => {
-  assert.equal(PROVIDERS.gemini.model, 'gemini-flash-latest');
+test('Gemini default model is the free flash-lite id', () => {
+  assert.equal(PROVIDERS.gemini.model, 'gemini-flash-lite-latest');
 });
 
 test('NVIDIA default model is an OpenAI-compatible NIM id', () => {
