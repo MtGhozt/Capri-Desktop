@@ -94,11 +94,16 @@ function formatWhen(at, { now = new Date(), timeZone = '' } = {}) {
   return `${date} a las ${time}`;
 }
 
-// Bubble always; voice unless No molestar (a game owns the screen).
+// Bubble always; voice unless No molestar (a game owns the screen). A dead TTS never eats the bubble.
 function deliverReminder({ line, noMolestar = false, speak, show } = {}) {
   const text = String(line || '').trim();
   if (!text) return { spoken: false };
-  const spoken = Boolean(!noMolestar && speak?.(text));
+  let spoken = false;
+  if (!noMolestar) {
+    try {
+      spoken = Boolean(speak?.(text));
+    } catch { /* the bubble still has to land */ }
+  }
   show?.(text);
   return { spoken };
 }

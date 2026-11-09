@@ -201,3 +201,82 @@ test('No molestar shows the bubble but keeps her quiet', () => {
   assert.equal(spoken, 1);
   assert.equal(shown, 'Tu recordatorio.');
 });
+
+test('a due reminder is spoken and shown once, never twice', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-reminders-'));
+  const file = path.join(dir, 'reminders.json');
+  try {
+    let now = 1000;
+    const spoken = [];
+    const shown = [];
+    const store = createReminders({
+      file,
+      now: () => now,
+      intervalMs: 0,
+      fire: (item) => deliverReminder({
+        line: `Recordatorio: ${item.text}`,
+        speak: (text) => { spoken.push(text); return 1; },
+        show: (text) => { shown.push(text); },
+      }),
+    });
+    store.add({ at: 2000, text: 'sacar la basura' });
+    now = 5000;
+    store.tick();
+    store.tick(); // the reminder is gone: no second bubble or voice
+    assert.deepEqual(spoken, ['Recordatorio: sacar la basura']);
+    assert.deepEqual(shown, ['Recordatorio: sacar la basura']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('voice disabled: the reminder is shown but not spoken', () => {
+  let shown = '';
+  const result = deliverReminder({
+    line: 'Hora del té.',
+    speak: () => 0, // ttsOn() is false: speakLine returns 0
+    show: (text) => { shown = text; },
+  });
+  assert.equal(result.spoken, false);
+  assert.equal(shown, 'Hora del té.');
+});
+
+test('a TTS failure never loses the bubble or breaks the scheduler', () => {
+  let shown = '';
+  const result = deliverReminder({
+    line: 'Tomá agua.',
+    speak: () => { throw new Error('voice sidecar died'); },
+    show: (text) => { shown = text; },
+  });
+  assert.equal(result.spoken, false);
+  assert.equal(shown, 'Tomá agua.');
+});
+
+test('overdue reminders at boot are one bubble and one voice line', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-reminders-'));
+  const file = path.join(dir, 'reminders.json');
+  try {
+    const before = createReminders({ file, now: () => 1000, intervalMs: 0 });
+    before.add({ at: 4000, text: 'pagar la luz' });
+    before.add({ at: 5000, text: 'sacar la basura' });
+    const spoken = [];
+    const shown = [];
+    const store = createReminders({
+      file,
+      now: () => 10000,
+      intervalMs: 0,
+      fire: (item) => deliverReminder({
+        line: `Se me pasaron ${item.count} cosas: ${item.text}`,
+        speak: (text) => { spoken.push(text); return 1; },
+        show: (text) => { shown.push(text); },
+      }),
+    });
+    store.start();
+    assert.equal(spoken.length, 1);
+    assert.equal(shown.length, 1);
+    assert.match(shown[0], /pagar la luz/);
+    assert.match(shown[0], /sacar la basura/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
