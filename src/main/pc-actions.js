@@ -261,10 +261,15 @@ function detectInfoKinds(text) {
   if (/\b(bateria|battery|carga\s+de\s+la\s+bateria|cuanta\s+bateria|nivel\s+de\s+bateria)\b/.test(said)) {
     out.push('battery');
   }
-  if (/\b(disco|espacio\s+(?:en\s+)?(?:disco|disco\s+duro|almacenamiento)|disk\s+space|cuanto\s+espacio|libre\s+en\s+[c-z]:?)\b/.test(said)) {
+  // "me gusta ese disco" stays with the model; need espacio/libre/almacenamiento/disco duro
+  if (/\b(?:almacenamiento|disco\s+duro|disk\s+space|cuanto\s+espacio)\b/.test(said)
+    || (/\bespacio\b/.test(said) && /\b(?:disco|almacenamiento)\b/.test(said))
+    || (/\blibre\b/.test(said) && /\b(?:disco|almacenamiento|[c-z]:)\b/.test(said))) {
     out.push('disk');
   }
-  if (/\b(ram|memoria\s+ram|memoria\s+(?:usada|libre|disponible)|cuanta\s+memoria)\b/.test(said)) {
+  // never when the phrase is about Capri's own memory footprint
+  if (!/\bcapri\b/.test(said)
+    && (/\bram\b/.test(said) || /\bcuanta\s+memoria\s+(?:tengo|queda|libre)\b/.test(said))) {
     out.push('ram');
   }
   if (/\b(ip\s+local|mi\s+ip|direccion\s+ip|cual\s+es\s+(?:mi\s+)?ip)\b/.test(said)) {
@@ -301,10 +306,12 @@ function parsePcCommand(text) {
   if (!said) return null;
 
   if (/^(?:(?:pon(?:e|me|eme)?|activa|cambia(?:me)?(?: a| al)?|pasa(?: a| al)?) )?(?:el |la )?(?:modo|tema) (?:oscuro|dark)$/.test(said)
+    || /^(?:cambialo|cambiala) a (?:modo |tema )?(?:oscuro|dark)$/.test(said)
     || /^dark mode$/.test(said)) {
     return { kind: 'theme', value: 'dark' };
   }
   if (/^(?:(?:pon(?:e|me|eme)?|activa|cambia(?:me)?(?: a| al)?|pasa(?: a| al)?) )?(?:el |la )?(?:modo|tema) (?:claro|light)$/.test(said)
+    || /^(?:cambialo|cambiala) a (?:modo |tema )?(?:claro|light)$/.test(said)
     || /^light mode$/.test(said)) {
     return { kind: 'theme', value: 'light' };
   }
@@ -316,11 +323,11 @@ function parsePcCommand(text) {
     return { kind: 'volume', value: 'unmute' };
   }
 
-  // master volume ±10% (music session keeps phrases that name "la música")
-  if (/^(?:(?:sube|subi)(?:le)?(?: el volumen)?|mas(?: alto| volumen))$/.test(said)) {
+  // ±10%: need volumen/sonido or más alto/bajo/fuerte/despacio/bajito — bare subí/bajá → LLM
+  if (/^(?:(?:sube|subi)(?:le)?(?: el )?(?:volumen|sonido)|mas(?: (?:alto|fuerte)| volumen))$/.test(said)) {
     return { kind: 'volume', value: 'up' };
   }
-  if (/^(?:(?:baja|baje)(?:le)?(?: el volumen)?|menos(?: alto| volumen))$/.test(said)) {
+  if (/^(?:(?:baja|baje)(?:le)?(?: el )?(?:volumen|sonido)|menos(?: (?:alto|volumen)| volumen)|mas(?: (?:bajo|despacio|bajito)))$/.test(said)) {
     return { kind: 'volume', value: 'down' };
   }
 

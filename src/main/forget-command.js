@@ -5,13 +5,15 @@
 
 const { normalizeCommandText } = require('./command-text');
 
+// "memoria" alone / "memoria RAM" goes to the LLM; only "tu memoria" or conversación/charla/chat/todo
 const FORGET_RE = new RegExp(
   [
-    '\\b(?:olvida|borra|limpia)\\s+(?:la|el|tu)?\\s*(?:conversacion|charla|memoria|chat|todo)\\b',
-    '\\bolvidate\\s+de\\s+(?:todo|la\\s+conversacion|la\\s+charla|el\\s+chat)\\b',
+    '^(?:olvida|borra|limpia)(?:me)? (?:la |el )?(?:conversacion|charla|chat|todo)$',
+    '^(?:olvida|borra|limpia)(?:me)? tu memoria$',
+    '^olvidate de (?:todo|la conversacion|la charla|el chat)$',
   ].join('|'),
 );
 
-const isForgetCommand = (text) => FORGET_RE.test(normalizeCommandText(text));
+const isForgetCommand = (text) => FORGET_RE.test(normalizeCommandText(text).replace(/\s+por favor$/, '').trim());
 
 module.exports = { isForgetCommand };

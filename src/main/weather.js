@@ -32,8 +32,14 @@ function isWeatherOrHolidayQuestion(text) {
   const { normalizeCommandText } = require('./command-text');
   const said = normalizeCommandText(text);
   if (!said) return false;
-  return /\b(llueve|llover|lluvia|clima|tiempo|temperatura|hace\s+frio|hace\s+calor|va\s+a\s+llover|pronostico)\b/.test(said)
-    || /\b(feriado|feriados|holiday|festivo|festivos|dia\s+festivo)\b/.test(said);
+  // no bare \btiempo\b ("no tengo tiempo", "hace tiempo que…")
+  if (/\b(?:que\s+tiempo\s+hace|el\s+tiempo\s+(?:hoy|afuera|manana)|clima|temperatura|hace\s+frio|hace\s+calor|pronostico)\b/.test(said)) {
+    return true;
+  }
+  if (/\b(?:va\s+a\s+llover|esta\s+lloviendo|lluvia)\b/.test(said)) return true;
+  if (/\bllueve\b/.test(said) && !/\bllueve\s+de\b/.test(said)) return true;
+  if (/\bllover\b/.test(said)) return true;
+  return /\b(?:feriado|feriados|holiday|festivo|festivos|dia\s+festivo)\b/.test(said);
 }
 
 function createWeather({

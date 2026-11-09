@@ -122,8 +122,14 @@ test('parsePcCommand takes system mute/theme/volume before music', () => {
   assert.deepEqual(parsePcCommand('subí el volumen'), { kind: 'volume', value: 'up' });
   assert.deepEqual(parsePcCommand('sube el volumen'), { kind: 'volume', value: 'up' });
   assert.deepEqual(parsePcCommand('más volumen'), { kind: 'volume', value: 'up' });
+  assert.deepEqual(parsePcCommand('más fuerte'), { kind: 'volume', value: 'up' });
   assert.deepEqual(parsePcCommand('bajá el volumen'), { kind: 'volume', value: 'down' });
   assert.deepEqual(parsePcCommand('menos volumen'), { kind: 'volume', value: 'down' });
+  assert.deepEqual(parsePcCommand('más bajo'), { kind: 'volume', value: 'down' });
+  assert.deepEqual(parsePcCommand('cambialo a modo oscuro'), { kind: 'theme', value: 'dark' });
+  assert.equal(parsePcCommand('subí'), null);
+  assert.equal(parsePcCommand('bajá'), null);
+  assert.equal(parsePcCommand('bajale'), null);
   assert.equal(parsePcCommand('silencia la música'), null); // music owns that phrase
   assert.equal(parsePcCommand('sube el volumen de la música'), null);
   assert.equal(parsePcCommand('pon never gonna give you up'), null);

@@ -12,19 +12,11 @@ const JPEG_QUALITY = 70;
 const AUTO_LOOK_MS = 10 * 60_000;
 const USER_ACTIVE_IDLE_SEC = 90;
 
-const LOOK_RE = new RegExp(
-  [
-    '\\bmir[aá](?:me)?\\s+(?:mi\\s+)?pantalla\\b',
-    '\\bmir[aá]\\s+esto\\b',
-    '\\bqu[eé]\\s+ves\\b',
-    '\\bqu[eé]\\s+hay\\s+en\\s+(?:mi\\s+)?pantalla\\b',
-    '\\bdescrib[eéi]\\s+(?:mi\\s+)?pantalla\\b',
-    '\\bve[eé]\\s+(?:mi\\s+)?pantalla\\b',
-  ].join('|'),
-);
+// Whole-utterance only (after normalize): "no sé qué ves de malo" stays with the model.
+const LOOK_RE = /^(?:mira(?:me)? (?:mi |la )?pantalla|mira esto|que ves|que hay en(?: mi)? pantalla|describe(?:me)?(?: mi)? pantalla|ve(?: me)?(?: mi)? pantalla)$/;
 
 function isLookCommand(text) {
-  return LOOK_RE.test(normalizeCommandText(text));
+  return LOOK_RE.test(normalizeCommandText(text).replace(/\s+por favor$/, '').trim());
 }
 
 function consentNotice({ label, model, cloud } = {}) {

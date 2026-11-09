@@ -205,13 +205,19 @@ function parseReminderCommand(text, { now = Date.now(), timeZone = '' } = {}) {
   }
   const move = /^(?:pasa|pasar|pasame|move|mover|mov[eé]|corre|correr|cambia|cambiar|reprograma|reprogramar)\b(.+?)\s+a\s+(.+)$/.exec(said);
   if (move) {
-    const destSaid = move[2].trim();
-    const dest = parseMoveTarget(destSaid, { now, timeZone })
-      || parseMoveTarget(`a ${destSaid}`, { now, timeZone });
-    if (!dest) return null;
-    return { action: 'move', match: matchFromPart(move[1]), at: dest, destSaid };
+    const left = move[1].trim();
+    // "pasa la canción a las 9" is music → LLM; need reminder words or "el de las N"
+    if (/\b(?:recordatorios?|temporizadores?|timers?|avisos?|alarmas?)\b/.test(left)
+      || /\b(?:el|la) de las?\b/.test(left)
+      || /^el de\b/.test(left)) {
+      const destSaid = move[2].trim();
+      const dest = parseMoveTarget(destSaid, { now, timeZone })
+        || parseMoveTarget(`a ${destSaid}`, { now, timeZone });
+      if (!dest) return null;
+      return { action: 'move', match: matchFromPart(left), at: dest, destSaid };
+    }
   }
-  const m = /^(?:pon(?:e|me)?\s+|poner\s+|inicia\s+)?(?:un\s+|una\s+)?(?:temporizador|timer|alarma|aviso|recordatorio|recordame|avisame)\b\s*(?:de\s+|en\s+|para\s+)?(.+)$/.exec(said);
+  const m = /^(?:pon(?:e|me)?\s+|poner\s+|inicia\s+)?(?:un\s+|una\s+)?(?:temporizador|timer|alarma|aviso|recordatorio|recordame|recorda|recuerdame|avisame)\b\s*(?:de\s+|en\s+|para\s+)?(.+)$/.exec(said);
   if (!m) return null;
   const parsed = parseMinutes(m[1]);
   if (!parsed) return null;

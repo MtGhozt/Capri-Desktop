@@ -52,6 +52,7 @@ const { createGoodnight } = require('./goodnight');
 const { isClipCommand } = require('./clip-command');
 const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
 const { isForgetCommand } = require('./forget-command');
+const { isStopTtsCommand } = require('./stop-tts-command');
 const { parseNameCommand, cleanName } = require('./name-command');
 const { notesFor, bootNotes, isWhatsNewCommand } = require('./whats-new');
 const { checkLine, formatReport, redact, copyErrorPayload } = require('./diagnose');
@@ -3011,11 +3012,20 @@ async function directCommand(line) {
   if (powerOrder) return { ok: true };
   const reminderOrder = parseReminderCommand(line, { timeZone: config.load().timeZone });
   if (reminderOrder) return goReminderReply(reminderOrder) || { ok: true };
+  // stop speaking before system mute ("callate" ≠ silencio)
+  if (isStopTtsCommand(line)) {
+    speakQueue?.stop();
+    followUp.cancel();
+    return { ok: true, line: announce('Callada.', { chat: true, badge: 'CAPRI' }) };
+  }
   // Weather/holiday questions go to the LLM with facts in temporalExtras; answerDirect is fallback only.
   // PC mute/theme/volume before music so "silencio" / "poné modo oscuro" are not music.
   const pcOrder = parsePcCommand(line);
   if (pcOrder) return pcReply(pcOrder);
-  const musicOrder = parseMusicCommand(line, { herSong: config.load().music?.herSong });
+  const musicOrder = parseMusicCommand(line, {
+    herSong: config.load().music?.herSong,
+    apps: allApps(),
+  });
   if (musicOrder) return musicReply(musicOrder);
   if (isSleepCommand(line)) return goSleepReply();
   if (quitFlow.pending) return answerQuit(line);
@@ -3485,12 +3495,14 @@ function main() {
       runAgentChat: ({ provider, user, persona }) => runAgentAsBrain(provider, user, persona),
       temporalExtras: async (cfg, user) => {
         const bits = [];
-        try {
-          bits.push(await weather.contextSnippet({
-            place: cfg.weatherPlace,
-            timeZone: cfg.timeZone,
-          }));
-        } catch { /* offline / bad city: skip */ }
+        if (isWeatherOrHolidayQuestion(user)) {
+          try {
+            bits.push(await weather.contextSnippet({
+              place: cfg.weatherPlace,
+              timeZone: cfg.timeZone,
+            }));
+          } catch { /* offline / bad city: skip */ }
+        }
         try {
           bits.push(await pcActions.contextSnippet(user));
         } catch { /* PC probe failed: skip */ }

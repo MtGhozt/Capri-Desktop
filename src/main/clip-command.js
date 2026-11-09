@@ -5,17 +5,13 @@
 
 const { normalizeCommandText } = require('./command-text');
 
-const CLIP_RE = new RegExp(
-  [
-    '\\bguarda(?:me)?\\s+(?:eso|esto|el\\s+clip|el\\s+replay|este\\s+clip)\\b',
-    '\\bgraba(?:me)?\\s+(?:eso|esto|el\\s+clip|el\\s+replay)\\b',
-    '\\bclipea(?:lo|me|\\s+eso|\\s+esto|\\s+el\\s+clip)?\\b',
-    '\\bclip\\s+(?:eso|esto)\\b',
-  ].join('|'),
-);
+const CLIP_RE = /^(?:guarda(?:me)? (?:eso|esto|el clip|el replay|este clip)|graba(?:me)? (?:eso|esto|el clip|el replay)|clipea(?:lo|me| eso| esto| el clip)?|clip (?:eso|esto))$/;
 
 function isClipCommand(text) {
-  return CLIP_RE.test(normalizeCommandText(text));
+  let said = normalizeCommandText(text).replace(/\s+por favor$/, '').trim();
+  if (!said) return false;
+  if (/^(?:no|nunca|despues)\b/.test(said)) return false;
+  return CLIP_RE.test(said);
 }
 
 // "Alt+F10" -> { mods: ['Alt'], key: 'F10' }; null when the combo is not something we can send.

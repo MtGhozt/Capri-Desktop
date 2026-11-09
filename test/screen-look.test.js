@@ -21,9 +21,11 @@ const {
 
 test('look phrases are detected', () => {
   assert.equal(isLookCommand('mirá mi pantalla'), true);
+  assert.equal(isLookCommand('mirame la pantalla'), true);
   assert.equal(isLookCommand('Capri, qué ves'), true);
   assert.equal(isLookCommand('mira esto'), true);
   assert.equal(isLookCommand('pon música'), false);
+  assert.equal(isLookCommand('no sé qué ves de malo'), false);
 });
 
 test('no-vision provider → supportsVision false and NO_VISION line ready', () => {

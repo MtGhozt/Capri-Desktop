@@ -42,7 +42,7 @@ const cases = [
     'borra la conversación',
     'olvida todo',
     'olvidate de todo',
-    'limpia la memoria',
+    'limpia tu memoria',
     'borrá el chat',
     'Capri, olvidá la conversación',
   ], [
@@ -50,6 +50,9 @@ const cases = [
     'no me olvido de vos',
     'borra la basura',
     'olvidate de mí',
+    'limpia la memoria',
+    'borra la memoria',
+    'limpia la memoria RAM',
   ]],
   [isWakeCommand, 'wake', [
     'despierta',

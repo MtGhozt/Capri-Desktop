@@ -11,7 +11,7 @@ const VERBS = new Set(['llamame', 'decime', 'dime']);
 // "llamame cuando llegues" is an order for later, not a name
 const NOT_A_NAME = new Set([
   'cuando', 'si', 'para', 'porque', 'luego', 'despues', 'manana', 'ahora', 'ya', 'mas',
-  'como', 'que', 'el', 'la', 'los', 'las', 'un', 'una', 'de', 'del', 'a', 'al',
+  'como', 'que', 'quien', 'tu', 'hola', 'el', 'la', 'los', 'las', 'un', 'una', 'de', 'del', 'a', 'al',
 ]);
 const MAX_WORDS = 4;
 const MAX_LENGTH = 24;
