@@ -1382,6 +1382,41 @@ button.appmenu__row {
   flex-direction: column;
 }
 
+/* Atajos: label | chip | CAMBIAR aligned across rows */
+.appmenu__shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.5fr) minmax(120px, 1fr) auto;
+  align-items: center;
+  justify-content: stretch;
+  gap: 12px;
+}
+
+.appmenu__shortcut-row .appmenu__label {
+  min-width: 0;
+}
+
+.appmenu__shortcut-row .appmenu__kbd,
+.appmenu__shortcut-row .appmenu__capture {
+  justify-self: start;
+}
+
+.appmenu__shortcut-row .appmenu__shortcut-action {
+  justify-self: end;
+  margin-left: 0;
+}
+
+.appmenu__kbd--empty {
+  opacity: 0.35;
+}
+
+.appmenu__submenu-priority {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: default;
+}
+
 .appmenu__slider {
   --fill: 50%;
   width: calc(100% - 18px);
