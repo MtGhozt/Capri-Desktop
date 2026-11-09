@@ -238,6 +238,23 @@ function promisesReminder(text) {
 
 // "hoy a las 14:30", "mañana a las 07:00", "el miércoles 12 de noviembre a las 08:00", in the
 // zone she is using ('' = this PC's).
+// datetime-local value in the configured zone (not the PC's local clock).
+function formatDateTimeLocal(at, timeZone = '') {
+  const p = zonedParts(at, timeZone);
+  if (!Number.isFinite(p.year)) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+function parseDateTimeLocal(value, timeZone = '') {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!m) return NaN;
+  return atZoneLocal({
+    year: Number(m[1]), month: Number(m[2]), day: Number(m[3]),
+    hour: Number(m[4]), minute: Number(m[5]),
+  }, timeZone);
+}
+
 function formatWhen(at, { now = new Date(), timeZone = '' } = {}) {
   const zone = resolveTimeZone(timeZone);
   const day = (date) => new Intl.DateTimeFormat('en-CA', {
@@ -425,6 +442,6 @@ function createReminders({
 
 module.exports = {
   CHECK_MS, DEFAULT_NOTICE_MIN, parseReminderCommand, parseNoticeMinutes, resolveFireAt,
-  parseMoveTarget, findMatches, formatWhen, deliverReminder, createReminders,
-  readsAsReminderRequest, promisesReminder, durationText,
+  parseMoveTarget, findMatches, formatWhen, formatDateTimeLocal, parseDateTimeLocal,
+  deliverReminder, createReminders, readsAsReminderRequest, promisesReminder, durationText,
 };
