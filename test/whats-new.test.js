@@ -6,6 +6,17 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { NOTES, notesFor, bootNotes, isWhatsNewCommand } = require('../src/main/whats-new');
 
+test('0.2.7 has 2–3 short lines, Gemini, identity and spoken reminders', () => {
+  const lines = notesFor('0.2.7');
+  assert.equal(Array.isArray(lines), true);
+  assert.ok(lines.length >= 2 && lines.length <= 3);
+  for (const line of lines) assert.ok(line.length < 120);
+  const all = lines.join(' ');
+  assert.match(all, /Gemini/);
+  assert.match(all, /voz alta/i);
+  assert.match(all, /modelo/i);
+});
+
 test('0.2.6 has 2–3 short lines', () => {
   const lines = notesFor('0.2.6');
   assert.equal(Array.isArray(lines), true);
@@ -39,7 +50,7 @@ test('upgrade: the new version lines, once', () => {
 });
 
 test('an upgrade to a version without notes says nothing', () => {
-  assert.equal(bootNotes({ version: '0.2.7', lastSeenVersion: '0.2.6' }), null);
+  assert.equal(bootNotes({ version: '0.2.8', lastSeenVersion: '0.2.7' }), null);
 });
 
 test('"¿qué hay de nuevo?" is recognized, also with the wake word', () => {

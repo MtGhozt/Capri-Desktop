@@ -6,6 +6,11 @@
 const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
+  '0.2.7': [
+    'Volví al modelo gratis de Gemini, y si tu config guardó el otro se corrige sola.',
+    'Si me preguntás qué modelo soy, te digo el mío (Gemini, Grok, LM Studio…) y no otra IA.',
+    'Los recordatorios también se dicen en voz alta, con burbuja y respetando No molestar.',
+  ],
   '0.2.6': [
     'Ahora uso la hora de tu país, y la podés elegir en Ajustes.',
     'Podés pedirme timers y recordatorios por voz, y te esperan aunque cierres Capri.',
