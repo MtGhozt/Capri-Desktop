@@ -31,7 +31,7 @@ const { switchProvider, setProviderModel, modelForProvider } = require('./chat-m
 const { parseRenderMode, renderSwitches, HINTS: RENDER_HINTS, SOFTWARE_CONFIRM } = require('./render-mode');
 const { createLms } = require('./lms');
 const { createVoice, checkVoiceDir, resolveVoiceDir } = require('./voice');
-const { createVoiceInstall, PYTHON_URL, voiceInstallDir } = require('./voice-install');
+const { createVoiceInstall, PYTHON_URL, voiceInstallDir, hasNvidiaGpu } = require('./voice-install');
 const { VC_URL, VC_MESSAGE, missingVcRuntime } = require('./vc-runtime');
 const { activeVoiceLabel, saveCustomRef, transcriptFor } = require('./voice-ref');
 const { createSpeakQueue } = require('./speak');
@@ -2291,7 +2291,13 @@ function applyMenuAction(id, value) {
         : { ok: true };
     }
     case 'time-zone': updateConfig({ timeZone: String(value || '').trim() }); break;
-    case 'weather-place': updateConfig({ weatherPlace: String(value || '').trim().slice(0, 80) }); break;
+    case 'weather-place': {
+      const place = String(value || '').trim().slice(0, 80);
+      updateConfig({ weatherPlace: place });
+      if (!place) return { ok: true, label: '' };
+      if (!weather?.resolvePlace) return { ok: true, offline: true };
+      return weather.resolvePlace(place).then((resolved) => ({ ok: true, ...resolved }));
+    }
     case 'reminder-update': {
       const id = String(value?.id || '').trim();
       const at = Date.parse(String(value?.at || ''));
@@ -2714,6 +2720,7 @@ function menuState(extra = {}) {
     clips: {
       hotkey: cfg.clips?.saveHotkey || 'Alt+F10',
       folder: clipFolderLabel(cfg),
+      nvidia: hasNvidiaGpu(),
     },
     shortcuts: [
       { id: 'toggle', label: 'Mostrar / ocultar Capri', accel: cfg.shortcuts?.toggle || '', active: Boolean(shortcutActive.toggle) },
