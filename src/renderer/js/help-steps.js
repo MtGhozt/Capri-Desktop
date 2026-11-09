@@ -57,7 +57,7 @@ export const HELP_STEPS = {
         text: 'Instalá Python 3.11 (Windows installer 64-bit). En el instalador marcá “Add python.exe to PATH” antes de Install Now:',
         command: 'https://www.python.org/downloads/release/python-3119/',
       },
-      'En Capri: Ajustes › Oído › «Instalar voz». Vas a ver la barra de progreso; «Ver detalles» muestra el log de la instalación.',
+      'En Capri: Ajustes › Oído y voz › «Instalar voz». Vas a ver la barra de progreso; «Ver detalles» muestra el log de la instalación.',
       'Con GPU NVIDIA se instala OmniVoice. Sin NVIDIA, la casilla «OmniVoice (mejor con GPU NVIDIA)» queda opcional (sin ella solo STT / Kokoro).',
       'Si falta el runtime: tocá «Instalar VC++ x64» o «Bajar Python 3.11» según el aviso.',
       {
@@ -71,7 +71,7 @@ export const HELP_STEPS = {
     section: 'hearing',
     steps: [
       'Decí «Hey Capri» y después tu orden (con la voz instalada y el micrófono en ACTIVO).',
-      'O usá «Tecla para hablar» en Ajustes › Oído (por defecto Ctrl+Alt+V): mantené o tocá según cómo la configuraste.',
+      'O usá «Tecla para hablar» en Ajustes › Oído y voz (por defecto Ctrl+Alt+V): mantené o tocá según cómo la configuraste.',
       'Para escribirle: Ctrl+Alt+T abre el chat.',
       '«Pausa antes de cortar» (CORTA · 0.8 s / NORMAL · 1.4 s / LARGA · 2.2 s) define cuánto silencio cierra la frase después de «Hey Capri».',
     ],
@@ -83,7 +83,7 @@ export const HELP_STEPS = {
     steps: [
       'Cerrá Capri.',
       {
-        text: 'Instalá Microsoft Visual C++ Redistributable (x64), o desde Ajustes › Oído tocá «Instalar VC++ x64»:',
+        text: 'Instalá Microsoft Visual C++ Redistributable (x64), o desde Ajustes › Oído y voz tocá «Instalar VC++ x64»:',
         command: 'https://aka.ms/vs/17/release/vc_redist.x64.exe',
       },
       'Reiniciá la PC, abrí Capri y probá «Hey Capri» o «Tecla para hablar».',
@@ -98,8 +98,8 @@ export const HELP_STEPS = {
     section: 'hearing',
     note: 'OmniVoice (voz por defecto) necesita GPU NVIDIA. Sin clone propio no se baja audio de terceros.',
     steps: [
-      'Instalá la voz con Ajustes › Oído › «Instalar voz» (ver el «?» de Instalar voz).',
-      'En Ajustes › Oído › Respuesta elegí VOZ (habla), BLIPS (beeps al escribir) o SILENCIO (solo texto).',
+      'Instalá la voz con Ajustes › Oído y voz › «Instalar voz» (ver el «?» de Instalar voz).',
+      'En Ajustes › Oído y voz › Respuesta elegí VOZ (habla), BLIPS (beeps al escribir) o SILENCIO (solo texto).',
       'La primera carga de OmniVoice puede mostrar «cargando voz…» uno o dos minutos; después contesta con voz.',
       'Para tu clone: «Usar mi propia voz…», elegí un .wav de 5–15 s y escribí en «Qué dice el audio» lo que dice, palabra por palabra (o «Cargar .txt»); «Guardar voz» se activa recién con audio y texto. Se guarda en «Carpeta de voz» → ref/my_ref.wav junto a su .txt.',
       {
@@ -163,6 +163,26 @@ export const HELP_STEPS = {
       '«Automático (recomendado)»: la configuración gráfica normal de Windows.',
       '«OpenGL (experimental)»: si Capri se vuelve invisible o transparente, volvé a Automático.',
       '«Sin GPU (lento)» es último recurso (pide CONFIRMAR); dibuja por CPU.',
+    ],
+  },
+  clip: {
+    title: 'Guardar clip',
+    section: 'behavior',
+    note: 'Solo con GPU NVIDIA (ShadowPlay / Instant Replay). En otras GPUs el atajo no hace nada.',
+    steps: [
+      'Con NVIDIA: Alt+F10 (o el atajo de Instant Replay) guarda el clip reciente.',
+      'Activá Instant Replay en la app de NVIDIA si todavía no está.',
+      'Sin NVIDIA este botón queda avisado; no hay grabador propio por ahora.',
+    ],
+  },
+  memory: {
+    title: 'Memoria y personalidad',
+    section: 'memory',
+    steps: [
+      '«Olvidar conversación» borra el hilo actual de chat (no toca memory.md).',
+      '«Personalidad» abre persona.md: tono y carácter de Capri.',
+      '«Memoria» abre memory.md: notas fijas sobre vos que viajan en el prompt.',
+      '«Recargar personalidad» relee esos archivos sin reiniciar Capri.',
     ],
   },
 };

@@ -8,7 +8,7 @@ const { HELP_STEPS, toggleHelp, splitHelpText } = require('../src/renderer/js/he
 
 test('each help id has a title and steps', () => {
   assert.deepEqual(Object.keys(HELP_STEPS).sort(), [
-    'agents', 'apps', 'brain', 'gaming', 'hearing', 'namida', 'screen', 'spotify', 'talk', 'voice', 'wake',
+    'agents', 'apps', 'brain', 'clip', 'gaming', 'hearing', 'memory', 'namida', 'screen', 'spotify', 'talk', 'voice', 'wake',
   ]);
   for (const [id, help] of Object.entries(HELP_STEPS)) {
     assert.ok(help.title, id);
