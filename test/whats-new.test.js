@@ -35,6 +35,7 @@ test('0.2.8 has 2–3 short lines about the screen look', () => {
   assert.match(all, /monitor/i);
   assert.match(all, /ventana/i);
   assert.match(all, /negro/i);
+  assert.match(all, /disco/i);
 });
 
 test('a version with no entry says nothing', () => {

@@ -20,7 +20,7 @@ const {
   providerAfterKeyRemoved, supportsVision, provider, activeBrainIds,
 } = require('./chat-providers');
 const {
-  isLookCommand, consentNotice, captureScreenJpeg, createCaptureShield, shouldAutoLook, AUTO_LOOK_MS,
+  isLookCommand, consentNotice, captureScreenJpeg, createCaptureShield, keepCaptureFile, shouldAutoLook, AUTO_LOOK_MS,
 } = require('./screen-look');
 const { patchGamingApps, gameAppKey } = require('./game-detect');
 const { probeProvider } = require('./llm-probe');
@@ -1571,6 +1571,11 @@ function lookDisplay() {
     || targetDisplay();
 }
 
+// Where an older build left the shot even though the consent text says it stays in memory.
+function captureFilePath() {
+  return path.join(path.dirname(voiceLogPath()), 'last-capture.jpg');
+}
+
 async function snapScreenForLook() {
   const display = lookDisplay();
   const displayIndex = screen.getAllDisplays().findIndex((d) => d.id === display?.id);
@@ -1607,11 +1612,11 @@ async function snapScreenForLook() {
     });
     logEvent(voiceLogPath(), `[capri] screen capture time=${Date.now()} display=${captured?.displayId || display?.id || '?'} size=${captured?.size?.width || 0}x${captured?.size?.height || 0} brain=pending image=${image ? 'attached' : 'none'}`);
     if (!image) return null;
-    try {
-      fs.writeFileSync(path.join(path.dirname(voiceLogPath()), 'last-capture.jpg'), Buffer.from(image, 'base64'));
-    } catch (err) {
-      logEvent(voiceLogPath(), `[capri] last capture save failed: ${err.message}`);
-    }
+    keepCaptureFile({
+      image,
+      file: captureFilePath(),
+      debugSave: config.load().voice?.debugSave === true,
+    });
     return image;
   } catch (err) {
     try { shield.after(); } catch { /* already cleaned */ }
@@ -3206,6 +3211,8 @@ function main() {
     restoreSpotifyToken();
     serveProtocol();
     registerIpc();
+    // 0.2.8: an older build wrote the shot here even though consent says it stays in memory.
+    keepCaptureFile({ file: captureFilePath(), debugSave: config.load().voice?.debugSave === true });
     // "what's new" once, only after an update: computed before lastSeenVersion moves on
     whatsNewLines = bootNotes({
       version: app.getVersion(),

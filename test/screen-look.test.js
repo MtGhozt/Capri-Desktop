@@ -15,6 +15,7 @@ const {
   createCaptureShield,
   pickScreenSource,
   frameIsBlank,
+  keepCaptureFile,
   AUTO_LOOK_MS,
 } = require('../src/main/screen-look');
 
@@ -58,6 +59,31 @@ test('capture path never writes a file', async () => {
   // Module has no fs import / write path; callers must not persist. Guard the contract.
   assert.equal(writes, 0);
   assert.equal(require('fs').writeFileSync === require('node:fs').writeFileSync, true);
+});
+
+test('a normal screen look never leaves the shot on disk', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-look-'));
+  const file = path.join(dir, 'last-capture.jpg');
+  fs.writeFileSync(file, 'leftover'); // written by a build before 0.2.8
+  const thumb = {
+    isEmpty: () => false,
+    getSize: () => ({ width: 320, height: 180 }),
+    toJPEG: () => Buffer.from('jpeg-bytes'),
+  };
+  const b64 = await captureScreenJpeg({
+    getSources: async () => [{ display_id: '1', thumbnail: thumb }],
+    displayId: '1',
+  });
+  assert.ok(b64);
+  assert.equal(keepCaptureFile({ image: b64, file, debugSave: false }), false);
+  assert.equal(fs.existsSync(file), false);
+  // voice.debugSave (off by default) is the only way the shot is kept
+  assert.equal(keepCaptureFile({ image: b64, file, debugSave: true }), true);
+  assert.equal(fs.readFileSync(file).toString(), 'jpeg-bytes');
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('capture reports the selected display and image dimensions', async () => {
@@ -343,6 +369,17 @@ test('look captures the display with the foreground window, not the mouse', () =
   assert.match(main, /attempts: 3,/);
   // a static window is a valid frame: the old hash-equality "blank" check is gone
   assert.doesNotMatch(main, /previousHash/);
+});
+
+test('the look and the boot keep the shot only with voice.debugSave on', () => {
+  const main = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
+    'utf8',
+  );
+  assert.match(main, /if \(!image\) return null;\s*keepCaptureFile\(\{\s*image,\s*file: captureFilePath\(\),\s*debugSave: config\.load\(\)\.voice\?\.debugSave === true,?\s*\}\)/);
+  // a leftover from an older build is removed on boot, not on the first look
+  assert.match(main, /an older build wrote the shot here[\s\S]*?keepCaptureFile\(\{ file: captureFilePath\(\)/);
+  assert.doesNotMatch(main, /writeFileSync\([^)]*last-capture/);
 });
 
 test('menu opens with explicit mouse capture and restores click-through on close', () => {

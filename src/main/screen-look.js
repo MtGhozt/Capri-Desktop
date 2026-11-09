@@ -4,6 +4,7 @@
 
 const { normalizeCommandText } = require('./command-text');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 
 const NO_VISION = 'Este cerebro no puede ver imágenes; probá con Gemini.';
 const MAX_WIDTH = 1280;
@@ -127,6 +128,23 @@ function frameIsBlank(pixels) {
   return true;
 }
 
+// The consent text promises the shot stays in memory. Only voice.debugSave (off by default) keeps it
+// on disk for debugging; otherwise a leftover from an older build is removed.
+function keepCaptureFile({ image = null, file = null, debugSave = false } = {}) {
+  if (!file) return false;
+  if (!debugSave) {
+    try { fs.unlinkSync(file); } catch { /* already gone */ }
+    return false;
+  }
+  if (!image) return false;
+  try {
+    fs.writeFileSync(file, Buffer.from(image, 'base64'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function captureScreenJpeg({
   getSources,
   displayId = null,
@@ -204,5 +222,6 @@ module.exports = {
   createCaptureShield,
   pickScreenSource,
   frameIsBlank,
+  keepCaptureFile,
   captureScreenJpeg,
 };

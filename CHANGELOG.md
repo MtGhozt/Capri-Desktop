@@ -6,6 +6,7 @@
 
 - **«Mirá mi pantalla» mira el monitor correcto:** la captura elegía la pantalla más cercana al mouse y, si no encontraba su id, la primera de la lista. Con dos monitores eso podía ser el que solo tiene el fondo y el cartel «Activar Windows». Ahora usa el monitor de la ventana que tenés adelante (el rectángulo ya lo daba el vigilante de ventanas), después el del mouse y por último el de Capri. Si hay varios monitores y ninguno coincide, no manda la captura de otro.
 - **Primer frame negro:** un frame plano negro se reintenta hasta tres veces antes de darse por vencido. Un frame quieto ya no se descarta como «repetido»: una ventana estática es una captura válida.
+- **La foto ya no queda en disco:** el aviso de consentimiento decía «no la guardo en disco» y ahora es cierto. La captura vive en memoria para esa respuesta; un `last-capture.jpg` de una versión anterior se borra al arrancar y solo se guarda si activás el guardado de depuración de voz (`voice.debugSave`, apagado por defecto).
 
 ## 0.2.7 (etiqueta `v0.2.7`)
 
