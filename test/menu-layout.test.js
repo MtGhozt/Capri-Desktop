@@ -15,7 +15,7 @@ test('quick menu contains only compact controls and settings entry', () => {
 
 test('settings tabs cover every non-quick configuration area', () => {
   assert.deepEqual(SETTINGS_TABS.map((tab) => tab.id), [
-    'model', 'agents', 'memory', 'hearing', 'apps', 'bubble', 'music', 'shortcuts', 'behavior', 'about',
+    'model', 'agents', 'memory', 'hearing', 'apps', 'bubble', 'music', 'shortcuts', 'behavior', 'reminders', 'about',
   ]);
 });
 
@@ -243,5 +243,6 @@ test('settings tabs have isolated sections and behavior uses nested config', () 
   assert.doesNotMatch(source, /Modo compacto|compact-mode/);
   const behavior = source.match(/section\('COMPORTAMIENTO', 'behavior'\)([\s\S]*?)section\('APARIENCIA'/);
   assert.ok(behavior, 'behavior section must end before Apariencia');
-  assert.doesNotMatch(behavior[1], /Tema|Atajos|Pantalla|Animaciones|Arrastrar|Iniciar con Windows/);
+  assert.doesNotMatch(behavior[1], /Tema|Atajos|Pantalla|Animaciones|Arrastrar/);
+  assert.match(behavior[1], /Iniciar con Windows/);
 });

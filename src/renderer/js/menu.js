@@ -94,10 +94,11 @@ export const QUICK_MENU_ITEMS = [
 
 export const SETTINGS_TABS = [
   { id: 'model', label: 'Cerebro' }, { id: 'agents', label: 'Agentes' },
-  { id: 'memory', label: 'Memoria' },
-  { id: 'hearing', label: 'Oído' }, { id: 'apps', label: 'Mis apps' },
+  { id: 'memory', label: 'Memoria y personalidad' },
+  { id: 'hearing', label: 'Oído y voz' }, { id: 'apps', label: 'Mis apps' },
   { id: 'bubble', label: 'Apariencia' }, { id: 'music', label: 'Música / Reproductor' },
   { id: 'shortcuts', label: 'Atajos' }, { id: 'behavior', label: 'Comportamiento' },
+  { id: 'reminders', label: 'Recordatorios' },
   { id: 'about', label: 'Acerca de' },
 ];
 
@@ -124,6 +125,7 @@ export class AppMenu {
     this.appNote = '';      // what came of the last add / save / delete
     this.gameNote = '';
     this.reminderNote = '';
+    this.placeNote = '';    // resolved city label or "No encontré esa ciudad"
     this.appDelete = null;  // BORRAR pressed once: the next press deletes
     this.linkForm = false;  // Añadir enlace open
     this.testText = '';     // Probar comando
@@ -455,11 +457,41 @@ export class AppMenu {
       (anchor) => openSubmenu('mic-device', [{ id: null, label: 'PREDETERMINADO' }, ...(state.micDevices || []).map((d) => ({ id: d.id, label: d.name }))], cfg.micDevice, 'mic-device', anchor));
     row('Modo de respuesta', REPLY_OPTIONS.find((o) => o.id === cfg.replyMode)?.label || 'VOZ', 'reply-mode',
       (anchor) => openSubmenu('reply-mode', REPLY_OPTIONS, cfg.replyMode, 'reply-mode', anchor));
-    row('Proveedor', model.providers?.find((o) => o.id === model.provider)?.label || model.provider, 'model-provider',
-      (anchor) => openSubmenu('model-provider', model.providers || [], model.provider, 'model-provider', anchor));
+    const chain = model.brainChain || [];
+    const activeLabel = chain[0]?.label
+      || model.providers?.find((o) => o.id === model.provider)?.label
+      || model.provider;
+    row('Proveedor', activeLabel, 'model-provider',
+      (anchor) => openSubmenu(
+        'model-provider',
+        [
+          ...chain.map((brain, index) => ({
+            id: brain.id,
+            label: `${index + 1}. ${brain.label}${index === 0 ? ' · activo' : ''}`,
+            reorder: true,
+          })),
+          { id: '__more__', label: 'Más proveedores…' },
+        ],
+        model.provider,
+        'model-provider',
+        anchor,
+      ));
     row('Corregir lo último', hearing.fixes?.length ? `${hearing.fixes.length} CORRECCIONES` : 'OÍDO', 'fixes',
       () => { this.hide(); this.host.openSettings('hearing'); });
-    row('Guardar clip', 'ALT+F10', 'clip-save', () => this.act('clip-save'));
+    const clipOk = state.clips?.nvidia !== false;
+    row(
+      'Guardar clip',
+      clipOk ? (state.clips?.hotkey || 'ALT+F10') : 'Solo NVIDIA',
+      'clip-save',
+      clipOk
+        ? () => this.act('clip-save')
+        : (anchor) => {
+          this.helpOpen = this.helpOpen === 'clip' ? null : 'clip';
+          this.helpAnchor = anchor;
+          this.renderQuick(this.lastState);
+          requestAnimationFrame(() => this.placeSubmenu());
+        },
+    );
     row('Hacer algo', '', 'do-something', () => this.act('do-something'));
     row('Comportamiento', cfg.locked ? 'FIJO' : 'NORMAL', 'behavior',
       (anchor) => openSubmenu('behavior', [{ id: 'normal', label: 'NORMAL' }, { id: 'locked', label: 'FIJO' }], cfg.locked ? 'locked' : 'normal', 'drag-lock', anchor));
@@ -486,10 +518,63 @@ export class AppMenu {
     // One popout at a time: the help panel takes the submenu's place while it is open.
     if (this.quickOpen && !this.helpOpen) {
       const menu = build('div', 'appmenu__submenu');
-      const title = build('div', 'appmenu__submenu-title', this.quickOptions.id === 'game-list' ? 'NO MOLESTAR' : this.quickOptions.id.toUpperCase());
+      const title = build('div', 'appmenu__submenu-title', this.quickOptions.id === 'game-list' ? 'NO MOLESTAR'
+        : this.quickOptions.id === 'model-provider' ? 'PRIORIDAD' : this.quickOptions.id.toUpperCase());
       if (this.quickOptions.id === 'game-list') title.append(this.helpButton('gaming'));
       menu.append(title);
-      for (const option of this.quickOptions.options) {
+      const providerPriority = this.quickOptions.id === 'model-provider';
+      for (const [index, option] of this.quickOptions.options.entries()) {
+        if (providerPriority && option.id === '__more__') {
+          const more = build('button', 'appmenu__submenu-row', option.label);
+          more.type = 'button';
+          more.addEventListener('click', () => {
+            this.quickOpen = null;
+            this.hide();
+            this.host.openSettings('model');
+          });
+          menu.append(more);
+          continue;
+        }
+        if (providerPriority && option.reorder) {
+          const row = build('div', 'appmenu__submenu-row appmenu__submenu-priority');
+          row.classList.toggle('is-selected', String(option.id) === String(this.quickOptions.current));
+          row.append(build('span', '', option.label));
+          const arrows = build('span', 'appmenu__priority-actions');
+          const brains = (this.lastState?.model?.brainChain || []).filter((b) => b.id !== '__more__');
+          for (const [direction, glyph, disabled] of [
+            ['up', '↑', index === 0],
+            ['down', '↓', index >= brains.length - 1],
+          ]) {
+            const btn = build('button', 'appmenu__arrow', glyph);
+            btn.type = 'button';
+            btn.disabled = disabled;
+            btn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              await this.host.menuAction({ id: 'model-reorder', value: { id: option.id, direction } });
+              const next = await this.host.getMenu({ folded: this.folded(), light: true });
+              this.lastState = next;
+              const chain = next.model?.brainChain || [];
+              this.quickOptions = {
+                ...this.quickOptions,
+                options: [
+                  ...chain.map((brain, i) => ({
+                    id: brain.id,
+                    label: `${i + 1}. ${brain.label}${i === 0 ? ' · activo' : ''}`,
+                    reorder: true,
+                  })),
+                  { id: '__more__', label: 'Más proveedores…' },
+                ],
+                current: next.model?.provider,
+              };
+              this.renderQuick(next);
+              requestAnimationFrame(() => this.placeSubmenu());
+            });
+            arrows.append(btn);
+          }
+          row.append(arrows);
+          menu.append(row);
+          continue;
+        }
         const button = build('button', 'appmenu__submenu-row', option.label);
         button.type = 'button';
         button.classList.toggle('is-selected', String(option.id) === String(this.quickOptions.current));
@@ -1172,7 +1257,7 @@ export class AppMenu {
     body.append(agentsHint);
 
     // MEMORIA
-    section('MEMORIA', 'memory');
+    section('MEMORIA Y PERSONALIDAD', 'memory');
     action('Olvidar conversación', {
       value: this.confirmForget ? 'CONFIRMAR' : '',
       danger: this.confirmForget,
@@ -1191,7 +1276,7 @@ export class AppMenu {
     action('Recargar personalidad', { setting: 'memory', value: 'RELEER', onClick: () => this.act('persona-reload') });
 
     // OÍDO: what she hears wrong (Paso 4A)
-    section('OÍDO', 'hearing');
+    section('OÍDO Y VOZ', 'hearing');
     const hearing = state.hearing || { fixes: [], lastHeard: '' };
     action('Corregir lo último', {
       value: hearing.fixes.length ? `${hearing.fixes.length} CORRECCIONES` : '',
@@ -1224,10 +1309,21 @@ export class AppMenu {
       },
     });
 
-    // CLIPS
-    section('CLIPS', 'clips');
-    action('Guardar clip', { hotkey: state.clips.hotkey, onClick: () => this.act('clip-save') });
-    action('Abrir carpeta de clips', { value: state.clips.folder, onClick: () => this.act('clips-dir') });
+    // CLIPS (lives under Comportamiento: no separate sidebar tab)
+    section('CLIPS', 'behavior');
+    const clipNvidia = state.clips?.nvidia !== false;
+    action('Guardar clip', {
+      setting: 'behavior',
+      hotkey: clipNvidia ? state.clips.hotkey : '',
+      value: clipNvidia ? '' : 'Solo con NVIDIA (ShadowPlay)',
+      help: 'clip',
+      onClick: clipNvidia ? () => this.act('clip-save') : undefined,
+    });
+    action('Abrir carpeta de clips', {
+      setting: 'behavior',
+      value: state.clips.folder,
+      onClick: () => this.act('clips-dir'),
+    });
 
     // COMPORTAMIENTO
     section('COMPORTAMIENTO', 'behavior');
@@ -1257,20 +1353,28 @@ export class AppMenu {
     placeInput.addEventListener('change', () => this.act('weather-place', placeInput.value.trim()));
     placeRow.append(placeInput);
     body.append(placeRow);
-    const placeHint = build('div', 'appmenu__hint', 'Opcional. Clima (Open-Meteo) y feriados (Nager.Date); sin red, no inventa.');
+    const placeHint = build('div', 'appmenu__hint', this.placeNote
+      || 'Opcional. Clima (Open-Meteo) y feriados (Nager.Date); sin red, no inventa.');
     placeHint.dataset.setting = 'behavior';
+    if (this.placeNote) placeHint.classList.add('is-place-resolved');
     body.append(placeHint);
+    toggle('Iniciar con Windows', {
+      setting: 'behavior',
+      on: Boolean(state.login),
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.act('startup', on),
+    });
 
-    section('RECORDATORIOS', 'behavior');
+    section('RECORDATORIOS', 'reminders');
     const pending = Array.isArray(cfg.reminders) ? cfg.reminders : [];
     if (!pending.length) {
       const empty = build('div', 'appmenu__hint', 'No hay recordatorios pendientes.');
-      empty.dataset.setting = 'behavior';
+      empty.dataset.setting = 'reminders';
       body.append(empty);
     } else {
       for (const item of pending) {
         const row = build('div', 'appmenu__row appmenu__reminder-row');
-        row.dataset.setting = 'behavior';
+        row.dataset.setting = 'reminders';
         const label = build('span', 'appmenu__label', item.when || '');
         label.title = item.text || '';
         row.append(label);
@@ -1278,10 +1382,12 @@ export class AppMenu {
         row.append(text);
         const whenInput = build('input', 'appmenu__input');
         whenInput.type = 'datetime-local';
-        whenInput.value = this.reminderInputValue(item.at);
+        whenInput.value = this.reminderInputValue(item.at, cfg.timeZone);
         whenInput.title = 'Editar hora';
         whenInput.addEventListener('change', () => {
-          const iso = whenInput.value ? new Date(whenInput.value).toISOString() : '';
+          const iso = whenInput.value
+            ? this.reminderInputToIso(whenInput.value, cfg.timeZone)
+            : '';
           this.act('reminder-update', { id: item.id, at: iso });
         });
         row.append(whenInput);
@@ -1297,7 +1403,7 @@ export class AppMenu {
     }
     if (this.reminderNote) {
       const note = build('div', 'appmenu__hint', this.reminderNote);
-      note.dataset.setting = 'behavior';
+      note.dataset.setting = 'reminders';
       body.append(note);
     }
 
@@ -1464,7 +1570,8 @@ export class AppMenu {
     if (!this.settingsMode) return;
     const groups = {
       model: ['model'], agents: ['agents'], memory: ['memory'], hearing: ['hearing'], apps: ['apps', 'apps-add', 'apps-found', 'apps-test'],
-      bubble: ['bubble'], music: ['music'], shortcuts: ['shortcuts'], behavior: ['behavior'], about: ['about'],
+      bubble: ['bubble'], music: ['music'], shortcuts: ['shortcuts'], behavior: ['behavior'], reminders: ['reminders'],
+      about: ['about'],
     };
     const allowed = new Set(groups[this.settingsSection] || []);
     let sectionId = '';
@@ -1655,12 +1762,37 @@ export class AppMenu {
     return h < 48 ? `${h} H` : `${Math.round(h / 24)} DÍAS`;
   }
 
-  reminderInputValue(at) {
+  // Mirrors reminders.formatDateTimeLocal / parseDateTimeLocal (renderer cannot require main).
+  reminderInputValue(at, timeZone = '') {
     const ms = Number(at);
     if (!Number.isFinite(ms)) return '';
-    const d = new Date(ms);
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const zone = resolvedTimeZone(timeZone);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date(ms));
+    const get = (type) => parts.find((p) => p.type === type)?.value || '';
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+  }
+
+  reminderInputToIso(value, timeZone = '') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || '').trim());
+    if (!m) return '';
+    const zone = resolvedTimeZone(timeZone);
+    let guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0);
+    for (let i = 0; i < 3; i++) {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).formatToParts(new Date(guess));
+      const get = (type) => Number(parts.find((p) => p.type === type)?.value || 0);
+      const want = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+      const have = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
+      const delta = want - have;
+      if (delta === 0) break;
+      guess += delta;
+    }
+    return new Date(guess).toISOString();
   }
 
   // A text field that keeps its keys to itself (Esc still closes the menu).
@@ -1858,13 +1990,15 @@ export class AppMenu {
   // Ajustes › Atajos: one editable combo each, same capture flow as Tecla para hablar.
   shortcutRow(s, build, kbd) {
     const wrap = build('div', 'appmenu__talkkey');
-    const row = build('button', 'appmenu__row appmenu__row--action');
+    wrap.dataset.setting = 'shortcuts';
+    const row = build('button', 'appmenu__row appmenu__row--action appmenu__shortcut-row');
     row.type = 'button';
     row.append(build('span', 'appmenu__label', s.label));
     const capturing = this.capturingId === s.id;
     if (capturing) row.append(build('span', 'appmenu__meta appmenu__capture', 'PULSA LA COMBINACIÓN…'));
     else if (s.accel) row.append(kbd(s.accel));
-    row.append(build('span', 'appmenu__meta', capturing ? 'ESC' : 'CAMBIAR'));
+    else row.append(build('kbd', 'appmenu__kbd appmenu__kbd--empty', '—'));
+    row.append(build('span', 'appmenu__meta appmenu__shortcut-action', capturing ? 'ESC' : 'CAMBIAR'));
     row.addEventListener('click', (e) => {
       e.stopPropagation();
       this.capturingId = capturing ? null : s.id;
@@ -2606,13 +2740,20 @@ export class AppMenu {
     if ((id === 'reminder-update' || id === 'reminder-delete') && result?.message) {
       this.reminderNote = result.message;
     }
+    if (id === 'weather-place') {
+      if (result?.label) this.placeNote = result.label;
+      else if (result?.notFound) this.placeNote = 'No encontré esa ciudad';
+      else if (result?.offline) { /* keep quiet: no spam when offline */ }
+      else if (!value) this.placeNote = '';
+    }
     if (!keep) {
       this.hide();
-      return;
+      return result;
     }
     if (this.open) {
       const state = await this.host.getMenu({ folded: this.folded(), light: !this.settingsMode });
       this.render(state);
     }
+    return result;
   }
 }
