@@ -157,7 +157,9 @@ test('menu exposes the city field next to the time zone', () => {
   const menu = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(menu, /Ciudad \/ país \(clima\)/);
   assert.match(menu, /weather-place/);
+  assert.match(menu, /No encontré esa ciudad/);
   const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
   assert.match(main, /case 'weather-place'/);
+  assert.match(main, /resolvePlace/);
   assert.match(main, /temporalExtras/);
 });

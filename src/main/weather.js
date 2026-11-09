@@ -53,29 +53,17 @@ function createWeather({
         headers: { Accept: 'application/json', 'User-Agent': 'Capri-Desktop' },
         signal: controller.signal,
       });
-      if (!res?.ok) return null;
-      return await res.json();
+      if (!res?.ok) return { offline: true };
+      return { data: await res.json() };
     } catch {
-      return null;
+      return { offline: true };
     } finally {
       clearTimeout(timer);
     }
   }
 
-  async function geocode(place) {
-    const key = String(place || '').trim().toLowerCase();
-    if (!key) return null;
-    if (geo && geo.key === key && now() - geo.at < WEATHER_TTL_MS) return geo.value;
-    const q = encodeURIComponent(String(place).trim());
-    const json = await getJson(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${q}&count=1&language=es&format=json`,
-    );
-    const hit = json?.results?.[0];
-    if (!hit || !Number.isFinite(hit.latitude) || !Number.isFinite(hit.longitude)) {
-      geo = { key, at: now(), value: null };
-      return null;
-    }
-    const value = {
+  function locFromHit(hit, place) {
+    return {
       name: String(hit.name || place).trim(),
       country: String(hit.country || '').trim(),
       countryCode: String(hit.country_code || '').trim().toUpperCase(),
@@ -83,8 +71,59 @@ function createWeather({
       longitude: hit.longitude,
       timezone: String(hit.timezone || '').trim(),
     };
+  }
+
+  async function geocode(place) {
+    const key = String(place || '').trim().toLowerCase();
+    if (!key) return null;
+    if (geo && geo.key === key && now() - geo.at < WEATHER_TTL_MS) return geo.value;
+    const q = encodeURIComponent(String(place).trim());
+    const result = await getJson(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${q}&count=1&language=es&format=json`,
+    );
+    if (result.offline) return null; // do not cache: retry when the net comes back
+    const hit = result.data?.results?.[0];
+    if (!hit || !Number.isFinite(hit.latitude) || !Number.isFinite(hit.longitude)) {
+      geo = { key, at: now(), value: null };
+      return null;
+    }
+    const value = locFromHit(hit, place);
     geo = { key, at: now(), value };
     return value;
+  }
+
+  // Settings hint: resolved "City, Country", notFound, or offline (no spam).
+  async function resolvePlace(place) {
+    const raw = String(place || '').trim();
+    if (!raw) return { ok: true, label: '' };
+    const key = raw.toLowerCase();
+    if (geo && geo.key === key && now() - geo.at < WEATHER_TTL_MS) {
+      if (geo.value) {
+        return {
+          ok: true,
+          label: [geo.value.name, geo.value.country].filter(Boolean).join(', '),
+          loc: geo.value,
+        };
+      }
+      return { notFound: true };
+    }
+    const q = encodeURIComponent(raw);
+    const result = await getJson(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${q}&count=1&language=es&format=json`,
+    );
+    if (result.offline) return { offline: true };
+    const hit = result.data?.results?.[0];
+    if (!hit || !Number.isFinite(hit.latitude) || !Number.isFinite(hit.longitude)) {
+      geo = { key, at: now(), value: null };
+      return { notFound: true };
+    }
+    const value = locFromHit(hit, raw);
+    geo = { key, at: now(), value };
+    return {
+      ok: true,
+      label: [value.name, value.country].filter(Boolean).join(', '),
+      loc: value,
+    };
   }
 
   async function loadForecast(place, timeZone) {
@@ -103,8 +142,9 @@ function createWeather({
       daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
       forecast_days: '2',
     });
-    const json = await getJson(`https://api.open-meteo.com/v1/forecast?${params}`);
-    if (!json?.current || !json?.daily) {
+    const result = await getJson(`https://api.open-meteo.com/v1/forecast?${params}`);
+    const json = result.data;
+    if (result.offline || !json?.current || !json?.daily) {
       forecast = { key, at: now(), value: null };
       return null;
     }
@@ -131,8 +171,9 @@ function createWeather({
     const key = `${code}:${y}`;
     const hit = holidayCache.get(key);
     if (hit && now() - hit.at < HOLIDAY_TTL_MS) return hit.value;
-    const json = await getJson(`https://date.nager.at/api/v3/PublicHolidays/${y}/${code}`);
-    if (!Array.isArray(json)) {
+    const result = await getJson(`https://date.nager.at/api/v3/PublicHolidays/${y}/${code}`);
+    const json = result.data;
+    if (result.offline || !Array.isArray(json)) {
       holidayCache.set(key, { at: now(), value: null });
       return null;
     }
@@ -257,6 +298,7 @@ function createWeather({
   return {
     contextSnippet,
     answerDirect,
+    resolvePlace,
     formatWeatherLine,
     formatHolidayLine,
     weatherLabel,
