@@ -26,6 +26,17 @@ test('0.2.6 has 2–3 short lines', () => {
   for (const line of lines) assert.ok(line.length < 120);
 });
 
+test('0.2.8 has 2–3 short lines about the screen look', () => {
+  const lines = notesFor('0.2.8');
+  assert.equal(Array.isArray(lines), true);
+  assert.ok(lines.length >= 2 && lines.length <= 3);
+  for (const line of lines) assert.ok(line.length < 120);
+  const all = lines.join(' ');
+  assert.match(all, /monitor/i);
+  assert.match(all, /ventana/i);
+  assert.match(all, /negro/i);
+});
+
 test('a version with no entry says nothing', () => {
   assert.equal(notesFor('0.2.3'), null);
   assert.equal(notesFor('v9.9.9'), null);
@@ -52,7 +63,7 @@ test('upgrade: the new version lines, once', () => {
 });
 
 test('an upgrade to a version without notes says nothing', () => {
-  assert.equal(bootNotes({ version: '0.2.8', lastSeenVersion: '0.2.7' }), null);
+  assert.equal(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.8' }), null);
 });
 
 test('"¿qué hay de nuevo?" is recognized, also with the wake word', () => {

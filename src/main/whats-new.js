@@ -6,6 +6,10 @@
 const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
+  '0.2.8': [
+    'Cuando te pido mirar la pantalla, miro el monitor de la ventana que tenés adelante, no el que marca el mouse.',
+    'Si la primera captura sale en negro, la reintento antes de responder; una ventana quieta ya no se descarta.',
+  ],
   '0.2.7': [
     'Volví a Gemini gratis y, si preguntás qué modelo soy, te digo el mío real; tu modelo elegido a mano no se toca.',
     'Los recordatorios ya se decían en voz alta desde la 0.2.6; ahora, si la voz falla, la burbuja igual aparece.',

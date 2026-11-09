@@ -10,9 +10,9 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 > Fan art. **No** afiliado a CD PROJEKT RED. Licencia PolyForm Noncommercial — [LICENSE](LICENSE), [CREDITS.md](CREDITS.md).
 
-**Versión en el repo:** `0.2.7` (en preparación, sin publicar). **Última etiquetada:** `0.2.6`. El instalador más reciente está en [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
+**Versión en el repo:** `0.2.8` (en preparación, sin publicar). **Última etiquetada:** `0.2.7`. El instalador más reciente está en [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
 
-**Novedades recientes:** 0.2.5 sumó varios comandos en una frase y arreglos de Spotify y voz en GPUs débiles; 0.2.6, hora local elegible y recordatorios persistentes; **0.2.7 (en preparación)** restaura el Gemini Flash-Lite gratis, hace que los modelos digan cuál los hace funcionar y endurece el aviso hablado de recordatorios.
+**Novedades recientes:** 0.2.5 sumó varios comandos en una frase y arreglos de Spotify y voz en GPUs débiles; 0.2.6, hora local elegible y recordatorios persistentes; 0.2.7 restaura el Gemini Flash-Lite gratis, hace que los modelos digan cuál los hace funcionar y endurece el aviso hablado de recordatorios; **0.2.8 (en preparación)** corrige «Mirá mi pantalla» para que mire el monitor de la ventana que tenés adelante.
 
 <img src="docs/media/capri-desktop.png" alt="Capri en el escritorio" width="100%">
 
@@ -23,8 +23,7 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 Lo que viene; detalle y estado en [`docs/roadmap.md`](docs/roadmap.md):
 
 - **Wake word** que no interfiera con **audífonos Bluetooth**.
-- Aviso de **SmartScreen** al instalar y **actualización con un clic**.
-- Arreglo de **“Mirá mi pantalla”** cuando manda una captura vieja o el primer frame vacío.
+- **Actualización con un clic** desde la app.
 
 Después: que el chat haga cosas en la PC (volumen, ordenar ventanas), sentir la PC y los juegos, y voz local gratis. Detalle y prioridad en [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -165,7 +164,7 @@ Si algo no arranca, mirá [`docs/SOPORTE.md`](docs/SOPORTE.md) (síntoma → cau
 
 # Capri (English, short)
 
-Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop). **v0.2.7** in preparation (unpublished); latest tagged: **v0.2.6**. Download the latest installer from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases); SmartScreen → *More info* → *Run anyway*.
+Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop). **v0.2.8** in preparation (unpublished); latest tagged: **v0.2.7**. Download the latest installer from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases); SmartScreen → *More info* → *Run anyway*.
 
 **Brain:** LM Studio / Ollama locally, or free NVIDIA/Gemini keys, or OpenRouter, Groq, OpenAI, Mistral, DeepSeek in **Settings → Cerebro**. Keys stay on your PC (`safeStorage`).
 

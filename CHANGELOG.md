@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.2.7 (en preparación, sin publicar)
+## 0.2.8 (en preparación, sin publicar)
+
+### Pantalla
+
+- **«Mirá mi pantalla» mira el monitor correcto:** la captura elegía la pantalla más cercana al mouse y, si no encontraba su id, la primera de la lista. Con dos monitores eso podía ser el que solo tiene el fondo y el cartel «Activar Windows». Ahora usa el monitor de la ventana que tenés adelante (el rectángulo ya lo daba el vigilante de ventanas), después el del mouse y por último el de Capri. Si hay varios monitores y ninguno coincide, no manda la captura de otro.
+- **Primer frame negro:** un frame plano negro se reintenta hasta tres veces antes de darse por vencido. Un frame quieto ya no se descarta como «repetido»: una ventana estática es una captura válida.
+
+## 0.2.7 (etiqueta `v0.2.7`)
 
 ### Cerebro y proveedores
 
