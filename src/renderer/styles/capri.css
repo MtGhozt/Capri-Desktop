@@ -1900,6 +1900,16 @@ button.appmenu__row {
   margin: 4px 0 8px;
 }
 
+.appmenu__voice-text {
+  min-height: 54px;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.appmenu__voice-saved-in {
+  opacity: 0.65;
+}
+
 .appmenu__submenu--help {
   width: 360px;
   max-width: min(360px, calc(100vw - 24px));

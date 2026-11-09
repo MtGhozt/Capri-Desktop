@@ -18,6 +18,17 @@ function usesCloneRef(voice) {
   return Boolean(String(voice?.ttsRef || '').trim());
 }
 
+// Same-name .txt beside the chosen .wav, ready to prefill the transcript field.
+function transcriptFor(wavPath, transcriptPath = '') {
+  const file = String(transcriptPath || '').trim()
+    || String(wavPath || '').trim().replace(/\.wav$/i, '.txt');
+  try {
+    return fs.readFileSync(file, 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
 function saveCustomRef({
   voiceDir,
   wavPath,
@@ -60,5 +71,6 @@ module.exports = {
   CUSTOM_REF_REL,
   activeVoiceLabel,
   usesCloneRef,
+  transcriptFor,
   saveCustomRef,
 };

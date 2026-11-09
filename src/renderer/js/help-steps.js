@@ -101,7 +101,7 @@ export const HELP_STEPS = {
       'Instalá la voz con Ajustes › Oído › «Instalar voz» (ver el «?» de Instalar voz).',
       'En Ajustes › Oído › Respuesta elegí VOZ (habla), BLIPS (beeps al escribir) o SILENCIO (solo texto).',
       'La primera carga de OmniVoice puede mostrar «cargando voz…» uno o dos minutos; después contesta con voz.',
-      'Para tu clone: «Usar mi propia voz…» (un .wav de 5–15 s + transcripción). «Voz por defecto» vuelve al diseño OmniVoice.',
+      'Para tu clone: «Usar mi propia voz…», elegí un .wav de 5–15 s y escribí en «Qué dice el audio» lo que dice, palabra por palabra (o «Cargar .txt»); «Guardar voz» se activa recién con audio y texto. Se guarda en «Carpeta de voz» → ref/my_ref.wav junto a su .txt.',
       {
         text: 'Si no carga: mirá el log y reportá en Discord #bugs:',
         command: '%APPDATA%\\capri-desktop\\logs\\voice.log',

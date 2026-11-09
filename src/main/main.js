@@ -33,7 +33,7 @@ const { createLms } = require('./lms');
 const { createVoice, checkVoiceDir, resolveVoiceDir } = require('./voice');
 const { createVoiceInstall, PYTHON_URL, voiceInstallDir } = require('./voice-install');
 const { VC_URL, VC_MESSAGE, missingVcRuntime } = require('./vc-runtime');
-const { activeVoiceLabel, saveCustomRef } = require('./voice-ref');
+const { activeVoiceLabel, saveCustomRef, transcriptFor } = require('./voice-ref');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
 const { planMultiCommand } = require('./multi-command');
@@ -1707,12 +1707,26 @@ async function pickVoiceRefWav() {
   if (/\.txt$/i.test(file)) {
     const wav = file.replace(/\.txt$/i, '.wav');
     if (!fs.existsSync(wav)) return { ok: false, message: 'No encontré el .wav con el mismo nombre.' };
-    return { ok: true, path: wav, transcriptPath: file };
+    return { ok: true, path: wav, transcriptPath: file, transcript: transcriptFor(wav, file) };
   }
   const selectedTxt = files.find((item) => /\.txt$/i.test(item)
     && path.basename(item, path.extname(item)).toLowerCase() === path.basename(file, path.extname(file)).toLowerCase());
   const sidecar = file.replace(/\.wav$/i, '.txt');
-  return { ok: true, path: file, transcriptPath: selectedTxt || (fs.existsSync(sidecar) ? sidecar : '') };
+  const transcriptPath = selectedTxt || (fs.existsSync(sidecar) ? sidecar : '');
+  return { ok: true, path: file, transcriptPath, transcript: transcriptFor(file, transcriptPath) };
+}
+
+// Ajustes › AUDIO › Cargar .txt: only the transcript, never the audio.
+async function pickVoiceRefText() {
+  const parent = (settingsWindow && !settingsWindow.isDestroyed()) ? settingsWindow : overlay;
+  const res = await dialog.showOpenDialog(parent, {
+    title: 'Transcripción del audio (.txt)',
+    properties: ['openFile'],
+    filters: [{ name: 'Transcripción', extensions: ['txt'] }],
+  });
+  const file = !res.canceled && res.filePaths?.[0];
+  if (!file) return { ok: false, message: '' };
+  return { ok: true, transcript: transcriptFor('', file) };
 }
 
 async function saveVoiceRef(value = {}) {
@@ -2061,6 +2075,7 @@ function applyMenuAction(id, value) {
     case 'voice-install': return runVoiceInstall(value).catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
     case 'voice-install-cancel': return voiceInstall?.cancel() || { ok: false, message: 'Nada que cancelar.' };
     case 'voice-ref-pick': return pickVoiceRefWav().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
+    case 'voice-ref-text': return pickVoiceRefText().catch((err) => ({ ok: false, message: `No se pudo: ${err.message}` }));
     case 'voice-ref-save': return saveVoiceRef(value);
     case 'voice-ref-clear': return clearVoiceRef();
     case 'open-python':

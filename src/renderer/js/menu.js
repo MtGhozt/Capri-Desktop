@@ -1,7 +1,7 @@
 // Overlay context menu, laid out like the Cyberpunk 2077 settings plate: coral labels,
 // toggles as OFF|ON blocks, selectors as ◀ value ▶, and microtext on the rails.
 
-import { clamp } from './util.js';
+import { clamp, voiceRefMissing } from './util.js';
 import { HELP_STEPS, toggleHelp, splitHelpText } from './help-steps.js';
 
 const REPLY_OPTIONS = [
@@ -805,7 +805,7 @@ export class AppMenu {
     });
     const voice = cfg.voice || { dir: '', status: '' };
     action('Carpeta de voz', {
-      help: 'hearing',
+      help: 'voice',
       value: String(voice.dir || '').split(/[\\/]/).filter(Boolean).pop() || 'SIN CARPETA',
       onClick: async () => {
         const res = await this.host.menuAction({ id: 'voice-dir' }).catch(() => ({ ok: false, message: 'No se pudo.' }));
@@ -932,22 +932,37 @@ export class AppMenu {
       form.append(build('div', 'appmenu__hint', this.pendingRefWav
         ? `Archivo: ${String(this.pendingRefWav).split(/[\\/]/).pop()}`
         : 'Ningún audio elegido todavía.'));
-      form.append(build('div', 'appmenu__hint', '2) Escribí exactamente lo que dice el audio (o un .txt con el mismo nombre) y guardá.'));
-      const transcript = build('input', 'appmenu__input');
-      let saveRef;
-      transcript.type = 'text';
-      transcript.placeholder = 'Transcripción exacta del audio';
+      form.append(build('div', 'appmenu__hint', '2) Qué dice el audio (palabra por palabra)'));
+      const transcript = build('textarea', 'appmenu__input appmenu__voice-text');
+      transcript.rows = 3;
+      transcript.placeholder = 'Qué dice el audio (palabra por palabra)';
       transcript.value = this.pendingRefText || '';
       transcript.maxLength = 500;
       transcript.spellcheck = true;
-      transcript.hidden = Boolean(this.pendingRefTranscriptPath);
+      const missing = build('div', 'appmenu__hint appmenu__voice-missing');
+      let saveRef;
+      const syncSave = () => {
+        const reason = voiceRefMissing({ wav: this.pendingRefWav, transcript: transcript.value });
+        if (saveRef) saveRef.disabled = Boolean(reason);
+        missing.textContent = reason;
+        missing.hidden = !reason;
+      };
       transcript.addEventListener('input', () => {
         this.pendingRefText = transcript.value;
-        if (saveRef) saveRef.disabled = !transcript.value.trim();
+        syncSave();
+      });
+      const loadTxt = build('button', 'appmenu__toggle-btn', 'Cargar .txt');
+      loadTxt.type = 'button';
+      loadTxt.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const res = await this.host.menuAction({ id: 'voice-ref-text' }).catch(() => null);
+        if (!res?.ok || !res.transcript) return;
+        transcript.value = res.transcript;
+        this.pendingRefText = res.transcript;
+        syncSave();
       });
       saveRef = build('button', 'appmenu__toggle-btn is-active', 'GUARDAR VOZ');
       saveRef.type = 'button';
-      saveRef.disabled = !this.pendingRefTranscriptPath && !transcript.value.trim();
       saveRef.addEventListener('click', async (e) => {
         e.stopPropagation();
         const res = await this.host.menuAction({
@@ -977,10 +992,15 @@ export class AppMenu {
         this.pendingRefTranscriptPath = '';
         this.render(this.lastState);
       });
+      const txtRow = build('div', 'appmenu__voice-install-btns');
+      txtRow.append(loadTxt);
       const refBtns = build('div', 'appmenu__voice-install-btns');
       refBtns.append(saveRef, cancelRef);
-      form.append(transcript, refBtns);
+      form.append(transcript, txtRow, missing, refBtns);
+      form.append(build('div', 'appmenu__hint appmenu__voice-saved-in',
+        `Se guarda en: ${String(voice.dir || '').trim() || 'la carpeta de voz'}`));
       body.append(form);
+      syncSave();
     } else {
       const refRow = build('div', 'appmenu__voice-install-btns');
       const custom = String(voice.ttsRef || '').trim();
@@ -994,7 +1014,7 @@ export class AppMenu {
         if (!res?.ok || !res.path) return;
         this.pendingRefWav = res.path;
         this.pendingRefTranscriptPath = res.transcriptPath || '';
-        this.pendingRefText = '';
+        this.pendingRefText = res.transcript || '';
         this.voiceRefForm = true;
         this.render(this.lastState);
       });

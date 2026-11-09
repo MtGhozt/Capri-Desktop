@@ -28,6 +28,13 @@ export function duration(ms, lang = 'fr') {
 
 export const basename = (p = '') => String(p).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
 
+// What still blocks "Guardar voz" in Ajustes › Oído, or '' when it can save.
+export const voiceRefMissing = ({ wav, transcript } = {}) => {
+  if (!String(wav || '').trim()) return 'Falta elegir el audio';
+  if (!String(transcript || '').trim()) return 'Falta escribir lo que dice el audio';
+  return '';
+};
+
 // Tweens a set of numeric props on `target`. Values are read by the stepped render loop,
 // so the result lands on whole drawing frames like cel animation.
 export function tween(target, to, ms, easing = ease.out) {

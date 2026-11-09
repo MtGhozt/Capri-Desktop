@@ -13,6 +13,7 @@ const {
   DEFAULT_TTS_DESIGN,
   activeVoiceLabel,
   usesCloneRef,
+  transcriptFor,
   saveCustomRef,
 } = require('../src/main/voice-ref');
 
@@ -84,10 +85,50 @@ test('custom ref picker loads a matching transcript file beside the wav', () => 
   assert.equal(fs.readFileSync(path.join(dir, 'ref', 'my_ref.txt'), 'utf8').trim(), 'Hola desde archivo.');
 });
 
-test('the voice panel shows the two steps and warns when audio was not saved', () => {
+test('a same-name .txt prefills the transcript field', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-ref-'));
+  try {
+    const wav = path.join(dir, 'sample.wav');
+    fs.writeFileSync(wav, 'RIFF');
+    fs.writeFileSync(path.join(dir, 'sample.txt'), '  Hola desde archivo.\n');
+    assert.equal(transcriptFor(wav), 'Hola desde archivo.');
+    assert.equal(transcriptFor(wav, path.join(dir, 'sample.txt')), 'Hola desde archivo.');
+    assert.equal(transcriptFor(wav, path.join(dir, 'missing.txt')), '');
+    assert.equal(transcriptFor(path.join(dir, 'other.wav')), '');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the typed transcript wins over an old same-name .txt', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-ref-'));
+  try {
+    const wav = path.join(dir, 'sample.wav');
+    fs.writeFileSync(wav, 'RIFF');
+    fs.writeFileSync(path.join(dir, 'sample.txt'), 'Texto viejo.\n');
+    const ok = saveCustomRef({ voiceDir: dir, wavPath: wav, transcript: 'Lo que escribí.' });
+    assert.equal(ok.ok, true);
+    assert.equal(fs.readFileSync(path.join(dir, 'ref', 'my_ref.txt'), 'utf8').trim(), 'Lo que escribí.');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Guardar voz explains what is missing', async () => {
+  globalThis.matchMedia = globalThis.matchMedia || (() => ({ matches: false }));
+  const { voiceRefMissing } = await import('../src/renderer/js/util.js');
+  assert.equal(voiceRefMissing({}), 'Falta elegir el audio');
+  assert.equal(voiceRefMissing({ wav: 'C:\\audio.wav', transcript: '  ' }), 'Falta escribir lo que dice el audio');
+  assert.equal(voiceRefMissing({ wav: 'C:\\audio.wav', transcript: 'Hola.' }), '');
+});
+
+test('the voice panel shows the two steps and the transcript field', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
   assert.match(source, /1\) Elegí tu audio \.wav/);
-  assert.match(source, /2\) Escribí exactamente lo que dice el audio/);
+  assert.match(source, /Qué dice el audio \(palabra por palabra\)/);
+  assert.match(source, /Cargar \.txt/);
+  assert.match(source, /Se guarda en:/);
+  assert.match(source, /voiceRefMissing/);
   assert.match(source, /No se guardó la voz/);
 });
 
