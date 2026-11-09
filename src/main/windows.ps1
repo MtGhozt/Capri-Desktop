@@ -88,13 +88,19 @@ public static class CapriWindows {
     return path;
   }
 
+  // The frame of a window in physical pixels (DWM's, so shadows and borders are out).
+  static bool FrameOf(IntPtr hwnd, out RECT r) {
+    r = new RECT();
+    if (hwnd == IntPtr.Zero) return false;
+    return DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out r, 16) == 0
+      || GetWindowRect(hwnd, out r);
+  }
+
   // Edge to edge on its monitor: borderless or exclusive fullscreen. A maximized window
   // leaves the taskbar out, so it does not count.
   static bool Fullscreen(IntPtr hwnd) {
-    if (hwnd == IntPtr.Zero) return false;
     RECT r;
-    if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out r, 16) != 0
-        && !GetWindowRect(hwnd, out r)) return false;
+    if (!FrameOf(hwnd, out r)) return false;
     IntPtr monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     var info = new MONITORINFO();
     info.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
@@ -165,7 +171,15 @@ public static class CapriWindows {
       .Append(",\"fgExe\":").Append(Quote(fgExe))
       .Append(",\"fgTitle\":").Append(Quote(TitleOf(fg)))
       .Append(",\"fgFull\":").Append(Fullscreen(fg) ? "true" : "false")
-      .Append(",\"taskbar\":").Append(taskbar ? "true" : "false")
+      .Append(",\"fgRect\":");
+    RECT fr;
+    if (FrameOf(fg, out fr)) {
+      sb.Append("{\"x\":").Append(fr.Left).Append(",\"y\":").Append(fr.Top)
+        .Append(",\"w\":").Append(fr.Right - fr.Left).Append(",\"h\":").Append(fr.Bottom - fr.Top).Append('}');
+    } else {
+      sb.Append("null");
+    }
+    sb.Append(",\"taskbar\":").Append(taskbar ? "true" : "false")
       .Append(",\"start\":").Append(start ? "true" : "false")
       .Append(",\"bar\":");
     IntPtr bar = BarOf(new IntPtr(self));

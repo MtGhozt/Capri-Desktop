@@ -13,6 +13,8 @@ const {
   shouldAutoLook,
   captureScreenJpeg,
   createCaptureShield,
+  pickScreenSource,
+  frameIsBlank,
   AUTO_LOOK_MS,
 } = require('../src/main/screen-look');
 
@@ -76,21 +78,81 @@ test('capture reports the selected display and image dimensions', async () => {
   assert.match(info.hash, /^[a-f0-9]{40}$/);
 });
 
-test('capture marks a black frame as blank', async () => {
-  let info;
-  await captureScreenJpeg({
-    getSources: async () => [{
-      display_id: '1',
-      thumbnail: {
-        isEmpty: () => false,
-        getSize: () => ({ width: 2, height: 2 }),
-        getBitmap: () => Buffer.alloc(16),
-        toJPEG: () => Buffer.from('black'),
-      },
-    }],
-    onCapture: (value) => { info = value; },
+test('the screen she captures is the one with the window in front', () => {
+  const left = { display_id: '10', id: 'screen:0:0' };
+  const right = { display_id: '20', id: 'screen:1:0' };
+  // Electron's display_id is the match; the array order is not trusted.
+  assert.equal(pickScreenSource([left, right], '20'), right);
+  assert.equal(pickScreenSource([right, left], '10'), left);
+  // no usable ids (some drivers): the display's position, never the first source.
+  assert.equal(pickScreenSource([left, right], null, 1), right);
+  assert.equal(pickScreenSource([left, right], 'gone', 0), left);
+  // several screens and no match: nothing beats another monitor's desktop.
+  assert.equal(pickScreenSource([left, right], 'gone'), null);
+  assert.equal(pickScreenSource([left], 'gone'), left);
+  assert.equal(pickScreenSource([], '10'), null);
+});
+
+test('an empty first frame is retried until a real one arrives', async () => {
+  let calls = 0;
+  const shieldCalls = [];
+  const black = {
+    isEmpty: () => false,
+    getSize: () => ({ width: 2, height: 2 }),
+    getBitmap: () => Buffer.alloc(16),
+    toJPEG: () => Buffer.from('black'),
+  };
+  const fresh = {
+    isEmpty: () => false,
+    getSize: () => ({ width: 2, height: 2 }),
+    getBitmap: () => Buffer.from([0, 0, 0, 255, 90, 40, 200, 255]),
+    toJPEG: () => Buffer.from('fresh'),
+  };
+  const b64 = await captureScreenJpeg({
+    getSources: async () => {
+      const thumb = calls++ === 0 ? black : fresh;
+      return [{ display_id: '1', thumbnail: thumb }];
+    },
+    displayId: '1',
+    attempts: 3,
+    retryDelayMs: 1,
+    beforeCapture: () => shieldCalls.push('before'),
+    afterCapture: () => shieldCalls.push('after'),
   });
-  assert.equal(info.blank, true);
+  assert.equal(Buffer.from(b64, 'base64').toString(), 'fresh');
+  assert.equal(calls, 2);
+  // the shield wraps the whole retry, so she never flashes between attempts
+  assert.deepEqual(shieldCalls, ['before', 'after']);
+});
+
+test('a frame that stays black is not sent and is retried a bounded number of times', async () => {
+  let calls = 0;
+  const b64 = await captureScreenJpeg({
+    getSources: async () => {
+      calls++;
+      return [{
+        display_id: '1',
+        thumbnail: {
+          isEmpty: () => false,
+          getSize: () => ({ width: 2, height: 2 }),
+          getBitmap: () => Buffer.alloc(16),
+          toJPEG: () => Buffer.from('black'),
+        },
+      }];
+    },
+    displayId: '1',
+    attempts: 3,
+    retryDelayMs: 1,
+  });
+  assert.equal(b64, null);
+  assert.equal(calls, 3);
+});
+
+test('blank means flat black, not a dark or dimmed screen', () => {
+  assert.equal(frameIsBlank(Buffer.alloc(64)), true);
+  assert.equal(frameIsBlank(Buffer.from([0, 0, 0, 255, 20, 20, 20, 255])), false);
+  assert.equal(frameIsBlank(Buffer.from([255, 255, 255, 255])), false);
+  assert.equal(frameIsBlank(null), false); // no pixels to read: trust the frame
 });
 
 test('user content with image is multimodal; without stays a string', () => {
@@ -268,6 +330,19 @@ test('click-through is logged only when it changes, not on every hover', () => {
   );
   assert.match(main, /let lastThrough = null;/);
   assert.match(main, /if \(through !== lastThrough\) \{\s*lastThrough = through;\s*logEvent\(voiceLogPath\(\), `\[capri\] click-through/);
+});
+
+test('look captures the display with the foreground window, not the mouse', () => {
+  const main = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
+    'utf8',
+  );
+  assert.match(main, /function lookDisplay\(\)[\s\S]*?lastWindows\?\.fgRect[\s\S]*?screen\.getDisplayMatching/);
+  assert.match(main, /const display = lookDisplay\(\);/);
+  assert.match(main, /displayIndex,/);
+  assert.match(main, /attempts: 3,/);
+  // a static window is a valid frame: the old hash-equality "blank" check is gone
+  assert.doesNotMatch(main, /previousHash/);
 });
 
 test('menu opens with explicit mouse capture and restores click-through on close', () => {

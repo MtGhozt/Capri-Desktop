@@ -105,57 +105,87 @@ function createCaptureShield({
   };
 }
 
+// The screen the caller asked for: Electron's display_id first, the display's position second.
+// With several screens and no match, nothing is better than another monitor's desktop.
+function pickScreenSource(sources, displayId = null, displayIndex = null) {
+  if (!Array.isArray(sources) || !sources.length) return null;
+  if (displayId != null) {
+    const hit = sources.find((s) => String(s.display_id) === String(displayId));
+    if (hit) return hit;
+  }
+  if (Number.isInteger(displayIndex) && displayIndex >= 0 && sources[displayIndex]) return sources[displayIndex];
+  return sources.length === 1 ? sources[0] : null;
+}
+
+// A frame that comes back flat black is the compositor with nothing to show yet (first frame
+// after waking, a display change, an exclusive-fullscreen game). Anything brighter is content.
+function frameIsBlank(pixels) {
+  if (!pixels || !pixels.length) return false;
+  for (let i = 0; i + 2 < pixels.length; i += 4) {
+    if (pixels[i] > 8 || pixels[i + 1] > 8 || pixels[i + 2] > 8) return false;
+  }
+  return true;
+}
+
 async function captureScreenJpeg({
   getSources,
   displayId = null,
+  displayIndex = null,
   maxWidth = MAX_WIDTH,
   quality = JPEG_QUALITY,
+  attempts = 1,
+  retryDelayMs = 150,
   beforeCapture = null,
   afterCapture = null,
   onCapture = null,
 } = {}) {
   if (typeof getSources !== 'function') return null;
+  const tries = Math.max(1, Number(attempts) || 1);
   try {
     beforeCapture?.();
     const thumbH = Math.max(720, Math.round(maxWidth * 0.75));
-    const sources = await getSources({
-      types: ['screen'],
-      thumbnailSize: { width: maxWidth, height: thumbH },
-    });
-    if (!Array.isArray(sources) || !sources.length) return null;
-    let source = sources[0];
-    if (displayId != null) {
-      const hit = sources.find((s) => String(s.display_id) === String(displayId));
-      if (hit) source = hit;
-    }
-    let img = source?.thumbnail;
-    if (!img || typeof img.isEmpty === 'function' && img.isEmpty()) return null;
-    const size = typeof img.getSize === 'function' ? img.getSize() : null;
-    if (size?.width > maxWidth && typeof img.resize === 'function') {
-      img = img.resize({ width: maxWidth, quality: 'better' });
-    }
-    if (typeof img.toJPEG !== 'function') return null;
-    const buf = img.toJPEG(quality);
-    if (!buf || !buf.length) return null;
-    const base64 = Buffer.from(buf).toString('base64');
-    let blank = false;
-    if (typeof img.getBitmap === 'function') {
-      const pixels = img.getBitmap();
-      let bright = 0;
-      const step = Math.max(4, Math.floor(pixels.length / 4096 / 4) * 4);
-      for (let i = 0; i < pixels.length; i += step) {
-        bright += pixels[i] + pixels[i + 1] + pixels[i + 2];
+    for (let attempt = 0; attempt < tries; attempt++) {
+      const sources = await getSources({
+        types: ['screen'],
+        thumbnailSize: { width: maxWidth, height: thumbH },
+      });
+      const source = pickScreenSource(sources, displayId, displayIndex);
+      let img = source?.thumbnail;
+      if (!img || typeof img.isEmpty === 'function' && img.isEmpty()) {
+        if (attempt < tries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+        return null;
       }
-      blank = bright === 0;
+      const size = typeof img.getSize === 'function' ? img.getSize() : null;
+      if (size?.width > maxWidth && typeof img.resize === 'function') {
+        img = img.resize({ width: maxWidth, quality: 'better' });
+      }
+      if (typeof img.toJPEG !== 'function') return null;
+      const buf = img.toJPEG(quality);
+      if (!buf || !buf.length) return null;
+      const pixels = typeof img.toBitmap === 'function'
+        ? img.toBitmap()
+        : (typeof img.getBitmap === 'function' ? img.getBitmap() : null);
+      const blank = frameIsBlank(pixels);
+      if (blank) {
+        if (attempt < tries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+        return null;
+      }
+      onCapture?.({
+        displayId: source?.display_id ?? displayId,
+        size,
+        bytes: buf.length,
+        hash: crypto.createHash('sha1').update(buf).digest('hex'),
+        blank,
+      });
+      return Buffer.from(buf).toString('base64');
     }
-    onCapture?.({
-      displayId: source?.display_id ?? displayId,
-      size,
-      bytes: buf.length,
-      hash: crypto.createHash('sha1').update(buf).digest('hex'),
-      blank,
-    });
-    return base64;
+    return null;
   } finally {
     try { afterCapture?.(); } catch { /* show overlay again even if capture failed */ }
   }
@@ -172,5 +202,7 @@ module.exports = {
   userContentWithImage,
   shouldAutoLook,
   createCaptureShield,
+  pickScreenSource,
+  frameIsBlank,
   captureScreenJpeg,
 };

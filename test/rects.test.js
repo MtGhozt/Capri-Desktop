@@ -60,3 +60,14 @@ test('the window watch passes fgFull on, so game mode can see a fullscreen game'
   const src = require('node:fs').readFileSync(require.resolve('../src/main/windows.js'), 'utf8');
   assert.match(src, /\.\.\.foreground\(snap\)/);
 });
+
+test('the window watch passes the foreground frame on, so the look picks its monitor', () => {
+  const { foreground } = require('../src/main/rects');
+  const rect = { x: 1920, y: 0, w: 1920, h: 1080 };
+  assert.deepEqual(foreground({ fg: 1, fgRect: rect }).fgRect, rect);
+  assert.equal(foreground({ fg: 1 }).fgRect, null);
+  const ps = require('node:fs').readFileSync(require.resolve('../src/main/windows.ps1'), 'utf8');
+  assert.match(ps, /fgRect/);
+  assert.match(ps, /static bool FrameOf\(IntPtr hwnd, out RECT r\)/);
+  assert.match(ps, /FrameOf\(fg, out fr\)/);
+});

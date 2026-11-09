@@ -1559,8 +1559,21 @@ function resetOverlayInput(reason = 'reset') {
 }
 
 // Phase 6C: JPEG in memory. Win32 uses setContentProtection so Capri stays visible and out of the shot.
+// The screen she captures is the one with the window in front, not wherever the mouse is resting:
+// a second monitor showing only the wallpaper (and the "Activar Windows" watermark) was the bug.
+function lookDisplay() {
+  const rect = lastWindows?.fgRect;
+  const dip = rect && typeof screen.screenToDipRect === 'function'
+    ? screen.screenToDipRect(null, { x: rect.x, y: rect.y, width: rect.w, height: rect.h })
+    : null;
+  return (dip && screen.getDisplayMatching(dip))
+    || screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    || targetDisplay();
+}
+
 async function snapScreenForLook() {
-  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) || targetDisplay();
+  const display = lookDisplay();
+  const displayIndex = screen.getAllDisplays().findIndex((d) => d.id === display?.id);
   const shield = createCaptureShield({
     platform: process.platform,
     setContentProtection: (on) => {
@@ -1581,36 +1594,25 @@ async function snapScreenForLook() {
     },
   });
   try {
-    let previousHash = '';
-    for (let attempt = 0; attempt < 2; attempt++) {
-      let captured = null;
-      const image = await captureScreenJpeg({
-        getSources: (opts) => desktopCapturer.getSources(opts),
-        displayId: display?.id,
-        beforeCapture: () => shield.before(),
-        afterCapture: () => shield.after(),
-        onCapture: (info) => { captured = info; },
-      });
-      if (!image) {
-        logEvent(voiceLogPath(), `[capri] screen capture time=${Date.now()} display=${display?.id || '?'} size=0x0 blank=empty brain=pending image=none`);
-        continue;
-      }
-      const repeated = Boolean(captured?.hash && captured.hash === previousHash);
-      const blank = Boolean(captured?.blank || repeated);
-      logEvent(voiceLogPath(), `[capri] screen capture time=${Date.now()} display=${captured?.displayId || display?.id || '?'} size=${captured?.size?.width || 0}x${captured?.size?.height || 0} blank=${blank ? (captured?.blank ? 'black' : 'repeated') : 'no'} brain=pending image=attached`);
-      previousHash = captured?.hash || '';
-      if (blank) {
-        await new Promise((resolve) => setTimeout(resolve, 120));
-        continue;
-      }
-      try {
-        fs.writeFileSync(path.join(path.dirname(voiceLogPath()), 'last-capture.jpg'), Buffer.from(image, 'base64'));
-      } catch (err) {
-        logEvent(voiceLogPath(), `[capri] last capture save failed: ${err.message}`);
-      }
-      return image;
+    let captured = null;
+    const image = await captureScreenJpeg({
+      getSources: (opts) => desktopCapturer.getSources(opts),
+      displayId: display?.id,
+      displayIndex,
+      attempts: 3,
+      retryDelayMs: 150,
+      beforeCapture: () => shield.before(),
+      afterCapture: () => shield.after(),
+      onCapture: (info) => { captured = info; },
+    });
+    logEvent(voiceLogPath(), `[capri] screen capture time=${Date.now()} display=${captured?.displayId || display?.id || '?'} size=${captured?.size?.width || 0}x${captured?.size?.height || 0} brain=pending image=${image ? 'attached' : 'none'}`);
+    if (!image) return null;
+    try {
+      fs.writeFileSync(path.join(path.dirname(voiceLogPath()), 'last-capture.jpg'), Buffer.from(image, 'base64'));
+    } catch (err) {
+      logEvent(voiceLogPath(), `[capri] last capture save failed: ${err.message}`);
     }
-    return null;
+    return image;
   } catch (err) {
     try { shield.after(); } catch { /* already cleaned */ }
     resetOverlayInput('look-capture-error');

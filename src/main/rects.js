@@ -23,12 +23,14 @@ function toOverlayRect(rect, bounds, toDip = (box) => box) {
 }
 
 // what the overlay needs to know about the window in front, fullscreen included (game mode)
+// `fgRect` stays in physical pixels: the screen look turns it into the display to capture.
 function foreground(snap) {
   return {
     fg: snap?.fg,
     fgExe: snap?.fgExe,
     fgTitle: snap?.fgTitle,
     fgFull: Boolean(snap?.fgFull),
+    fgRect: snap?.fgRect || null,
   };
 }
 
