@@ -30,6 +30,35 @@ const INFO_KINDS = ['battery', 'disk', 'ram', 'ip'];
 const WINDOW_POSITIONS = ['left', 'right', 'max', 'min', 'restore'];
 const PROC_OK = /^[A-Za-z0-9._-]+$/;
 const CAPRI_PROC = /^(?:capri(?:-desktop)?|electron)$/i;
+const FIND_TIMEOUT_MS = 4000;
+const FIND_SCAN_MAX = 200;
+const FIND_TOP = 5;
+const FILE_KINDS = ['pdf', 'word', 'excel', 'ppt', 'image', 'video', 'audio', 'zip', 'any'];
+const FILE_EXTS = {
+  pdf: ['.pdf'],
+  word: ['.doc', '.docx', '.odt', '.rtf'],
+  excel: ['.xls', '.xlsx', '.csv', '.ods'],
+  ppt: ['.ppt', '.pptx', '.odp'],
+  image: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.heic', '.svg'],
+  video: ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.wmv'],
+  audio: ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg'],
+  zip: ['.zip', '.rar', '.7z', '.tar', '.gz'],
+  any: [],
+};
+const FILE_KIND_ALIAS = {
+  pdf: 'pdf',
+  word: 'word', doc: 'word', documento: 'word', documentos: 'word',
+  excel: 'excel', xls: 'excel', xlsx: 'excel', hoja: 'excel', planilla: 'excel',
+  ppt: 'ppt', powerpoint: 'ppt', presentacion: 'ppt', presentaciones: 'ppt',
+  image: 'image', imagen: 'image', imagenes: 'image', foto: 'image', fotos: 'image', picture: 'image',
+  video: 'video', videos: 'video',
+  audio: 'audio', mp3: 'audio', wav: 'audio',
+  zip: 'zip', rar: 'zip', comprimido: 'zip',
+  archivo: 'any', archivos: 'any', file: 'any', fichero: 'any',
+};
+const FILE_PICK = { primero: 1, segundo: 2, tercero: 3, cuarto: 4, quinto: 5 };
+/** Last findFiles hits for "abrí el segundo" (memory only). */
+let lastFileHits = [];
 
 const AUDIO = `Add-Type -TypeDefinition @"
 using System; using System.Runtime.InteropServices;
@@ -130,6 +159,81 @@ function parseWindowValue(raw) {
   return { app, position, value: `${app}|${position}` };
 }
 
+function foldKey(text) {
+  return String(text || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+}
+
+function parseFileKind(raw) {
+  const key = foldKey(raw).trim();
+  if (FILE_KINDS.includes(key)) return key;
+  return FILE_KIND_ALIAS[key] || null;
+}
+
+/** Sanitize search words: letters/digits only, capped. */
+function sanitizeWords(words) {
+  const list = Array.isArray(words) ? words : String(words || '').trim().split(/\s+/);
+  const out = [];
+  for (const w of list) {
+    const t = String(w || '').trim();
+    if (!t || t.length > 40) return null;
+    if (!/^[\p{L}\p{N}._-]+$/u.test(t)) return null;
+    out.push(t);
+  }
+  if (!out.length || out.length > 8) return null;
+  return out;
+}
+
+/** Tag value `pdf|calculo` → { kind, words, value }. */
+function parseFilesValue(raw) {
+  const text = String(raw || '').trim();
+  const bar = text.indexOf('|');
+  if (bar < 0) return null;
+  const kind = parseFileKind(text.slice(0, bar));
+  const words = sanitizeWords(text.slice(bar + 1).trim().split(/\s+/).filter(Boolean));
+  if (!kind || !words) return null;
+  return { kind, words, value: `${kind}|${words.join(' ')}` };
+}
+
+function nameMatchesWords(fileName, words) {
+  const n = foldKey(fileName);
+  return (words || []).every((w) => n.includes(foldKey(w)));
+}
+
+function validateUserFilePath(p) {
+  const path = require('node:path');
+  const raw = String(p || '');
+  if (!raw || raw.includes('\0') || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(raw)) return null;
+  const n = path.win32.normalize(raw);
+  if (!/^[A-Za-z]:\\/.test(n)) return null;
+  return n;
+}
+
+/** PowerShell scan: only base64 config interpolated (ext list + caps). */
+function buildFindCommand(exts) {
+  const list = Array.isArray(exts) ? exts.map((e) => String(e).toLowerCase()).filter((e) => /^\.[a-z0-9]+$/.test(e)) : [];
+  const payload = Buffer.from(JSON.stringify({ exts: list, max: FIND_SCAN_MAX }), 'utf8').toString('base64');
+  if (!/^[A-Za-z0-9+/=]+$/.test(payload)) return null;
+  return `$cfg = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${payload}')) | ConvertFrom-Json; `
+    + '$exts = @($cfg.exts); $max = [int]$cfg.max; '
+    + '$roots = @('
+    + '[Environment]::GetFolderPath(\'Desktop\'),'
+    + '[Environment]::GetFolderPath(\'MyDocuments\'),'
+    + '[Environment]::GetFolderPath(\'MyPictures\'),'
+    + '[Environment]::GetFolderPath(\'MyMusic\'),'
+    + '[Environment]::GetFolderPath(\'MyVideos\'),'
+    + '(Join-Path $env:USERPROFILE \'Downloads\')'
+    + '); if ($env:OneDrive) { $roots += $env:OneDrive }; '
+    + '$roots = $roots | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique; '
+    + '$out = New-Object System.Collections.Generic.List[object]; $n = 0; '
+    + 'foreach ($root in $roots) { if ($n -ge $max) { break }; '
+    + 'Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { '
+    + 'if ($n -ge $max) { return }; $n++; '
+    + 'if ($exts.Count -gt 0 -and ($exts -notcontains $_.Extension.ToLowerInvariant())) { return }; '
+    + '$out.Add([pscustomobject]@{ name = $_.Name; path = $_.FullName; dir = $_.DirectoryName; '
+    + 'mtime = $_.LastWriteTimeUtc.ToString(\'o\') }) } }; '
+    + 'if ($out.Count -eq 0) { \'[]\' } else { $out | ConvertTo-Json -Compress }';
+}
+
 /** True when `kind`/`value` is on the allowlist (parser + run share this). */
 function allowed(kind, value) {
   const k = String(kind || '').toLowerCase();
@@ -139,6 +243,10 @@ function allowed(kind, value) {
   if (k === 'info') return parseInfoValue(value) != null;
   if (k === 'snip' || (k === 'pc' && String(value || '').trim().toLowerCase() === 'snip')) return true;
   if (k === 'window') return parseWindowValue(value) != null;
+  if (k === 'files') {
+    if (/^pick\|[1-5]$/.test(String(value || ''))) return true;
+    return parseFilesValue(value) != null;
+  }
   return false;
 }
 
@@ -463,11 +571,113 @@ async function snapWindows(action, deps = {}) {
   return { ok: true, results, snaps };
 }
 
-/** Direct chat/voice orders for volume / theme / snip / window (before music). */
+function formatFileHits(hits) {
+  const path = require('node:path');
+  return hits.map((h, i) => {
+    const folder = path.win32.basename(h.dir || '') || h.dir || '?';
+    let when = '?';
+    try {
+      when = new Date(h.mtime).toLocaleDateString('es-AR');
+    } catch { /* keep ? */ }
+    return `${i + 1}. ${h.name} — ${folder} — ${when}`;
+  }).join('\n');
+}
+
+async function selectInExplorer(filePath, deps = {}) {
+  const full = validateUserFilePath(filePath);
+  if (!full) return fail('No pude abrir esa carpeta.');
+  const run = deps.execFile || execFile;
+  await new Promise((resolve) => {
+    run('explorer.exe', [`/select,${full}`], { windowsHide: true }, () => resolve());
+  });
+  return { ok: true, path: full };
+}
+
+async function runFiles(action, deps = {}) {
+  const value = String(action?.value || '').trim();
+  const pickM = /^pick\|([1-5])$/.exec(value);
+  if (pickM || action?.pick) {
+    const n = Number(pickM ? pickM[1] : action.pick);
+    const hit = lastFileHits[n - 1];
+    if (!hit) return fail('No tengo una lista reciente; buscá de nuevo.');
+    const sel = await selectInExplorer(hit.path, deps);
+    if (!sel.ok) return sel;
+    return { ok: true, line: `Ahí está: ${hit.name}`, pick: n, hit };
+  }
+
+  const parsed = parseFilesValue(value)
+    || (action?.fileKind && action?.words
+      ? { kind: action.fileKind, words: sanitizeWords(action.words), value }
+      : null);
+  if (!parsed?.kind || !parsed.words) return fail('Esa búsqueda de archivos no está permitida.');
+  const exts = FILE_EXTS[parsed.kind];
+  if (!exts) return fail('Esa búsqueda de archivos no está permitida.');
+  const cmd = buildFindCommand(exts);
+  if (!cmd) return fail('No pude buscar archivos.');
+  const ps = deps.powershell || powershell;
+  let rows = [];
+  try {
+    const out = await ps(cmd, { timeout: deps.findTimeoutMs || FIND_TIMEOUT_MS });
+    const parsedJson = JSON.parse(out || '[]');
+    rows = Array.isArray(parsedJson) ? parsedJson : (parsedJson ? [parsedJson] : []);
+  } catch {
+    return fail('No pude buscar archivos.');
+  }
+  const hits = rows
+    .filter((r) => r && r.name && r.path && nameMatchesWords(r.name, parsed.words))
+    .map((r) => ({
+      name: String(r.name),
+      path: String(r.path),
+      dir: String(r.dir || ''),
+      mtime: r.mtime || '',
+    }))
+    .filter((r) => validateUserFilePath(r.path))
+    .sort((a, b) => Date.parse(b.mtime) - Date.parse(a.mtime) || 0)
+    .slice(0, FIND_TOP);
+  lastFileHits = hits;
+  if (!hits.length) {
+    return { ok: true, line: 'No encontré nada con eso en tus carpetas.', hits: [] };
+  }
+  if (hits.length === 1) {
+    const sel = await selectInExplorer(hits[0].path, deps);
+    if (!sel.ok) return { ok: false, line: `No pude abrir la carpeta de ${hits[0].name}.`, hits };
+    return { ok: true, line: `Ahí está: ${hits[0].name}`, hits };
+  }
+  const line = `Encontré ${hits.length}:\n${formatFileHits(hits)}\nDecí «abrí el primero» (o segundo…) para abrir la carpeta.`;
+  return { ok: true, line, hits };
+}
+
+function parseFindFilesCommand(said) {
+  // music owns "buscá la canción…"; web search stays with the model
+  if (/^(?:busca(?:me|r)?) (?:la |el )?(?:cancion|tema|rola|pista|musica)\b/.test(said)) return null;
+  if (/\ben (?:google|bing|internet|la web|el navegador|youtube)\b/.test(said)) return null;
+
+  const pick = /^abri(?:me|r)?(?: el)? (primero|segundo|tercero|cuarto|quinto|[1-5])$/.exec(said);
+  if (pick) {
+    const n = FILE_PICK[pick[1]] || Number(pick[1]);
+    if (n >= 1 && n <= 5) return { kind: 'files', value: `pick|${n}`, pick: n };
+  }
+
+  const head = /^(?:busca(?:me|r)?|encontra(?:me|r)?|donde esta)(?: (?:el|la|mi|los|las|un|una))? (.+)$/.exec(said);
+  if (!head) return null;
+  const rest = head[1].trim().split(/\s+/).filter(Boolean);
+  if (!rest.length) return null;
+  const kind = parseFileKind(rest[0]);
+  // require an explicit kind so "buscame una excusa" / "dónde está Discord" stay off this path
+  if (!kind) return null;
+  const words = sanitizeWords(rest.slice(1).filter((w) => !/^(?:de|del|la|el|los|las|un|una|mi|mis|al|a)$/.test(w)));
+  if (!words) return null;
+  return { kind: 'files', value: `${kind}|${words.join(' ')}`, fileKind: kind, words };
+}
+
+/** Direct chat/voice orders for volume / theme / snip / window / files (before music). */
 function parsePcCommand(text, { apps = [] } = {}) {
   const { normalizeCommandText } = require('./command-text');
   const said = normalizeCommandText(text).replace(/\s+por favor$/, '').trim();
   if (!said) return null;
+
+  const files = parseFindFilesCommand(said);
+  if (files) return files;
 
   if (/^(?:(?:pon(?:e|me|eme)?|activa|cambia(?:me)?(?: a| al)?|pasa(?: a| al)?) )?(?:el |la )?(?:modo|tema) (?:oscuro|dark)$/.test(said)
     || /^(?:cambialo|cambiala) a (?:modo |tema )?(?:oscuro|dark)$/.test(said)
@@ -573,6 +783,7 @@ async function run(action, deps = {}) {
   if (platform !== 'win32') return fail('Eso solo funciona en Windows.');
   if (kind === 'snip' || (kind === 'pc' && value.toLowerCase() === 'snip')) return startSnip(deps);
   if (kind === 'window') return snapWindows(action, deps);
+  if (kind === 'files') return runFiles(action, deps);
   if (!allowed(kind, value)) return fail('Esa acción de PC no está permitida.');
   if (kind === 'volume') return setVolume(value, deps);
   if (kind === 'settings') return openSettings(value, deps);
@@ -591,21 +802,32 @@ module.exports = {
   THEME_VALUES,
   INFO_KINDS,
   WINDOW_POSITIONS,
+  FILE_KINDS,
+  FILE_EXTS,
   TIMEOUT_MS,
+  FIND_TIMEOUT_MS,
   parseVolumeValue,
   parseSettingsValue,
   parseThemeValue,
   parseInfoValue,
   parseWindowPosition,
   parseWindowValue,
+  parseFileKind,
+  parseFilesValue,
+  sanitizeWords,
   sanitizeProcess,
+  nameMatchesWords,
   buildSnapCommand,
+  buildFindCommand,
+  validateUserFilePath,
   allowed,
   run,
   info,
   contextSnippet,
   detectInfoKinds,
   parsePcCommand,
+  getLastFileHits: () => lastFileHits.slice(),
+  setLastFileHits: (hits) => { lastFileHits = Array.isArray(hits) ? hits.slice(0, FIND_TOP) : []; },
   NO_BATTERY,
   powershell,
 };

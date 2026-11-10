@@ -4,8 +4,9 @@
 // runs one of her own closed-list actions. [calm] is kept as an alias for [seria].
 
 const {
-  SETTINGS_PAGES, VOLUME_WORDS, THEME_VALUES, INFO_KINDS, WINDOW_POSITIONS,
+  SETTINGS_PAGES, VOLUME_WORDS, THEME_VALUES, INFO_KINDS, WINDOW_POSITIONS, FILE_KINDS,
   parseVolumeValue, parseSettingsValue, parseThemeValue, parseInfoValue, parseWindowValue,
+  parseFilesValue,
 } = require('./pc-actions');
 
 const MOODS = ['burla', 'emocion', 'aburrida', 'seria'];
@@ -15,7 +16,7 @@ const TAG = /^\s*\[(burla|emocion|aburrida|seria|calm)\]\s*/i;
 // one from their own list. Anything else is text and never runs.
 const ACTION_KINDS = [
   'open', 'play', 'sleep', 'wake', 'minimize', 'lock', 'mic', 'forget', 'clip', 'quit', 'music', 'remind',
-  'volume', 'settings', 'theme', 'info', 'snip', 'pc', 'window',
+  'volume', 'settings', 'theme', 'info', 'snip', 'pc', 'window', 'files',
 ];
 const PLAIN_ACTIONS = new Set(['sleep', 'wake', 'minimize', 'lock', 'forget', 'clip', 'quit', 'snip']);
 const MIC_VALUES = ['on', 'off'];
@@ -34,7 +35,8 @@ const ACTION_TAG_HELP = [
   `[theme:${THEME_VALUES.join('|')}],`,
   `[info:${INFO_KINDS.join('|')}],`,
   '[snip] / [pc:snip] (recorte de pantalla),',
-  `[window:<app>|${WINDOW_POSITIONS.join('|')}] (ej. [window:Discord|left]).`,
+  `[window:<app>|${WINDOW_POSITIONS.join('|')}] (ej. [window:Discord|left]),`,
+  `[files:<${FILE_KINDS.join('|')}>|<palabras>] (ej. [files:pdf|calculo]; solo abre la carpeta).`,
   'Para un recordatorio o una alarma usá [remind:<fecha y hora ISO 8601 en la zona local que te dije>|<texto corto>],',
   'por ejemplo [remind:2026-11-08T07:00:00-06:00|tomar agua] (suena a esa hora).',
   'Si es un evento/reunión/cita ("mañana a las 8 tengo un evento"), avisá ANTES con un tercer campo en minutos:',
@@ -118,6 +120,10 @@ function parseAction(name, value) {
   if (kind === 'window') {
     const w = parseWindowValue(text);
     return w ? { kind: 'window', value: w.value, app: w.app, position: w.position } : null;
+  }
+  if (kind === 'files') {
+    const f = parseFilesValue(text);
+    return f ? { kind: 'files', value: f.value, fileKind: f.kind, words: f.words } : null;
   }
   const allowedVals = kind === 'mic' ? MIC_VALUES : MUSIC_VALUES;
   const picked = text.toLowerCase();

@@ -71,6 +71,12 @@ function parseMusicCommand(text, { herSong = DEFAULT_HER_SONG, apps = [] } = {})
     const query = String(herSong || '').trim() || DEFAULT_HER_SONG;
     return { action: 'query', query, herSong: true };
   }
+  // "buscá la canción X" is music, not file search (pc-actions leaves this phrase alone)
+  const buscaSong = /^(?:busca(?:me|r)?) (?:la |el )?(?:cancion|tema|rola|pista) (.+)$/.exec(value);
+  if (buscaSong) {
+    const q = buscaSong[1].trim();
+    if (q) return { action: 'query', query: q };
+  }
   const spotify = new RegExp(`^(?:${PLAY_VERB}|play) (?:reproducir )?(.+?) en spotify$`).exec(value);
   if (spotify) return { action: 'query', query: spotify[1], player: 'spotify' };
   const playEn = /^play (?!music(?:a)?$)(.+)$/.exec(value);

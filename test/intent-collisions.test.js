@@ -89,6 +89,13 @@ const ROWS = [
   ['poné Discord', 'app'],
   ['poné música a la derecha', 'llm'],
   ['la izquierda de la foto está mal', 'llm'],
+  // find files vs music / web / chat
+  ['buscame el PDF de cálculo', 'files'],
+  ['dónde está la foto del perro', 'files'],
+  ['buscá la canción Bohemian', 'music'],
+  ['buscá en Google recetas', 'llm'],
+  ['buscame una excusa para mañana', 'llm'],
+  ['dónde está Discord', 'llm'],
 ];
 
 for (const [phrase, dest] of ROWS) {

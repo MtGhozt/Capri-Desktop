@@ -4,8 +4,10 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { stripReplyTags, ACTION_KINDS, ACTION_TAG_HELP } = require('../src/main/mood-tag');
 const {
-  SETTINGS, SETTINGS_PAGES, allowed, run, detectInfoKinds, contextSnippet,
+  SETTINGS, SETTINGS_PAGES, FILE_EXTS, allowed, run, detectInfoKinds, contextSnippet,
   parsePcCommand, parseWindowValue, parseWindowPosition, sanitizeProcess, buildSnapCommand,
+  parseFileKind, parseFilesValue, sanitizeWords, nameMatchesWords, buildFindCommand,
+  validateUserFilePath, setLastFileHits, getLastFileHits,
   NO_BATTERY, info,
 } = require('../src/main/pc-actions');
 
@@ -201,8 +203,10 @@ test('system prompt lists the new PC action kinds', () => {
   }
   assert.ok(ACTION_KINDS.includes('snip'));
   assert.ok(ACTION_KINDS.includes('window'));
+  assert.ok(ACTION_KINDS.includes('files'));
   assert.match(ACTION_TAG_HELP, /\[pc:snip\]/);
   assert.match(ACTION_TAG_HELP, /\[window:/);
+  assert.match(ACTION_TAG_HELP, /\[files:/);
   assert.match(ACTION_TAG_HELP, /dígitos/i);
 });
 
@@ -277,4 +281,114 @@ test('run window snap uses allowlisted PowerShell (mocked)', async () => {
   );
   assert.equal(miss.ok, false);
   assert.match(miss.line, /No veo Discord abierta/);
+});
+
+test('file kind mapping and accent-insensitive word match', () => {
+  assert.equal(parseFileKind('PDF'), 'pdf');
+  assert.equal(parseFileKind('foto'), 'image');
+  assert.equal(parseFileKind('excel'), 'excel');
+  assert.equal(parseFileKind('cancion'), null);
+  assert.ok(FILE_EXTS.pdf.includes('.pdf'));
+  assert.ok(FILE_EXTS.image.includes('.png'));
+  assert.deepEqual(parseFilesValue('pdf|calculo'), {
+    kind: 'pdf', words: ['calculo'], value: 'pdf|calculo',
+  });
+  assert.equal(parseFilesValue('pdf|'), null);
+  assert.equal(parseFilesValue('hack|x'), null);
+  assert.deepEqual(sanitizeWords(['cálculo']), ['cálculo']);
+  assert.deepEqual(sanitizeWords(['calculo']), ['calculo']);
+  assert.equal(sanitizeWords(['bad;rm']), null);
+  assert.ok(nameMatchesWords('Informe-Cálculo-2024.pdf', ['calculo']));
+  assert.ok(nameMatchesWords('foto del perro.jpg', ['perro']));
+  assert.equal(nameMatchesWords('gato.jpg', ['perro', 'gato']), false);
+});
+
+test('buildFindCommand only embeds base64 allowlisted config', () => {
+  const cmd = buildFindCommand(FILE_EXTS.pdf);
+  assert.ok(cmd);
+  assert.match(cmd, /FromBase64String\('[A-Za-z0-9+/=]+'\)/);
+  assert.doesNotMatch(cmd, /calculo|perro|; rm /i);
+  assert.match(cmd, /GetFolderPath/);
+  assert.match(cmd, /Downloads/);
+  assert.equal(validateUserFilePath('C:\\Users\\x\\Documents\\a.pdf'), 'C:\\Users\\x\\Documents\\a.pdf');
+  assert.equal(validateUserFilePath('C:\\Users\\x\\..\\Windows\\a.pdf'), null);
+  assert.equal(validateUserFilePath('/etc/passwd'), null);
+});
+
+test('parsePcCommand find files and pick', () => {
+  const pdf = parsePcCommand('buscame el PDF de cálculo');
+  assert.equal(pdf?.kind, 'files');
+  assert.equal(pdf.fileKind, 'pdf');
+  assert.deepEqual(pdf.words, ['calculo']);
+  const foto = parsePcCommand('dónde está la foto del perro');
+  assert.equal(foto?.kind, 'files');
+  assert.equal(foto.fileKind, 'image');
+  assert.deepEqual(foto.words, ['perro']);
+  assert.equal(parsePcCommand('buscá la canción Bohemian'), null);
+  assert.equal(parsePcCommand('buscá en Google recetas'), null);
+  assert.equal(parsePcCommand('buscame una excusa para mañana'), null);
+  assert.equal(parsePcCommand('dónde está Discord'), null);
+  assert.deepEqual(parsePcCommand('abrí el segundo'), { kind: 'files', value: 'pick|2', pick: 2 });
+});
+
+test('findFiles 1/many/0 replies and abrí el segundo', async () => {
+  setLastFileHits([]);
+  const selected = [];
+  const rows = [
+    { name: 'gastos.xlsx', path: 'C:\\Users\\x\\Documents\\gastos.xlsx', dir: 'C:\\Users\\x\\Documents', mtime: '2024-06-01T00:00:00.000Z' },
+    { name: 'gastos-old.xlsx', path: 'C:\\Users\\x\\Downloads\\gastos-old.xlsx', dir: 'C:\\Users\\x\\Downloads', mtime: '2023-01-01T00:00:00.000Z' },
+    { name: 'otro.xlsx', path: 'C:\\Users\\x\\Documents\\otro.xlsx', dir: 'C:\\Users\\x\\Documents', mtime: '2024-05-01T00:00:00.000Z' },
+  ];
+  const many = await run(
+    { kind: 'files', value: 'excel|gastos', fileKind: 'excel', words: ['gastos'] },
+    {
+      platform: 'win32',
+      powershell: async (cmd) => {
+        assert.match(cmd, /FromBase64String/);
+        assert.doesNotMatch(cmd, /gastos/);
+        return JSON.stringify(rows);
+      },
+      execFile: (_f, args, _o, cb) => { selected.push(args); cb(null); },
+    },
+  );
+  assert.equal(many.ok, true);
+  assert.match(many.line, /Encontré 2/);
+  assert.match(many.line, /gastos\.xlsx/);
+  assert.equal(selected.length, 0);
+  assert.equal(getLastFileHits().length, 2);
+
+  const pick = await run(
+    { kind: 'files', value: 'pick|2', pick: 2 },
+    {
+      platform: 'win32',
+      execFile: (_f, args, _o, cb) => { selected.push(args); cb(null); },
+    },
+  );
+  assert.equal(pick.ok, true);
+  assert.match(pick.line, /Ahí está: gastos-old\.xlsx/);
+  assert.equal(selected.length, 1);
+  assert.match(selected[0][0], /\/select,/);
+  assert.match(selected[0][0], /gastos-old\.xlsx/);
+
+  selected.length = 0;
+  const one = await run(
+    { kind: 'files', value: 'pdf|unico', fileKind: 'pdf', words: ['unico'] },
+    {
+      platform: 'win32',
+      powershell: async () => JSON.stringify([
+        { name: 'unico.pdf', path: 'C:\\Users\\x\\Desktop\\unico.pdf', dir: 'C:\\Users\\x\\Desktop', mtime: '2024-01-01T00:00:00.000Z' },
+      ]),
+      execFile: (_f, args, _o, cb) => { selected.push(args); cb(null); },
+    },
+  );
+  assert.equal(one.ok, true);
+  assert.equal(one.line, 'Ahí está: unico.pdf');
+  assert.equal(selected.length, 1);
+
+  const none = await run(
+    { kind: 'files', value: 'pdf|nada', fileKind: 'pdf', words: ['nada'] },
+    { platform: 'win32', powershell: async () => '[]' },
+  );
+  assert.equal(none.ok, true);
+  assert.equal(none.line, 'No encontré nada con eso en tus carpetas.');
 });

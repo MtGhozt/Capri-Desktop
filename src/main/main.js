@@ -768,6 +768,7 @@ async function pcReply(action, { chat = true } = {}) {
     let line = 'Listo.';
     if (action.kind === 'snip') line = 'Listo, recortá lo que quieras.';
     else if (action.kind === 'window') line = windowResultLine(action, result);
+    else if (action.kind === 'files' && result.line) line = result.line;
     else if (action.kind === 'theme') line = action.value === 'dark' ? 'Modo oscuro.' : 'Modo claro.';
     else if (action.kind === 'volume' && (action.value === 'mute' || action.value === 'unmute')) {
       line = pickLine('musicaMute');
@@ -893,9 +894,9 @@ async function runReplyAction(action) {
       if (!result?.ok) showLine(result?.error || 'No pude hacer eso con la música.', { chat: true, badge: 'MUSIC' });
       return;
     }
-    if (kind === 'volume' || kind === 'settings' || kind === 'theme' || kind === 'snip' || kind === 'window') {
+    if (kind === 'volume' || kind === 'settings' || kind === 'theme' || kind === 'snip' || kind === 'window' || kind === 'files') {
       const result = await pcActions.run(
-        kind === 'window' ? action : { kind, value },
+        (kind === 'window' || kind === 'files') ? action : { kind, value },
         { openExternal: (url) => shell.openExternal(url), apps: allApps() },
       );
       logEvent(
@@ -903,7 +904,10 @@ async function runReplyAction(action) {
         `[capri] pc ${kind}:${value || ''} ${result?.ok ? 'ok' : `failed: ${result?.line || '?'}`}`,
       );
       // she already answered in character; only a friendly line when the PC action failed
+      // (files list is spoken by her tag reply; show the list if she omitted details)
       if (result?.ok === false && result.line) {
+        showLine(result.line, { chat: true, badge: 'PC' });
+      } else if (kind === 'files' && result?.ok && result.hits?.length > 1 && result.line) {
         showLine(result.line, { chat: true, badge: 'PC' });
       }
     }

@@ -32,6 +32,7 @@ function matchDirect(text, { apps = [], herSong, timeZone } = {}) {
   if (pc) {
     if (pc.kind === 'snip') return 'snip';
     if (pc.kind === 'window') return 'window';
+    if (pc.kind === 'files') return 'files';
     return 'pc';
   }
   if (parseMusicCommand(text, { herSong, apps })) return 'music';
