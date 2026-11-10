@@ -32,4 +32,39 @@ function planMultiCommand(text, isDirect) {
   return sleepLast(parts);
 }
 
-module.exports = { splitCommands, sleepLast, planMultiCommand };
+/**
+ * Collapse consecutive window snaps into one run so combineWindowResults speaks once.
+ * `getAction(segment)` → parsePcCommand result (or null). Non-window parts stay as `{ segment }`.
+ */
+function coalesceWindowRuns(segments, getAction) {
+  const out = [];
+  let i = 0;
+  const parts = Array.isArray(segments) ? segments : [];
+  while (i < parts.length) {
+    const action = typeof getAction === 'function' ? getAction(parts[i]) : null;
+    if (action?.kind === 'window') {
+      const snaps = [];
+      while (i < parts.length) {
+        const w = getAction(parts[i]);
+        if (w?.kind !== 'window') break;
+        if (Array.isArray(w.snaps) && w.snaps.length) {
+          for (const s of w.snaps) if (s) snaps.push(s);
+        } else {
+          snaps.push(w);
+        }
+        i += 1;
+      }
+      out.push({
+        kind: 'window',
+        snaps,
+        value: snaps.map((s) => `${s.app || ''}|${s.position || ''}`).join('+'),
+      });
+      continue;
+    }
+    out.push({ kind: 'segment', text: parts[i] });
+    i += 1;
+  }
+  return out;
+}
+
+module.exports = { splitCommands, sleepLast, planMultiCommand, coalesceWindowRuns };

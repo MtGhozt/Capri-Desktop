@@ -2,8 +2,9 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { splitCommands, sleepLast, planMultiCommand } = require('../src/main/multi-command');
+const { splitCommands, sleepLast, planMultiCommand, coalesceWindowRuns } = require('../src/main/multi-command');
 const { isDirectCommand } = require('../src/main/direct-match');
+const { parsePcCommand, run, combineWindowResults } = require('../src/main/pc-actions');
 const { APPS } = require('./apps-fixture');
 
 const isDirect = (part) => isDirectCommand(part, APPS);
@@ -68,4 +69,44 @@ test('only direct commands count as parts', () => {
   assert.equal(isDirect('abre Discord'), true);
   assert.equal(isDirect('Spotify'), false);
   assert.equal(isDirect('saluda'), false);
+});
+
+test('consecutive window parts coalesce into one snapWindows run', async () => {
+  const apps = [
+    ...APPS,
+    { name: 'Grok', aliases: [], type: 'program', target: 'C:\\Grok\\Grok.exe', processes: ['Grok Bot'] },
+  ];
+  const phrase = 'poné Discord a la izquierda y Grok a la derecha';
+  const parts = planMultiCommand(phrase, (part) => isDirectCommand(part, apps));
+  assert.ok(parts);
+  assert.equal(parts.length, 2);
+  const runs = coalesceWindowRuns(parts, (part) => parsePcCommand(part, { apps }));
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].kind, 'window');
+  assert.equal(runs[0].snaps.length, 2);
+
+  let psCalls = 0;
+  const okOk = await run(
+    { kind: 'window', value: runs[0].value, snaps: runs[0].snaps },
+    { platform: 'win32', powershell: async () => { psCalls += 1; return 'OK'; } },
+  );
+  assert.equal(psCalls, 2);
+  assert.equal(okOk.ok, true);
+  assert.equal(okOk.line, 'Discord a la izquierda y Grok a la derecha.');
+  assert.equal(combineWindowResults(okOk.results), okOk.line);
+
+  psCalls = 0;
+  const okFail = await run(
+    { kind: 'window', value: runs[0].value, snaps: runs[0].snaps },
+    {
+      platform: 'win32',
+      powershell: async (cmd) => {
+        psCalls += 1;
+        return cmd.includes("-Name 'Grok Bot'") ? 'MISSING' : 'OK';
+      },
+    },
+  );
+  assert.equal(psCalls, 2);
+  assert.equal(okFail.ok, false);
+  assert.equal(okFail.line, 'Discord a la izquierda, pero no veo Grok abierta.');
 });

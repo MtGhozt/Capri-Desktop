@@ -270,6 +270,8 @@ test('buildSnapCommand only interpolates validated process + position', () => {
   assert.ok(cmd);
   assert.match(cmd, /-Name 'Discord'/);
   assert.match(cmd, /Place\(\$p\.MainWindowHandle, 'left'\)/);
+  assert.match(cmd, /IsZoomed/);
+  assert.match(cmd, /if \(IsZoomed\(h\)\) ShowWindow\(h, 9\);/);
   assert.doesNotMatch(cmd, /Discord;/);
   const max = buildSnapCommand('chrome', 'max');
   assert.match(max, /-Name 'chrome'/);

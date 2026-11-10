@@ -449,6 +449,7 @@ const PLACE = `Add-Type -TypeDefinition @"
 using System; using System.Runtime.InteropServices;
 public static class CapriWin {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr i, int x, int y, int cx, int cy, uint f);
   [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr h, uint f);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
@@ -461,6 +462,7 @@ public static class CapriWin {
   public static extern bool GetMonitorInfo(IntPtr h, ref MONITORINFO mi);
   public static bool Place(IntPtr h, string side) {
     ShowWindow(h, 9);
+    if (IsZoomed(h)) ShowWindow(h, 9);
     var mon = MonitorFromWindow(h, 2);
     var mi = new MONITORINFO(); mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
     if (!GetMonitorInfo(mon, ref mi)) return false;

@@ -36,7 +36,7 @@ const { VC_URL, VC_MESSAGE, missingVcRuntime } = require('./vc-runtime');
 const { activeVoiceLabel, saveCustomRef, transcriptFor } = require('./voice-ref');
 const { createSpeakQueue } = require('./speak');
 const { isSleepCommand } = require('./sleep-command');
-const { planMultiCommand } = require('./multi-command');
+const { planMultiCommand, coalesceWindowRuns } = require('./multi-command');
 const { isDirectCommand } = require('./direct-match');
 const {
   createReminders, parseReminderCommand, formatWhen, deliverReminder,
@@ -3055,10 +3055,15 @@ async function directCommand(line) {
 
 // Every part already checked as direct: run them in order, unless one asks first ("¿seguro?") —
 // then the rest waits for the answer instead of firing blind.
+// Consecutive window snaps merge into one snapWindows so TTS hears a single combined line.
 async function runDirectSegments(segments) {
   let last = { ok: true };
-  for (const segment of segments) {
-    const result = await directCommand(segment);
+  const appsList = allApps();
+  const runs = coalesceWindowRuns(segments, (part) => parsePcCommand(part, { apps: appsList }));
+  for (const run of runs) {
+    const result = run.kind === 'window'
+      ? await pcReply({ kind: 'window', value: run.value, snaps: run.snaps })
+      : await directCommand(run.text);
     if (!result) break;
     last = result;
     if (systemFlow.pending || systemFlow.running || quitFlow.pending || apps().confirm.pending) break;
