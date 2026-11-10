@@ -5,7 +5,7 @@
 
 const { normalizeCommandText } = require('./command-text');
 
-const CLIP_RE = /^(?:guarda(?:me)? (?:eso|esto|el clip|el replay|este clip)|graba(?:me)? (?:eso|esto|el clip|el replay)|clipea(?:lo|me| eso| esto| el clip)?|clip (?:eso|esto))$/;
+const CLIP_RE = /^(?:guarda(?:me)? (?:eso|esto|el clip|un clip|el replay|este clip)|graba(?:me)? (?:eso|esto|el clip|un clip|el replay)|clipea(?:lo|me| eso| esto| el clip)?|clip (?:eso|esto))$/;
 
 function isClipCommand(text) {
   let said = normalizeCommandText(text).replace(/\s+por favor$/, '').trim();

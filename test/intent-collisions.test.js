@@ -7,9 +7,10 @@ const { detectInfoKinds } = require('../src/main/pc-actions');
 const { isWeatherOrHolidayQuestion } = require('../src/main/weather');
 
 const APPS = [
-  { name: 'Discord', aliases: ['discor'], type: 'link', target: 'https://discord.com' },
-  { name: 'Spotify', aliases: ['spoti'], type: 'link', target: 'https://open.spotify.com' },
-  { name: 'Namida', aliases: [], type: 'link', target: 'https://namida.app' },
+  { name: 'Discord', aliases: ['discor'], type: 'program', target: 'C:\\Discord\\Discord.exe', processes: ['Discord'] },
+  { name: 'Chrome', aliases: [], type: 'program', target: 'C:\\Chrome\\chrome.exe', processes: ['chrome'] },
+  { name: 'Spotify', aliases: ['spoti'], type: 'link', target: 'https://open.spotify.com', processes: ['Spotify'] },
+  { name: 'Namida', aliases: [], type: 'link', target: 'https://namida.app', processes: ['namida'] },
 ];
 
 const opts = { apps: APPS };
@@ -77,6 +78,17 @@ const ROWS = [
   // window/file phrasing that used to look like volume
   ['bajame ese archivo', 'llm'],
   ['bajá la ventana', 'llm'],
+  // snip vs screen-look vs clip
+  ['recortá la pantalla', 'snip'],
+  ['mirá mi pantalla', 'look'],
+  ['guardá un clip', 'clip'],
+  // arrange windows
+  ['poné Discord a la izquierda', 'window'],
+  ['Discord a la izquierda y Chrome a la derecha', 'window'],
+  ['maximizá Chrome', 'window'],
+  ['poné Discord', 'app'],
+  ['poné música a la derecha', 'llm'],
+  ['la izquierda de la foto está mal', 'llm'],
 ];
 
 for (const [phrase, dest] of ROWS) {
@@ -105,4 +117,15 @@ test('main temporalExtras gates weather on isWeatherOrHolidayQuestion', () => {
   const path = require('node:path');
   const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
   assert.match(main, /if \(isWeatherOrHolidayQuestion\(user\)\)/);
+});
+
+test('dual window phrase yields two snap ops', () => {
+  const { parsePcCommand } = require('../src/main/pc-actions');
+  const got = parsePcCommand('Discord a la izquierda y Chrome a la derecha', { apps: APPS });
+  assert.equal(got?.kind, 'window');
+  assert.equal(got.snaps?.length, 2);
+  assert.equal(got.snaps[0].position, 'left');
+  assert.equal(got.snaps[0].process, 'Discord');
+  assert.equal(got.snaps[1].position, 'right');
+  assert.equal(got.snaps[1].process, 'chrome');
 });

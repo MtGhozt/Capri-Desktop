@@ -4,8 +4,8 @@
 // runs one of her own closed-list actions. [calm] is kept as an alias for [seria].
 
 const {
-  SETTINGS_PAGES, VOLUME_WORDS, THEME_VALUES, INFO_KINDS,
-  parseVolumeValue, parseSettingsValue, parseThemeValue, parseInfoValue,
+  SETTINGS_PAGES, VOLUME_WORDS, THEME_VALUES, INFO_KINDS, WINDOW_POSITIONS,
+  parseVolumeValue, parseSettingsValue, parseThemeValue, parseInfoValue, parseWindowValue,
 } = require('./pc-actions');
 
 const MOODS = ['burla', 'emocion', 'aburrida', 'seria'];
@@ -15,9 +15,9 @@ const TAG = /^\s*\[(burla|emocion|aburrida|seria|calm)\]\s*/i;
 // one from their own list. Anything else is text and never runs.
 const ACTION_KINDS = [
   'open', 'play', 'sleep', 'wake', 'minimize', 'lock', 'mic', 'forget', 'clip', 'quit', 'music', 'remind',
-  'volume', 'settings', 'theme', 'info',
+  'volume', 'settings', 'theme', 'info', 'snip', 'pc', 'window',
 ];
-const PLAIN_ACTIONS = new Set(['sleep', 'wake', 'minimize', 'lock', 'forget', 'clip', 'quit']);
+const PLAIN_ACTIONS = new Set(['sleep', 'wake', 'minimize', 'lock', 'forget', 'clip', 'quit', 'snip']);
 const MIC_VALUES = ['on', 'off'];
 const MUSIC_VALUES = ['pause', 'play', 'next', 'previous', 'up', 'down', 'mute', 'unmute', 'nowplaying', 'open', 'start'];
 const TAG_NAMES = [...new Set([...MOODS, ...Object.keys(ALIAS), ...ACTION_KINDS])];
@@ -32,7 +32,9 @@ const ACTION_TAG_HELP = [
   `[volume:${VOLUME_WORDS.join('|')}|0-100],`,
   `[settings:${SETTINGS_PAGES.join('|')}],`,
   `[theme:${THEME_VALUES.join('|')}],`,
-  `[info:${INFO_KINDS.join('|')}].`,
+  `[info:${INFO_KINDS.join('|')}],`,
+  '[snip] / [pc:snip] (recorte de pantalla),',
+  `[window:<app>|${WINDOW_POSITIONS.join('|')}] (ej. [window:Discord|left]).`,
   'Para un recordatorio o una alarma usá [remind:<fecha y hora ISO 8601 en la zona local que te dije>|<texto corto>],',
   'por ejemplo [remind:2026-11-08T07:00:00-06:00|tomar agua] (suena a esa hora).',
   'Si es un evento/reunión/cita ("mañana a las 8 tengo un evento"), avisá ANTES con un tercer campo en minutos:',
@@ -109,6 +111,13 @@ function parseAction(name, value) {
   if (kind === 'info') {
     const v = parseInfoValue(text);
     return v ? { kind, value: v } : null;
+  }
+  if (kind === 'pc') {
+    return text.toLowerCase() === 'snip' ? { kind: 'snip', value: '' } : null;
+  }
+  if (kind === 'window') {
+    const w = parseWindowValue(text);
+    return w ? { kind: 'window', value: w.value, app: w.app, position: w.position } : null;
   }
   const allowedVals = kind === 'mic' ? MIC_VALUES : MUSIC_VALUES;
   const picked = text.toLowerCase();

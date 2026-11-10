@@ -88,6 +88,8 @@ function parseMusicCommand(text, { herSong = DEFAULT_HER_SONG, apps = [] } = {})
   if (query) {
     const q = query[1].replace(/^en\s+/, '').trim();
     if (isKnownAppName(q, apps)) return null;
+    // window arrange ("poné música a la derecha") is not a song search
+    if (/\ba la (?:izquierda|derecha)$/.test(q)) return null;
     return { action: 'query', query: q };
   }
   return null;

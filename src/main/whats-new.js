@@ -10,6 +10,7 @@ const NOTES = {
     'Puedo subir/bajar el volumen de Windows, silenciar y abrir Configuración (Bluetooth, sonido, Wi‑Fi…).',
     'Si preguntás por batería, disco, RAM o tu IP local, te contesto con datos reales de la PC.',
     'También cambio modo oscuro/claro; todo con las mismas etiquetas ocultas del chat.',
+    'Recorte de pantalla (Snipping) y acomodar ventanas: izquierda/derecha, maximizar o minimizar.',
   ],
   '0.2.8': [
     'Clima/feriados en carácter; si el modelo falla, te contesto igual sin cartel de error.',

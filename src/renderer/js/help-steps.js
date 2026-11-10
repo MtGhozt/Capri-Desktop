@@ -74,6 +74,7 @@ export const HELP_STEPS = {
       'O usá «Tecla para hablar» en Ajustes › Oído y voz (por defecto Ctrl+Alt+V): mantené o tocá según cómo la configuraste.',
       'Para escribirle: Ctrl+Alt+T abre el chat.',
       '«Pausa antes de cortar» (CORTA · 0.8 s / NORMAL · 1.4 s / LARGA · 2.2 s) define cuánto silencio cierra la frase después de «Hey Capri».',
+      '«Recortá la pantalla» abre el Snipping de Windows; «poné Discord a la izquierda» (o maximizá/minimizá) acomoda apps de Mis apps.',
     ],
   },
   wake: {

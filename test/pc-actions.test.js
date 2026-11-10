@@ -5,8 +5,14 @@ const assert = require('node:assert/strict');
 const { stripReplyTags, ACTION_KINDS, ACTION_TAG_HELP } = require('../src/main/mood-tag');
 const {
   SETTINGS, SETTINGS_PAGES, allowed, run, detectInfoKinds, contextSnippet,
-  parsePcCommand, NO_BATTERY, info,
+  parsePcCommand, parseWindowValue, parseWindowPosition, sanitizeProcess, buildSnapCommand,
+  NO_BATTERY, info,
 } = require('../src/main/pc-actions');
+
+const APPS = [
+  { name: 'Discord', aliases: ['discor'], type: 'program', target: 'C:\\Discord\\Discord.exe', processes: ['Discord'] },
+  { name: 'Chrome', aliases: [], type: 'program', target: 'C:\\Chrome\\chrome.exe', processes: ['chrome'] },
+];
 
 test('stripReplyTags parses volume / settings / theme / info tags', () => {
   assert.deepEqual(stripReplyTags('[volume:30] Listo.').action, { kind: 'volume', value: '30' });
@@ -32,15 +38,27 @@ test('unknown PC tags / values stay as text (allowlist)', () => {
     '[theme:neon] Nada.',
     '[info:cpu] Nada.',
     '[pc:hack] Nada.',
+    '[window:Discord|diagonal] Nada.',
   ]) {
     assert.deepEqual(stripReplyTags(text), { text, mood: null, action: null }, text);
     const m = /^\[(\w+):([^\]]*)\]/.exec(text);
-    if (m && ['volume', 'settings', 'theme', 'info'].includes(m[1])) {
+    if (m && ['volume', 'settings', 'theme', 'info', 'window'].includes(m[1])) {
       assert.equal(allowed(m[1], m[2]), false, text);
     }
   }
   assert.equal(allowed('shell', 'Get-Process'), false);
   assert.equal(allowed('settings', 'foobar'), false);
+});
+
+test('snip and window reply tags parse', () => {
+  assert.deepEqual(stripReplyTags('[pc:snip] Recortá.').action, { kind: 'snip', value: '' });
+  assert.deepEqual(stripReplyTags('[snip] Listo.').action, { kind: 'snip', value: '' });
+  assert.deepEqual(stripReplyTags('[window:Discord|left] Hecho.').action, {
+    kind: 'window', value: 'Discord|left', app: 'Discord', position: 'left',
+  });
+  assert.deepEqual(stripReplyTags('[window:Chrome|max] Ya.').action, {
+    kind: 'window', value: 'Chrome|max', app: 'Chrome', position: 'max',
+  });
 });
 
 test('ms-settings mapping covers the closed page list', () => {
@@ -181,5 +199,82 @@ test('system prompt lists the new PC action kinds', () => {
       `missing from the prompt: ${kind}`,
     );
   }
+  assert.ok(ACTION_KINDS.includes('snip'));
+  assert.ok(ACTION_KINDS.includes('window'));
+  assert.match(ACTION_TAG_HELP, /\[pc:snip\]/);
+  assert.match(ACTION_TAG_HELP, /\[window:/);
   assert.match(ACTION_TAG_HELP, /dígitos/i);
+});
+
+test('parseWindowValue and sanitizeProcess are allowlisted', () => {
+  assert.deepEqual(parseWindowValue('Discord|left'), {
+    app: 'Discord', position: 'left', value: 'Discord|left',
+  });
+  assert.equal(parseWindowPosition('derecha'), 'right');
+  assert.equal(parseWindowValue('Discord|diagonal'), null);
+  assert.equal(parseWindowValue('Capri|left'), null);
+  assert.equal(sanitizeProcess('Discord'), 'Discord');
+  assert.equal(sanitizeProcess('chrome.exe'), 'chrome');
+  assert.equal(sanitizeProcess('Discord;rm'), null);
+  assert.equal(sanitizeProcess('../evil'), null);
+  assert.equal(sanitizeProcess('electron'), null);
+});
+
+test('buildSnapCommand only interpolates validated process + position', () => {
+  assert.equal(buildSnapCommand('Discord; rm', 'left'), null);
+  assert.equal(buildSnapCommand('Discord', 'diagonal'), null);
+  const cmd = buildSnapCommand('Discord', 'left');
+  assert.ok(cmd);
+  assert.match(cmd, /-Name 'Discord'/);
+  assert.match(cmd, /Place\(\$p\.MainWindowHandle, 'left'\)/);
+  assert.doesNotMatch(cmd, /Discord;/);
+  const max = buildSnapCommand('chrome', 'max');
+  assert.match(max, /-Name 'chrome'/);
+  assert.match(max, /ShowWindow\(\$p\.MainWindowHandle, 3\)/);
+});
+
+test('parsePcCommand snip and window arrange', () => {
+  assert.deepEqual(parsePcCommand('recortá la pantalla'), { kind: 'snip', value: '' });
+  assert.deepEqual(parsePcCommand('sacá un recorte'), { kind: 'snip', value: '' });
+  const left = parsePcCommand('poné Discord a la izquierda', { apps: APPS });
+  assert.equal(left?.kind, 'window');
+  assert.equal(left.process, 'Discord');
+  assert.equal(left.position, 'left');
+  const max = parsePcCommand('maximizá Chrome', { apps: APPS });
+  assert.equal(max?.kind, 'window');
+  assert.equal(max.process, 'chrome');
+  assert.equal(max.position, 'max');
+  assert.equal(parsePcCommand('poné Discord', { apps: APPS }), null);
+  assert.equal(parsePcCommand('poné música a la derecha', { apps: APPS }), null);
+  assert.equal(parsePcCommand('la izquierda de la foto está mal', { apps: APPS }), null);
+});
+
+test('run snip opens ms-screenclip', async () => {
+  const opened = [];
+  const ok = await run(
+    { kind: 'snip', value: '' },
+    { platform: 'win32', openExternal: async (url) => { opened.push(url); } },
+  );
+  assert.equal(ok.ok, true);
+  assert.deepEqual(opened, ['ms-screenclip:']);
+});
+
+test('run window snap uses allowlisted PowerShell (mocked)', async () => {
+  const cmds = [];
+  const ok = await run(
+    { kind: 'window', value: 'Discord|left', app: 'Discord', process: 'Discord', position: 'left' },
+    {
+      platform: 'win32',
+      powershell: async (cmd) => { cmds.push(cmd); return 'OK'; },
+    },
+  );
+  assert.equal(ok.ok, true);
+  assert.match(cmds[0], /-Name 'Discord'/);
+  assert.match(cmds[0], /CapriWin/);
+  const miss = await run(
+    { kind: 'window', value: 'Discord|left', app: 'Discord', process: 'Discord', position: 'left' },
+    { platform: 'win32', powershell: async () => 'MISSING' },
+  );
+  assert.equal(miss.ok, false);
+  assert.match(miss.line, /No veo Discord abierta/);
 });

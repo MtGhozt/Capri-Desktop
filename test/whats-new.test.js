@@ -71,6 +71,7 @@ test('0.2.9 has short lines about PC volume/settings/info', () => {
   const all = lines.join(' ');
   assert.match(all, /volumen|Configuración|Bluetooth/i);
   assert.match(all, /batería|disco|RAM|IP/i);
+  assert.match(all, /Recorte|ventanas|Snipping/i);
 });
 
 test('an upgrade to a version without notes says nothing', () => {

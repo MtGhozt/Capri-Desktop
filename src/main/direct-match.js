@@ -28,7 +28,12 @@ function matchDirect(text, { apps = [], herSong, timeZone } = {}) {
   if (parseSystemCommand(text)) return 'system';
   if (isStopTtsCommand(text)) return 'stopTts';
   if (parseReminderCommand(text, { timeZone })) return 'reminder';
-  if (parsePcCommand(text)) return 'pc';
+  const pc = parsePcCommand(text, { apps });
+  if (pc) {
+    if (pc.kind === 'snip') return 'snip';
+    if (pc.kind === 'window') return 'window';
+    return 'pc';
+  }
   if (parseMusicCommand(text, { herSong, apps })) return 'music';
   if (isSleepCommand(text)) return 'sleep';
   if (isQuitCommand(text)) return 'quit';

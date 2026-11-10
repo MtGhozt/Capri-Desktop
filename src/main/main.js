@@ -739,19 +739,36 @@ const MUSIC_LINE = {
   query: 'musicaPlay',
 };
 
+function windowResultLine(action, result) {
+  const snaps = result?.snaps || action?.snaps || [action];
+  const bits = (Array.isArray(snaps) ? snaps : [snaps]).map((s) => {
+    const name = s?.app || 'Listo';
+    if (s?.position === 'left') return `${name} a la izquierda.`;
+    if (s?.position === 'right') return `${name} a la derecha.`;
+    if (s?.position === 'max') return `${name} maximizada.`;
+    if (s?.position === 'min') return `${name} minimizada.`;
+    if (s?.position === 'restore') return `${name} restaurada.`;
+    return `${name}.`;
+  });
+  return bits.join(' ') || 'Listo.';
+}
+
 async function pcReply(action, { chat = true } = {}) {
   try {
     const result = await pcActions.run(action, {
       openExternal: (url) => shell.openExternal(url),
+      apps: allApps(),
     });
-    const tag = `${action.kind}:${action.value}`;
+    const tag = `${action.kind}:${action.value || ''}`;
     logEvent(voiceLogPath(), `[capri] pc ${tag} ${result?.ok ? 'ok' : `failed: ${result?.line || '?'}`}`);
     if (!result?.ok) {
       showLine(result?.line || 'No pude hacer eso en la PC.', { chat, badge: 'PC' });
       return { ok: false };
     }
     let line = 'Listo.';
-    if (action.kind === 'theme') line = action.value === 'dark' ? 'Modo oscuro.' : 'Modo claro.';
+    if (action.kind === 'snip') line = 'Listo, recortá lo que quieras.';
+    else if (action.kind === 'window') line = windowResultLine(action, result);
+    else if (action.kind === 'theme') line = action.value === 'dark' ? 'Modo oscuro.' : 'Modo claro.';
     else if (action.kind === 'volume' && (action.value === 'mute' || action.value === 'unmute')) {
       line = pickLine('musicaMute');
     } else if (action.kind === 'volume') {
@@ -876,14 +893,14 @@ async function runReplyAction(action) {
       if (!result?.ok) showLine(result?.error || 'No pude hacer eso con la música.', { chat: true, badge: 'MUSIC' });
       return;
     }
-    if (kind === 'volume' || kind === 'settings' || kind === 'theme') {
+    if (kind === 'volume' || kind === 'settings' || kind === 'theme' || kind === 'snip' || kind === 'window') {
       const result = await pcActions.run(
-        { kind, value },
-        { openExternal: (url) => shell.openExternal(url) },
+        kind === 'window' ? action : { kind, value },
+        { openExternal: (url) => shell.openExternal(url), apps: allApps() },
       );
       logEvent(
         voiceLogPath(),
-        `[capri] pc ${kind}:${value} ${result?.ok ? 'ok' : `failed: ${result?.line || '?'}`}`,
+        `[capri] pc ${kind}:${value || ''} ${result?.ok ? 'ok' : `failed: ${result?.line || '?'}`}`,
       );
       // she already answered in character; only a friendly line when the PC action failed
       if (result?.ok === false && result.line) {
@@ -3019,8 +3036,8 @@ async function directCommand(line) {
     return { ok: true, line: announce('Callada.', { chat: true, badge: 'CAPRI' }) };
   }
   // Weather/holiday questions go to the LLM with facts in temporalExtras; answerDirect is fallback only.
-  // PC mute/theme/volume before music so "silencio" / "poné modo oscuro" are not music.
-  const pcOrder = parsePcCommand(line);
+  // PC mute/theme/volume/snip/window before music so "silencio" / "poné modo oscuro" are not music.
+  const pcOrder = parsePcCommand(line, { apps: allApps() });
   if (pcOrder) return pcReply(pcOrder);
   const musicOrder = parseMusicCommand(line, {
     herSong: config.load().music?.herSong,
