@@ -28,7 +28,8 @@ const VOLUME_WORDS = ['up', 'down', 'mute', 'unmute'];
 const THEME_VALUES = ['dark', 'light'];
 const INFO_KINDS = ['battery', 'disk', 'ram', 'ip'];
 const WINDOW_POSITIONS = ['left', 'right', 'max', 'min', 'restore'];
-const PROC_OK = /^[A-Za-z0-9._-]+$/;
+// Process names may include a single inner space ("Grok Bot"); no quotes/$/`/newlines.
+const PROC_OK = /^[A-Za-z0-9._-]+( [A-Za-z0-9._-]+)*$/;
 const CAPRI_PROC = /^(?:capri(?:-desktop)?|electron)$/i;
 const FIND_TIMEOUT_MS = 4000;
 const FIND_SCAN_MAX = 200;
@@ -143,7 +144,10 @@ function parseWindowPosition(raw) {
 
 /** Sanitize a process name for PowerShell: allowlisted charset only, no .exe. */
 function sanitizeProcess(name) {
-  const n = String(name || '').replace(/\.exe$/i, '').trim();
+  const raw = String(name || '').replace(/\.exe$/i, '');
+  // reject leading/trailing/double spaces (PROC_OK also forbids doubles)
+  if (!raw || raw !== raw.trim() || / {2}/.test(raw)) return null;
+  const n = raw.trim();
   return PROC_OK.test(n) && !CAPRI_PROC.test(n) ? n : null;
 }
 
@@ -492,16 +496,54 @@ function resolveAppProcess(phrase, apps) {
   const hit = matchApp(apps || [], phrase);
   if (hit.status !== 'sure' || !hit.app) return null;
   if (/^capri$/i.test(hit.app.name)) return null;
-  const candidates = [
-    ...(hit.app.processes || []),
-    processName(hit.app.target),
-    processName(hit.app.name),
-  ];
-  for (const c of candidates) {
+  const listed = hit.app.processes || [];
+  // Explicit processes[]: never fall back to a truncated app-name candidate.
+  if (listed.length) {
+    for (const c of listed) {
+      const safe = sanitizeProcess(c);
+      if (safe) return { app: hit.app.name, process: safe };
+    }
+    return null;
+  }
+  for (const c of [processName(hit.app.target), processName(hit.app.name)]) {
     const safe = sanitizeProcess(c);
     if (safe) return { app: hit.app.name, process: safe };
   }
   return null;
+}
+
+function snapOkPhrase(result) {
+  const name = result?.app || 'esa app';
+  if (result?.position === 'left') return `${name} a la izquierda`;
+  if (result?.position === 'right') return `${name} a la derecha`;
+  if (result?.position === 'max') return `${name} maximizada`;
+  if (result?.position === 'min') return `${name} minimizada`;
+  if (result?.position === 'restore') return `${name} restaurada`;
+  return name;
+}
+
+/** One spoken line after all snaps in a two-in-one (or single) arrange. */
+function combineWindowResults(results) {
+  const list = Array.isArray(results) ? results : [];
+  if (!list.length) return 'Listo.';
+  if (list.length === 1) {
+    const r = list[0];
+    if (!r.ok) return r.line || `No pude mover la ventana de ${r.app || 'esa app'}.`;
+    return `${snapOkPhrase(r)}.`;
+  }
+  const ok = list.filter((r) => r.ok);
+  const bad = list.filter((r) => !r.ok);
+  if (!bad.length) {
+    const parts = list.map(snapOkPhrase);
+    return parts.length === 2 ? `${parts[0]} y ${parts[1]}.` : `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}.`;
+  }
+  if (ok.length) {
+    const okPart = ok.map(snapOkPhrase).join(' y ');
+    const badPart = bad.map((r) => String(r.line || '').replace(/\.$/, '')).filter(Boolean)
+      .map((s, i) => (i === 0 ? s.replace(/^No /, 'no ') : s)).join('; ');
+    return `${okPart}, pero ${badPart}.`;
+  }
+  return list.map((r) => r.line || `No pude mover la ventana de ${r.app || 'esa app'}.`).join(' ');
 }
 
 function windowAction(app, process, position) {
@@ -562,13 +604,19 @@ async function snapWindows(action, deps = {}) {
     if (!one) return fail('Esa acción de ventana no está permitida.');
     snaps = [one];
   }
+  // Run every snap first; one combined reply (ok+ok / ok+fail), never speak mid-batch.
   const results = [];
   for (const snap of snaps) {
     const got = await snapOne(snap, deps);
-    results.push(got);
-    if (!got.ok) return { ...got, results };
+    results.push({
+      ...got,
+      app: got.app || snap.app,
+      position: got.position || snap.position,
+      process: got.process || snap.process,
+    });
   }
-  return { ok: true, results, snaps };
+  const line = combineWindowResults(results);
+  return { ok: results.every((r) => r.ok), line, results, snaps };
 }
 
 function formatFileHits(hits) {
@@ -816,6 +864,8 @@ module.exports = {
   parseFilesValue,
   sanitizeWords,
   sanitizeProcess,
+  resolveAppProcess,
+  combineWindowResults,
   nameMatchesWords,
   buildSnapCommand,
   buildFindCommand,

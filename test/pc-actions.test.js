@@ -6,6 +6,7 @@ const { stripReplyTags, ACTION_KINDS, ACTION_TAG_HELP } = require('../src/main/m
 const {
   SETTINGS, SETTINGS_PAGES, FILE_EXTS, allowed, run, detectInfoKinds, contextSnippet,
   parsePcCommand, parseWindowValue, parseWindowPosition, sanitizeProcess, buildSnapCommand,
+  resolveAppProcess, combineWindowResults,
   parseFileKind, parseFilesValue, sanitizeWords, nameMatchesWords, buildFindCommand,
   validateUserFilePath, setLastFileHits, getLastFileHits,
   NO_BATTERY, info,
@@ -219,9 +220,47 @@ test('parseWindowValue and sanitizeProcess are allowlisted', () => {
   assert.equal(parseWindowValue('Capri|left'), null);
   assert.equal(sanitizeProcess('Discord'), 'Discord');
   assert.equal(sanitizeProcess('chrome.exe'), 'chrome');
+  assert.equal(sanitizeProcess('Grok Bot'), 'Grok Bot');
+  assert.equal(sanitizeProcess('Grok\' ; x'), null);
+  assert.equal(sanitizeProcess('a$b'), null);
+  assert.equal(sanitizeProcess('a`b'), null);
+  assert.equal(sanitizeProcess('Grok  Bot'), null); // double space
+  assert.equal(sanitizeProcess(' Grok'), null); // leading space
   assert.equal(sanitizeProcess('Discord;rm'), null);
   assert.equal(sanitizeProcess('../evil'), null);
   assert.equal(sanitizeProcess('electron'), null);
+});
+
+test('resolveAppProcess keeps spaced process names (Grok Bot)', () => {
+  const apps = [{
+    name: 'Grok',
+    aliases: [],
+    type: 'program',
+    target: 'C:\\Grok\\Grok.exe',
+    processes: ['Grok Bot'],
+  }];
+  assert.deepEqual(resolveAppProcess('Grok', apps), { app: 'Grok', process: 'Grok Bot' });
+  // rejected process entry must not fall back to truncated app name
+  assert.equal(resolveAppProcess('Grok', [{
+    name: 'Grok', aliases: [], type: 'program', target: 'C:\\Grok\\Grok.exe', processes: ['Grok\'x'],
+  }]), null);
+});
+
+test('combineWindowResults speaks once for ok+ok and ok+fail', () => {
+  assert.equal(
+    combineWindowResults([
+      { ok: true, app: 'Discord', position: 'left' },
+      { ok: true, app: 'Grok', position: 'right' },
+    ]),
+    'Discord a la izquierda y Grok a la derecha.',
+  );
+  assert.equal(
+    combineWindowResults([
+      { ok: true, app: 'Discord', position: 'left' },
+      { ok: false, app: 'Grok', position: 'right', line: 'No veo Grok abierta' },
+    ]),
+    'Discord a la izquierda, pero no veo Grok abierta.',
+  );
 });
 
 test('buildSnapCommand only interpolates validated process + position', () => {
@@ -273,6 +312,7 @@ test('run window snap uses allowlisted PowerShell (mocked)', async () => {
     },
   );
   assert.equal(ok.ok, true);
+  assert.equal(ok.line, 'Discord a la izquierda.');
   assert.match(cmds[0], /-Name 'Discord'/);
   assert.match(cmds[0], /CapriWin/);
   const miss = await run(
@@ -281,6 +321,29 @@ test('run window snap uses allowlisted PowerShell (mocked)', async () => {
   );
   assert.equal(miss.ok, false);
   assert.match(miss.line, /No veo Discord abierta/);
+
+  const dual = await run(
+    {
+      kind: 'window',
+      value: 'Discord|left+Grok|right',
+      snaps: [
+        { kind: 'window', value: 'Discord|left', app: 'Discord', process: 'Discord', position: 'left' },
+        { kind: 'window', value: 'Grok|right', app: 'Grok', process: 'Grok Bot', position: 'right' },
+      ],
+    },
+    {
+      platform: 'win32',
+      powershell: async (cmd) => {
+        cmds.push(cmd);
+        if (cmd.includes("-Name 'Grok Bot'")) return 'MISSING';
+        return 'OK';
+      },
+    },
+  );
+  assert.equal(dual.ok, false);
+  assert.equal(dual.results?.length, 2);
+  assert.equal(dual.line, 'Discord a la izquierda, pero no veo Grok abierta.');
+  assert.ok(cmds.some((c) => c.includes("-Name 'Grok Bot'")));
 });
 
 test('file kind mapping and accent-insensitive word match', () => {

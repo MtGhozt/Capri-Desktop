@@ -739,20 +739,6 @@ const MUSIC_LINE = {
   query: 'musicaPlay',
 };
 
-function windowResultLine(action, result) {
-  const snaps = result?.snaps || action?.snaps || [action];
-  const bits = (Array.isArray(snaps) ? snaps : [snaps]).map((s) => {
-    const name = s?.app || 'Listo';
-    if (s?.position === 'left') return `${name} a la izquierda.`;
-    if (s?.position === 'right') return `${name} a la derecha.`;
-    if (s?.position === 'max') return `${name} maximizada.`;
-    if (s?.position === 'min') return `${name} minimizada.`;
-    if (s?.position === 'restore') return `${name} restaurada.`;
-    return `${name}.`;
-  });
-  return bits.join(' ') || 'Listo.';
-}
-
 async function pcReply(action, { chat = true } = {}) {
   try {
     const result = await pcActions.run(action, {
@@ -761,13 +747,18 @@ async function pcReply(action, { chat = true } = {}) {
     });
     const tag = `${action.kind}:${action.value || ''}`;
     logEvent(voiceLogPath(), `[capri] pc ${tag} ${result?.ok ? 'ok' : `failed: ${result?.line || '?'}`}`);
+    // window: always one combined line after every snap (partial fail still spoken)
+    if (action.kind === 'window') {
+      const line = result?.line || 'No pude mover la ventana.';
+      announce(line, { chat, badge: 'PC' });
+      return { ok: !!result?.ok };
+    }
     if (!result?.ok) {
       showLine(result?.line || 'No pude hacer eso en la PC.', { chat, badge: 'PC' });
       return { ok: false };
     }
     let line = 'Listo.';
     if (action.kind === 'snip') line = 'Listo, recortá lo que quieras.';
-    else if (action.kind === 'window') line = windowResultLine(action, result);
     else if (action.kind === 'files' && result.line) line = result.line;
     else if (action.kind === 'theme') line = action.value === 'dark' ? 'Modo oscuro.' : 'Modo claro.';
     else if (action.kind === 'volume' && (action.value === 'mute' || action.value === 'unmute')) {
