@@ -2,7 +2,9 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { LINKS, KOFI_URL, isAllowedOpenUrl, aboutInfo } = require('../src/main/about');
+const fs = require('node:fs');
+const path = require('node:path');
+const { LINKS, KOFI_URL, isAllowedOpenUrl, aboutInfo, formatVersionLabel } = require('../src/main/about');
 
 test('Acerca de community links include Discord invite and TikTok', () => {
   const about = aboutInfo({ version: '0.1.3' });
@@ -26,6 +28,36 @@ test('Acerca de exposes Abrir log next to Diagnóstico', () => {
   assert.ok(ids.includes('diagnose'));
   assert.ok(ids.includes('open-log'));
   assert.ok(ids.indexOf('open-log') > ids.indexOf('diagnose') - 2);
+});
+
+test('version chrome labels use the same about.version as Acerca de', () => {
+  assert.equal(formatVersionLabel('0.2.9'), 'v0.2.9');
+  assert.equal(formatVersionLabel('v0.2.9'), 'v0.2.9');
+  assert.equal(formatVersionLabel(''), '');
+  assert.equal(aboutInfo({ version: '0.2.9' }).version, '0.2.9');
+
+  const root = path.join(__dirname, '..');
+  const main = fs.readFileSync(path.join(root, 'src', 'main', 'main.js'), 'utf8');
+  assert.match(main, /aboutInfo\(\{\s*version:\s*app\.getVersion\(\)/);
+
+  const aboutPanel = fs.readFileSync(path.join(root, 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  assert.match(aboutPanel, /about\.version/);
+
+  const appJs = fs.readFileSync(path.join(root, 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  assert.match(appJs, /state\?\.about\?\.version/);
+  assert.match(appJs, /bubble\.setVersion/);
+  assert.doesNotMatch(appJs, /setVersion\(['"]v0\./);
+
+  const settingsJs = fs.readFileSync(path.join(root, 'src', 'renderer', 'js', 'settings.js'), 'utf8');
+  assert.match(settingsJs, /state\?\.about\?\.version/);
+  assert.doesNotMatch(settingsJs, /textContent\s*=\s*['"]v0\./);
+
+  const indexHtml = fs.readFileSync(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
+  const settingsHtml = fs.readFileSync(path.join(root, 'src', 'renderer', 'settings.html'), 'utf8');
+  assert.match(indexHtml, /bubble__ver/);
+  assert.match(settingsHtml, /settings__ver/);
+  assert.doesNotMatch(indexHtml, />v0\.\d/);
+  assert.doesNotMatch(settingsHtml, />v0\.\d/);
 });
 
 test('open-url allowlist: discord, tiktok, Capri github, Spotify; http/https only', () => {

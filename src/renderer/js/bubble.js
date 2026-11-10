@@ -35,6 +35,7 @@ export class Bubble {
     this.lineEl = el.querySelector('.bubble__text');
     this.field = el.querySelector('.bubble__field');
     this.stateEl = el.querySelector('.bubble__state');
+    this.verEl = el.querySelector('.bubble__ver');
     this.voiceEl = el.querySelector('.bubble__voice');
     this.voiceLabel = this.voiceEl?.querySelector('.bubble__voice-label');
     this.voiceBar = this.voiceEl?.querySelector('.bubble__voice-fill');
@@ -83,6 +84,14 @@ export class Bubble {
     });
     this.setFx(true);
     this.bindDrag();
+  }
+
+  /** Same string Acerca de uses (`about.version` from menu:get → app.getVersion()). */
+  setVersion(label) {
+    if (!this.verEl) return;
+    const text = String(label || '').trim();
+    this.verEl.textContent = text;
+    this.verEl.hidden = !text;
   }
 
   bindDrag() {

@@ -45,6 +45,12 @@ function isAllowedOpenUrl(url) {
   }
 }
 
+/** Display label for UI chrome ("v0.2.9"); same version string Acerca de shows. */
+function formatVersionLabel(version) {
+  const v = String(version || '').replace(/^v/i, '').trim();
+  return v ? `v${v}` : '';
+}
+
 function aboutInfo({ version } = {}) {
   return {
     name: 'Capri',
@@ -73,4 +79,4 @@ function aboutInfo({ version } = {}) {
   };
 }
 
-module.exports = { LINKS, KOFI_URL, AUTHOR, OPEN_HOSTS, isAllowedOpenUrl, aboutInfo };
+module.exports = { LINKS, KOFI_URL, AUTHOR, OPEN_HOSTS, isAllowedOpenUrl, aboutInfo, formatVersionLabel };

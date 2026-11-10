@@ -61,6 +61,13 @@ Promise.all([
 ]).then(([, , , state]) => {
   console.timeEnd('settings:load');
   document.documentElement.dataset.theme = state.cfg.theme;
+  // Same about.version as Acerca de (menu:get → app.getVersion())
+  const ver = String(state?.about?.version || '').replace(/^v/i, '').trim();
+  const verEl = document.querySelector('.settings__ver');
+  if (verEl && ver) {
+    verEl.textContent = `v${ver}`;
+    verEl.hidden = false;
+  }
   if (pendingHint) {
     menu.modelNote = pendingHint;
     menu.expanded = 'model';

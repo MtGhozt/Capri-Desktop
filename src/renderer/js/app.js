@@ -90,6 +90,11 @@ async function boot() {
   const bubble = new Bubble({ el: document.getElementById('bubble'), machine });
   bubble.setFx(config.fx?.scanlines !== false);
   bubble.setLogLimit(config.ui?.logLines ?? 4);
+  // Same about.version as Acerca de (menu:get → app.getVersion())
+  host.getMenu({ folded: true, light: true }).then((state) => {
+    const ver = String(state?.about?.version || '').replace(/^v/i, '').trim();
+    if (ver) bubble.setVersion(`v${ver}`);
+  }).catch(() => {});
   const appMenu = new AppMenu({
     el: document.getElementById('app-menu'),
     host,
