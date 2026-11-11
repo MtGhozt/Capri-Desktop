@@ -11,7 +11,8 @@ const turnAls = new AsyncLocalStorage();
 const STAGE = [
   ['stt', 'stt'],
   ['send', 'send'],
-  ['llmFirst', 'llm_first'],
+  ['ctx', 'ctx'],
+  ['net', 'net'],
   ['llmFull', 'llm_full'],
   ['ttsFirst', 'tts_first'],
   ['synth', 'synth'],
@@ -36,7 +37,7 @@ function safeToken(value) {
 
 function formatTimingLine(turn = {}) {
   const id = ms(turn.id ?? turn.turn);
-  const src = turn.src === 'voice' || turn.src === 'text' ? turn.src : '';
+  const src = turn.src === 'voice' || turn.src === 'chat' ? turn.src : '';
   if (id == null || !src) return '';
   const parts = ['[timing]', `turn=${id}`, `src=${src}`];
   for (const [key, label] of STAGE) {
@@ -49,6 +50,18 @@ function formatTimingLine(turn = {}) {
       parts.push(`${label}=${value}`);
     }
   }
+  const sys = ms(turn.sys);
+  const hist = ms(turn.hist);
+  const req = ms(turn.req);
+  if (sys != null) parts.push(`sys=${sys}`);
+  if (hist != null) parts.push(`hist=${hist}`);
+  if (req != null) parts.push(`req=${req}`);
+  const stream = ms(turn.stream);
+  if (stream === 0 || stream === 1) parts.push(`stream=${stream}`);
+  const retries = ms(turn.retries);
+  if (retries != null && retries > 0) parts.push(`retries=${retries}`);
+  const http = ms(turn.http);
+  if (http != null) parts.push(`http=${http}`);
   const provider = safeToken(turn.provider);
   const model = safeToken(turn.model);
   if (provider && model) parts.push(`provider=${provider}/${model}`);
@@ -72,8 +85,8 @@ function createTurnTiming({ log, now = () => performance.now() } = {}) {
   const rows = new Map();
   const voiceClock = new Map();
 
-  function allocText() {
-    // Voice turns use even ids from the sidecar. Text turns stay odd, so the two
+  function allocChat() {
+    // Voice turns use even ids from the sidecar. Chat turns stay odd, so the two
     // counters cannot land on the same id.
     seq += seq % 2 === 0 ? 1 : 2;
     return seq;
@@ -102,11 +115,11 @@ function createTurnTiming({ log, now = () => performance.now() } = {}) {
     const voice = src === 'voice' && requested > 0;
     const clock = voice ? voiceClock.get(requested) : null;
     if (voice) voiceClock.delete(requested);
-    const turn = voice ? requested : allocText();
+    const turn = voice ? requested : allocChat();
     if (turn > seq) seq = turn;
     const row = {
       id: turn,
-      src: voice ? 'voice' : 'text',
+      src: voice ? 'voice' : 'chat',
       t0: clock?.at ?? now(),
       llmSettled: false,
       audioSettled: true,
@@ -151,8 +164,15 @@ function createTurnTiming({ log, now = () => performance.now() } = {}) {
   function noteLlm(id, outcome = {}) {
     const row = rowOf(id);
     if (!row) return;
-    put(row, 'llmFirst', outcome.llmFirst);
+    put(row, 'ctx', outcome.ctx);
+    put(row, 'net', outcome.net);
     put(row, 'llmFull', outcome.llmFull);
+    put(row, 'sys', outcome.sys);
+    put(row, 'hist', outcome.hist);
+    put(row, 'req', outcome.req);
+    put(row, 'stream', outcome.stream);
+    put(row, 'retries', outcome.retries);
+    put(row, 'http', outcome.http);
     put(row, 'provider', outcome.provider);
     put(row, 'model', outcome.model);
     row.llmSettled = true;

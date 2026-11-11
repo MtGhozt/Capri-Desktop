@@ -215,7 +215,29 @@ function createLlm({
       : `${explain(err, from)} Te contesto con ${providerLabel(to)} mientras tanto.`;
   }
 
+  // Message sizes for the timing line: counts only, never the text.
+  function promptStats(messages) {
+    let sys = 0;
+    let hist = 0;
+    let req = 0;
+    for (const msg of messages || []) {
+      const content = msg?.content;
+      let n = 0;
+      if (typeof content === 'string') n = content.length;
+      else if (Array.isArray(content)) {
+        for (const part of content) {
+          if (typeof part?.text === 'string') n += part.text.length;
+        }
+      }
+      req += n;
+      if (msg?.role === 'system') sys += n;
+      else hist += 1;
+    }
+    return { sys, hist, req };
+  }
+
   // OpenAI-style streaming (server-sent events): onToken as each piece comes, all of it at the end.
+  // stream=1 only when content arrived across more than one network read (a single dump is stream=0).
   async function streamChat(request, onToken, signal) {
     let res;
     try {
@@ -231,6 +253,7 @@ function createLlm({
     if (!res.ok || !res.body) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
 
     let full = '';
+    let readsWithContent = 0;
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
@@ -240,6 +263,7 @@ function createLlm({
       buf += decoder.decode(value, { stream: true });
       const lines = buf.split('\n');
       buf = lines.pop() ?? '';
+      let hit = false;
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed.startsWith('data:')) continue;
@@ -251,16 +275,18 @@ function createLlm({
         } catch {
           continue;
         }
-        if (json.error) throw new Error(json.error.message || 'provider error');
+        if (json.error) throw Object.assign(new Error(json.error.message || 'provider error'), { status: res.status });
         const piece = json.choices?.[0]?.delta?.content;
         if (piece) {
+          hit = true;
           full += piece;
           onToken(piece);
         }
       }
+      if (hit) readsWithContent += 1;
     }
-    if (!full.trim()) throw Object.assign(new Error('empty'), { code: 'empty' });
-    return full;
+    if (!full.trim()) throw Object.assign(new Error('empty'), { code: 'empty', status: res.status });
+    return { text: full, stream: readsWithContent > 1 ? 1 : 0, status: res.status };
   }
 
   async function chat({ user, image = null, onToken, onDone, onError, onMood, onTiming }) {
@@ -274,11 +300,15 @@ function createLlm({
       controller.abort();
     }, TIMEOUT_MS);
     const started = Date.now();
-    // Request clock is the fetch that produced the reply. `sent` is the first try,
-    // so "text -> request" stays on the first call even when a later provider answers.
+    const chatAt = performance.now();
+    // ctx = chat entry -> HTTP (temporalExtras, persona/memory, messagesFor). net = fetch -> first token.
     let reqAt = 0;
     let firstAt = 0;
     let sent = false;
+    let attempts = 0;
+    let lastHttp = null;
+    let lastStream = null;
+    let lastStats = null;
     const onRequest = () => {
       const at = performance.now();
       if (!sent) {
@@ -330,9 +360,11 @@ function createLlm({
       const cleaner = isCloud(target)
         ? createStreamCleaner({ onText: show })
         : null;
-      await streamChat(requestFor(target, {
+      const messages = messagesFor(cfg, isCloud(target), user, jpeg, target);
+      lastStats = promptStats(messages);
+      const wire = await streamChat(requestFor(target, {
         model: modelFor(cfg, target),
-        messages: messagesFor(cfg, isCloud(target), user, jpeg, target),
+        messages,
         key: apiKey?.(target) || '',
         baseUrl: cfg.llm?.baseUrl,
       }), (piece) => {
@@ -341,11 +373,13 @@ function createLlm({
         if (cleaner) cleaner.push(piece);
         else show(piece);
       }, signal);
+      lastHttp = wire.status;
+      lastStream = wire.stream;
       if (cleaner) cleaner.flush();
       stripper.flush();
       replyMood = stripper.mood || replyMood;
       replyAction = stripper.action || replyAction;
-      return full;
+      return wire.text;
     };
 
     const result = (outcome, used = id) => ({
@@ -353,10 +387,17 @@ function createLlm({
       model: modelFor(cfg, used),
       outcome,
       ms: Date.now() - started,
+      retries: Math.max(0, attempts - 1),
+      ...(lastStats || {}),
+      ...(lastStream === 0 || lastStream === 1 ? { stream: lastStream } : {}),
+      ...(lastHttp != null ? { http: lastHttp } : {}),
       ...(reqAt ? {
+        ctx: Math.round(reqAt - chatAt),
         llmFull: Math.round(performance.now() - reqAt),
-        ...(firstAt ? { llmFirst: Math.round(firstAt - reqAt) } : {}),
-      } : {}),
+        ...(firstAt ? { net: Math.round(firstAt - reqAt) } : {}),
+      } : {
+        ctx: Math.round(performance.now() - chatAt),
+      }),
     });
 
     const done = (text) => {
@@ -389,11 +430,18 @@ function createLlm({
 
     // One turn to whoever answers: an agent CLI on this PC, or an OpenAI-compatible server.
     const attempt = async (target) => {
+      attempts += 1;
       onRequest();
       if (isAgent(target) && typeof runAgentChat === 'function') {
         if (jpeg) {
           throw Object.assign(new Error('agent vision fallback'), { code: 'no-vision' });
         }
+        lastStats = promptStats([
+          { role: 'system', content: systemPrompt(cfg, false, target) },
+          { role: 'user', content: user },
+        ]);
+        lastStream = 0;
+        lastHttp = null;
         const text = await runAgentChat({
           provider: target,
           user,
@@ -450,6 +498,7 @@ function createLlm({
       return result(start === id ? 'ok' : 'fallback', start);
     } catch (err) {
       error = err;
+      if (Number.isFinite(err?.status)) lastHttp = err.status;
     }
     if (signal.aborted && !timedOut) {
       clearTimeout(timer); // you stopped her: nothing left to say
@@ -467,6 +516,7 @@ function createLlm({
           done(text);
           return result('fallback', target);
         } catch (err) {
+          if (Number.isFinite(err?.status)) lastHttp = err.status;
           if (signal.aborted && !timedOut) {
             clearTimeout(timer);
             return null;
