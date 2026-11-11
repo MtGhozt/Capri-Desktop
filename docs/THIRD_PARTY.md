@@ -29,7 +29,7 @@ ajustado a este proyecto.
 | Fastidiarse tras varias caricias seguidas y una pantalla de "Extras" en el primer arranque (pantalla + acceso directo). Código escrito desde cero. | [Capri-cmd/capri-ai](https://github.com/Capri-cmd/capri-ai) | MIT | `src/renderer/js/pet-taps.js`, `src/renderer/js/guide.js`, `src/renderer/js/app.js` |
 | Ronroneo suave al acariciarla. Idea, sin código copiado. | [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop) | MIT (hasta `f839580`) | `src/renderer/js/voice.js` (cue `purr`), `src/renderer/js/app.js` |
 | Redactar claves y tokens antes de copiar un error o escribir el log. Idea, sin código copiado. | [lachydotmcg/capri-desktop](https://github.com/lachydotmcg/capri-desktop) | MIT | `src/main/diagnose.js`, `src/main/log.js`, `src/renderer/js/redact-keys.js` |
-| Velocidad de respuesta (TTS por frase, tiempos en el log), acciones de PC/ventanas, modo música al ritmo y límites en juegos (comentar, no controlar). Solo ideas, sin código copiado. | Capri 1.0.3 (referencia) | n/d | `docs/roadmap.md` (0.3.0, P2–P5) |
+| Velocidad de respuesta (TTS por frase, tiempos en el log), acciones de PC/ventanas, modo música al ritmo y límites en juegos (comentar, no controlar). Solo ideas, sin código copiado. | [Capri 1.0.3](https://capri-core.com) / [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop) (ideas only) | n/d | `docs/roadmap.md` (0.3.0, P2–P5) |
 
 ## Fases anteriores (ya en el repo)
 

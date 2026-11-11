@@ -21,8 +21,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ### 0.2.9 — El chat hace cosas en la PC (P2, en preparación)
 
-- **Hecho:** acciones de PC (volumen, ajustes de Windows, tema, batería/disco/RAM/IP); recorte de pantalla; ordenar ventanas (izq/der/max/min/restaurar, varias a la vez con una sola respuesta); buscar archivos en carpetas del usuario; fix de colisiones de comandos y "callate".
-- **Pendiente:** versión visible en Capri.
+- **Hecho:** acciones de PC (volumen, ajustes de Windows, tema, batería/disco/RAM/IP); recorte de pantalla; ordenar ventanas (izq/der/max/min/restaurar, varias a la vez con una sola respuesta); buscar archivos en carpetas del usuario; fix de colisiones de comandos y "callate"; versión visible en Capri (chat y Ajustes).
 
 ### 0.3.0 — Velocidad
 
@@ -42,8 +41,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ### P2 — Que el chat haga cosas en la PC (idea de upstream `cb33e87`)
 
-- **Hecho (0.2.9):** volumen Windows, páginas de Configuración, batería/disco/RAM/IP, modo oscuro/claro; ordenar ventanas; recorte de pantalla; buscar archivos por tipo y abrir la carpeta; colisiones de comandos y "callate".
-- **Pendiente (0.2.9):** versión visible en Capri.
+- **Hecho (0.2.9):** volumen Windows, páginas de Configuración, batería/disco/RAM/IP, modo oscuro/claro; ordenar ventanas; recorte de pantalla; buscar archivos por tipo y abrir la carpeta; colisiones de comandos y "callate"; versión visible en Capri.
 
 ### P3 — Sentir la PC y juegos
 
