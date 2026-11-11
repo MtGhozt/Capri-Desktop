@@ -129,6 +129,7 @@ class UtteranceTests(unittest.TestCase):
         engine.follow = False
         engine.follow_s = 0.0
         engine.cfg = {"debugSave": False}
+        engine._stt_error = ""
         engine.arm_wake = lambda: None
         engine.transcribe = lambda _audio: "Hola Capri, pon música"
         seen = []

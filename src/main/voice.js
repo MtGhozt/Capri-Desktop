@@ -106,7 +106,7 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown, missingVc = m
   function send(payload) {
     const kind = payload?.type;
     if (kind === 'speak' || kind === 'speak_start' || kind === 'speak_flush' || kind === 'stop_speak' || kind === 'greet') {
-      const extra = `${payload.id != null ? ` id=${payload.id}` : ''}${kind === 'speak' ? ` ${String(payload.text || '').length}c` : ''}`;
+      const extra = `${payload.id != null ? ` id=${payload.id}` : ''}${payload.turn ? ` turn=${payload.turn}` : ''}${kind === 'speak' ? ` ${String(payload.text || '').length}c` : ''}`;
       if (!ws || ws.readyState !== 1) {
         logLines(logFile, `[capri] ws skip ${kind}${extra}`);
         return;

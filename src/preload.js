@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('host', {
   windowsNow: () => ipcRenderer.invoke('windows:get'),
   trayPlace: () => ipcRenderer.invoke('guide:tray'),
   openClaudeFolder: () => ipcRenderer.invoke('guide:claudeFolder'),
-  sendChat: (text) => ipcRenderer.invoke('chat:send', text),
+  sendChat: (text, meta) => ipcRenderer.invoke('chat:send', text, meta || undefined),
   cancelChat: () => ipcRenderer.send('chat:cancel'),
   closeChat: () => ipcRenderer.send('chat:close'),
   chatVisible: (open, source) => ipcRenderer.send('chat:visible', { open: Boolean(open), source: String(source || 'overlay') }),

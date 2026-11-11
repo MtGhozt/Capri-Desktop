@@ -278,17 +278,17 @@ export class Bubble {
 
   // what he said stays in the chat; the order without the wake word is what gets processed.
   // Empty `command` after a wake strip means wake-only: note it, do not send the greeting to the LLM.
-  submitFromVoice(text, command) {
+  submitFromVoice(text, command, timing) {
     const line = String(text || '').trim();
     if (!line || this.busy) return;
     if (!this.open) this.show();
     this.note('oido', line);
     const order = command == null ? line : String(command).trim();
     if (!order) return;
-    this.sendLine(order, { heard: true });
+    this.sendLine(order, { heard: true, timing });
   }
 
-  sendLine(text, { heard = false } = {}) {
+  sendLine(text, { heard = false, timing = null } = {}) {
     if (!heard) this.note('pregunta', text);
     this.voicePlaying = false;
     this.busy = true;
@@ -299,7 +299,9 @@ export class Bubble {
     this.replyEl = this.lineEl;
     this.startThink();
     this.onTalk?.(false);
-    window.host.sendChat(text).catch(() => {
+    const turn = Math.round(Number(timing?.turn));
+    const meta = turn > 0 ? { src: 'voice', turn, stt: timing?.stt } : undefined;
+    window.host.sendChat(text, meta).catch(() => {
       if (this.busy) this.fail();
     });
   }

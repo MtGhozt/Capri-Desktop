@@ -74,6 +74,8 @@ const { createComments } = require('./comments');
 const { createGameMode } = require('./game-mode');
 const { vramText } = require('./vram');
 const { logEvent, voiceLogPath } = require('./log');
+const { createTurnTiming, currentTurn, enterTurn, fromSidecar } = require('./timing');
+const turns = createTurnTiming({ log: (line) => logEvent(voiceLogPath(), line) });
 const { createChatVisible } = require('./chat-visible');
 const { saveClip, openClipsFolder, clipFolderLabel } = require('./clips');
 const { micActive, voiceStatus: ttsStatus } = require('./voice-config');
@@ -629,8 +631,17 @@ function followUpSec(cfg) {
 }
 
 // Her line to the sidecar, when her voice is on. The speak id, or 0 when it was not sent.
+// The current user turn is on the async context; greetings and comments are not, so they stay untimed.
+function startSpeakTurn() {
+  if (!ttsOn() || !speakQueue) return 0;
+  const turn = currentTurn();
+  const speakId = speakQueue.start(turn) || 0;
+  if (speakId && turn && voice?.connected?.()) turns.expectAudio(turn);
+  return speakId;
+}
+
 function speakLine(line) {
-  const speakId = ttsOn() ? speakQueue?.start() : 0;
+  const speakId = startSpeakTurn();
   if (!speakId) return 0;
   speakQueue.feed(line);
   speakQueue.flush(speakId);
@@ -1804,7 +1815,7 @@ function sayWithoutLlm(text) {
   const line = String(text || '').trim();
   if (!line || !overlay) return;
   openChat('say');
-  const speakId = ttsOn() ? speakQueue?.start() : 0;
+  const speakId = startSpeakTurn();
   if (!speakId) speakQueue?.stop();
   overlay.webContents.send('chat:token', line);
   overlay.webContents.send('chat:done', { text: line });
@@ -3204,24 +3215,31 @@ function registerIpc() {
     isCloud(config.load().llm?.provider) ? 'ready' : lms?.status() || 'ready'
   ));
   ipcMain.on('systemfx:done', (_e, id) => systemFxWaiters.get(Number(id))?.());
-  ipcMain.handle('chat:send', async (_e, text) => {
+  ipcMain.handle('chat:send', async (_e, text, meta) => {
     const line = String(text || '').trim();
     if (!line || !overlay) return { ok: false };
+    const info = meta && typeof meta === 'object' ? meta : null;
+    const turn = turns.begin(info?.src === 'voice' ? 'voice' : 'text', info?.turn, info?.stt);
+    enterTurn(turn);
+    const endDirect = (value) => {
+      turns.noteNoLlm(turn);
+      return value;
+    };
     // her "¿seguro que apago la compu?" waiting for this answer (Paso 4G)
     const powerAnswer = await systemFlow.answer(line);
-    if (powerAnswer) return { ok: true };
+    if (powerAnswer) return endDirect({ ok: true });
     // her "¿quisiste decir…?" / "¿seguro?" waiting for this answer (Paso 4C)
     const answered = await apps().answer(line);
-    if (answered) return appReply(answered);
+    if (answered) return endDirect(appReply(answered));
     // several orders in one breath: only when every part is already direct, and sleep last.
     // A mixed line ("saluda y duerme") goes to the model whole: no partial execution.
     // While she's DORMANT any message wakes her first, as it always did.
     const segments = quitFlow.pending || overlayFolded
       ? null
       : planMultiCommand(line, (part) => isDirectCommand(part, allApps()));
-    if (segments) return runDirectSegments(segments);
+    if (segments) return endDirect(await runDirectSegments(segments));
     const direct = await directCommand(line);
-    if (direct) return direct;
+    if (direct) return endDirect(direct);
     // Phase 6C: "mirá mi pantalla" → JPEG in memory when shareScreen is on and the brain can see.
     let lookImage = null;
     let didLook = false;
@@ -3231,12 +3249,12 @@ function registerIpc() {
         const cfgLook = config.load();
         if (!cfgLook.llm?.shareScreen) {
           sayWithoutLlm('Activá «Enviar mi pantalla cuando le pida mirar» en Cerebro y pedímelo de nuevo.');
-          return { ok: true };
+          return endDirect({ ok: true });
         }
         lookImage = await snapScreenForLook();
         if (!lookImage) {
           sayWithoutLlm('No puedo ver juegos en pantalla completa, ponelo en modo ventana sin bordes.');
-          return { ok: true };
+          return endDirect({ ok: true });
         }
       }
       // the local stack is only waited for when LM Studio is the one who answers: an agent CLI or
@@ -3246,13 +3264,13 @@ function registerIpc() {
         if (boot === 'failed') {
           const weatherLine = await weatherFallbackLine(line);
           if (weatherLine) {
-            return { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
+            return endDirect({ ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) });
           }
           overlay.webContents.send('chat:error', { kind: 'offline', text: 'No pude despertar LM Studio. Revisa que esté instalado y vuelve a intentarlo.' });
-          return { ok: false };
+          return endDirect({ ok: false });
         }
       }
-      const speakId = ttsOn() ? speakQueue?.start() : 0;
+      const speakId = startSpeakTurn();
       if (!speakId) speakQueue?.stop();
       llmBusy = true;
       let said = '';
@@ -3263,6 +3281,9 @@ function registerIpc() {
         outcome = await llm.chat({
           user: line,
           image: lookImage,
+          onTiming: (ev) => {
+            if (ev?.phase === 'request') turns.noteSend(turn);
+          },
           onMood: (name) => speakQueue?.setMood?.(name),
           onToken: (piece) => {
             said += typeof piece === 'string' ? piece : piece?.text || '';
@@ -3291,7 +3312,7 @@ function registerIpc() {
                 // drop any leaked JSON already fed; speak only the friendly unknown line
                 speakQueue?.stop(speakId);
                 if (payload.text) {
-                  const id = speakQueue?.start();
+                  const id = startSpeakTurn();
                   if (id) {
                     speakQueue.feed(payload.text);
                     speakQueue.flush(id);
@@ -3305,6 +3326,7 @@ function registerIpc() {
           },
           onError: (payload) => {
             if (speakId) speakQueue?.stop(speakId);
+            turns.settleAudio(turn);
             followUp.reply('', {});
             // Weather/holiday: suppress chat:error; fallback line is shown below instead.
             if (!mayWeatherFallback) overlay?.webContents.send('chat:error', payload);
@@ -3317,22 +3339,30 @@ function registerIpc() {
         // who answered and how it went, with no key and no text of the answer (Paso 4K)
         if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome} image=${hadImage}: ${outcome.ms}ms`);
       }
+      const finishLlm = (value) => {
+        if (outcome) turns.noteLlm(turn, outcome);
+        else turns.cancel(turn);
+        return value;
+      };
       if (outcome?.outcome === 'failed') {
         const weatherLine = await weatherFallbackLine(line);
         if (weatherLine) {
-          return { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
+          return finishLlm({ ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) });
         }
         if (mayWeatherFallback) {
           overlay?.webContents.send('chat:error', { kind: 'offline', text: 'No pude consultar el clima ahora.' });
         }
       }
-      return { ok: true };
+      return finishLlm({ ok: true });
     } catch (err) {
       logEvent(voiceLogPath(), `[capri] chat failed: ${err?.message || err}`);
       const weatherLine = await weatherFallbackLine(line);
       if (weatherLine) {
-        return { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
+        const value = { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
+        turns.noteNoLlm(turn);
+        return value;
       }
+      turns.cancel(turn);
       resetOverlayInput('chat-error');
       return { ok: false };
     } finally {
@@ -3343,12 +3373,14 @@ function registerIpc() {
     llm?.cancel();
     speakQueue?.stop();
     followUp.cancel();
+    turns.cancelAll();
     resetOverlayInput('chat-cancel');
   });
   ipcMain.on('voice:interrupt', () => {
     llm?.cancel();
     speakQueue?.stop();
     followUp.cancel();
+    turns.cancelAll();
     voice?.pttStart();
   });
   ipcMain.on('voice:ptt-start', () => { voice?.pttStart(); });
@@ -3588,6 +3620,7 @@ function main() {
                 : event;
         if (payload?.missed) return; // background audio said "Capri", she was not called
         if (payload?.type === 'transcript') {
+          if (payload.turn) turns.stashVoice(payload.turn, payload.stt);
           if (payload.followUp) comments?.heard();
           followUp.heard({ followUp: Boolean(payload.followUp) });
         }
@@ -3608,8 +3641,14 @@ function main() {
           const quiet = voiceStatus(config.load());
           if (quiet) logEvent(voiceLogPath(), `[capri] replyMode=voice, tts engine=${lastTts.engine || '?'} state=${lastTts.state || '?'}: ${quiet}`);
         }
-        if (payload?.type === 'talking') voiceTalking = true;
+        if (payload?.type === 'talking') {
+          voiceTalking = true;
+          if (payload.turn) turns.noteAudio(payload.turn, fromSidecar(payload));
+        }
         if (payload?.type === 'talking_done' || payload?.type === 'stopped') {
+          if (payload?.type === 'talking_done' && payload.turn && !payload.interrupted) {
+            turns.noteAudio(payload.turn, fromSidecar(payload), { done: true });
+          }
           voiceTalking = false;
           speechOver(); // her goodbye before a power-off is over (Paso 4G)
         }

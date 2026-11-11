@@ -44,12 +44,19 @@ function packPhrases(lines, flush = false) {
   return out;
 }
 
+function withTurn(msg, turnId) {
+  const turn = Math.round(Number(turnId));
+  if (turn > 0) msg.turn = turn;
+  return msg;
+}
+
 function createSpeakQueue({ send }) {
   let buf = '';
   let live = 0;
   let nextId = 0;
   let held = '';
   let mood = null;
+  let turn = 0;
 
   function emit(text) {
     const line = String(text || '').trim();
@@ -60,7 +67,7 @@ function createSpeakQueue({ send }) {
     }
     const out = held ? `${held} ${line}` : line;
     held = '';
-    send({ type: 'speak', text: out, id: live, mood: mood || undefined });
+    send(withTurn({ type: 'speak', text: out, id: live, mood: mood || undefined }, turn));
   }
 
   function feed(piece) {
@@ -71,13 +78,14 @@ function createSpeakQueue({ send }) {
     for (const sentence of sentences) emit(sentence);
   }
 
-  function start() {
+  function start(turnId) {
     nextId += 1;
     live = nextId;
     buf = '';
     held = '';
     mood = null;
-    send({ type: 'speak_start', id: live });
+    turn = Math.round(Number(turnId)) || 0;
+    send(withTurn({ type: 'speak_start', id: live }, turn));
     return live;
   }
 
@@ -87,26 +95,30 @@ function createSpeakQueue({ send }) {
 
   function flush(id) {
     const target = Number(id) || live;
+    const msgTurn = turn;
     if (live && (!target || live === target)) {
       const rest = buf.trim();
       buf = '';
       const out = [held, rest].filter(Boolean).join(' ');
       held = '';
-      if (out) send({ type: 'speak', text: out, id: target, mood: mood || undefined });
+      if (out) send(withTurn({ type: 'speak', text: out, id: target, mood: mood || undefined }, msgTurn));
       live = 0;
+      turn = 0;
     }
-    send({ type: 'speak_flush', id: target || 0 });
+    send(withTurn({ type: 'speak_flush', id: target || 0 }, msgTurn));
   }
 
   function stop(id) {
     const target = Number(id) || live;
+    const msgTurn = turn;
     if (live && (!target || live === target)) {
       live = 0;
       buf = '';
       held = '';
       mood = null;
+      turn = 0;
     }
-    send({ type: 'stop_speak', id: target || 0 });
+    send(withTurn({ type: 'stop_speak', id: target || 0 }, msgTurn));
   }
 
   return { start, feed, flush, stop, setMood };

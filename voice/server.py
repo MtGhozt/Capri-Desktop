@@ -897,7 +897,7 @@ class Engine:
             return
         log("talking_done idle-timeout")
         self._set_speaking(False)
-        self.broadcast({"type": "talking_done", "skipped": False})
+        self._broadcast_talk({"type": "talking_done", "skipped": False}, self._live_id)
 
     def _listen_limit(self) -> float:
         # a follow-up window gives the answer the usual time once it may have started
@@ -1193,6 +1193,116 @@ class Engine:
         except (TypeError, ValueError):
             return 0
 
+    def _open_turn(self, t0: float | None = None) -> int:
+        # Even ids. Main's typed turns are odd, so the two sides never share a number.
+        seq = getattr(self, "_turn_seq", 0) + 2
+        self._turn_seq = seq
+        if not hasattr(self, "_turns"):
+            self._turns = {}
+        self._turns[seq] = {
+            "t0": time.perf_counter() if t0 is None else t0,
+            "reply_at": None,
+            "chunk_at": None,
+            "synth": 0.0,
+            "engine": "",
+        }
+        if len(self._turns) > 24:
+            for key in list(self._turns)[:8]:
+                if key != seq:
+                    self._turns.pop(key, None)
+        return seq
+
+    def _drop_turn(self, turn: int) -> None:
+        turns = getattr(self, "_turns", None)
+        if turns is not None:
+            turns.pop(int(turn or 0), None)
+
+    def _ensure_slot(self, turn: int) -> dict | None:
+        turn = int(turn or 0)
+        if turn <= 0:
+            return None
+        if not hasattr(self, "_turns"):
+            self._turns = {}
+        slot = self._turns.get(turn)
+        if slot is None:
+            slot = {"t0": None, "reply_at": None, "chunk_at": None, "synth": 0.0, "engine": ""}
+            self._turns[turn] = slot
+        return slot
+
+    def _turn_for(self, rid) -> int:
+        try:
+            return int(getattr(self, "_rid_turn", {}).get(int(rid or 0), 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def note_reply_turn(self, reply_id, turn) -> None:
+        rid = self._as_id(reply_id)
+        tid = self._as_id(turn)
+        if rid <= 0 or tid <= 0:
+            return
+        if not hasattr(self, "_rid_turn"):
+            self._rid_turn = {}
+        self._rid_turn[rid] = tid
+        self._ensure_slot(tid)
+
+    def _mark_reply(self, rid: int) -> None:
+        slot = self._ensure_slot(self._turn_for(rid))
+        if slot is not None and slot.get("reply_at") is None:
+            slot["reply_at"] = time.perf_counter()
+
+    def _engine_label(self, engine) -> str:
+        if isinstance(engine, OmniVoiceTTS):
+            device = str(getattr(engine, "device", "") or "")
+            return "omnivoice-cuda" if device.startswith("cuda") else "omnivoice-cpu"
+        if engine is None or isinstance(engine, NullTTS):
+            return ""
+        return "kokoro"
+
+    def _mark_synth(self, rid: int, synth_ms: float) -> None:
+        slot = self._ensure_slot(self._turn_for(rid))
+        if slot is None:
+            return
+        slot["synth"] = float(slot.get("synth") or 0) + float(synth_ms)
+        label = getattr(self, "_last_tts_engine", "") or ""
+        if label and not slot.get("engine"):
+            slot["engine"] = label
+        if slot.get("chunk_at") is None:
+            slot["chunk_at"] = time.perf_counter()
+            if slot.get("reply_at") is not None:
+                slot["tts_first"] = (slot["chunk_at"] - slot["reply_at"]) * 1000
+
+    def _mark_play(self, rid: int) -> None:
+        slot = self._ensure_slot(self._turn_for(rid))
+        if slot is None or slot.get("play") is not None:
+            return
+        now = time.perf_counter()
+        if slot.get("chunk_at") is not None:
+            slot["play"] = (now - slot["chunk_at"]) * 1000
+        if slot.get("t0") is not None:
+            slot["total"] = (now - slot["t0"]) * 1000
+
+    def _timing_fields(self, turn: int) -> dict:
+        slot = (getattr(self, "_turns", {}) or {}).get(int(turn or 0))
+        if not slot:
+            return {}
+        out = {"turn": int(turn)}
+        for key in ("stt", "tts_first", "synth", "play", "total"):
+            value = slot.get(key)
+            if isinstance(value, (int, float)):
+                out[key] = int(round(value))
+        engine = slot.get("engine") or ""
+        if engine:
+            out["engine"] = engine
+        return out
+
+    def _broadcast_talk(self, payload: dict, rid=0) -> None:
+        turn = self._turn_for(rid)
+        if turn:
+            payload = {**payload, **self._timing_fields(turn)}
+            if payload.get("type") == "talking_done" and not payload.get("interrupted"):
+                self._drop_turn(turn)
+        self.broadcast(payload)
+
     def _accept_reply(self, rid: int, via: str) -> None:
         log(f"speak_start id={rid} via={via}")
         self._live_id = rid
@@ -1230,6 +1340,7 @@ class Engine:
         elif not self._accept_speak:
             log(f"speak drop cut id={rid} {self._speak_preview(line)!r}")
             return
+        self._mark_reply(rid)
         name = str(mood or ("seria" if calm else "") or "").strip().lower()
         if name:
             self._reply_mood = name
@@ -1258,7 +1369,7 @@ class Engine:
             self._accept_reply(rid, "flush")
         if not self.tts_enabled() or rid < self._live_id or (rid == self._live_id and not self._accept_speak):
             log(f"speak_flush skipped id={rid} live={self._live_id}")
-            self.broadcast({"type": "talking_done", "skipped": True})
+            self._broadcast_talk({"type": "talking_done", "skipped": True}, rid)
             return
         if self._held_phrase:
             held = self._held_phrase
@@ -1316,6 +1427,7 @@ class Engine:
             if gen != self._speak_gen or rid != self._live_id or not self._accept_speak:
                 log("speak drop after synth")
                 continue
+            self._mark_synth(rid, ms)
             self._prep_q.put(("audio", rid, pcm, sr, gen))
 
     def _play_loop(self) -> None:
@@ -1335,7 +1447,7 @@ class Engine:
                 self._speak_stop.clear()
                 log(f"talking_done interrupted={was} id={rid}")
                 if was:
-                    self.broadcast({"type": "talking_done", "interrupted": True})
+                    self._broadcast_talk({"type": "talking_done", "interrupted": True}, rid)
                 continue
             if kind == "flush":
                 if rid and rid != self._live_id:
@@ -1345,10 +1457,10 @@ class Engine:
                     session = False
                     self._set_speaking(False)
                     log(f"talking_done id={rid}")
-                    self.broadcast({"type": "talking_done", "interrupted": False})
+                    self._broadcast_talk({"type": "talking_done", "interrupted": False}, rid)
                 else:
                     log(f"talking_done skipped id={rid}")
-                    self.broadcast({"type": "talking_done", "skipped": True})
+                    self._broadcast_talk({"type": "talking_done", "skipped": True}, rid)
                 continue
             if rid != self._live_id or not self._accept_speak or gen != self._speak_gen:
                 log("play skip stale")
@@ -1359,8 +1471,9 @@ class Engine:
                 session = True
                 session_id = rid
                 self._set_speaking(True)
+                self._mark_play(rid)
                 log(f"talking id={rid}")
-                self.broadcast({"type": "talking"})
+                self._broadcast_talk({"type": "talking"}, rid)
             self._note_audio()
             if not self._play(pcm, sr, gen):
                 session = False
@@ -1373,7 +1486,7 @@ class Engine:
                 session_id = 0
                 self._set_speaking(False)
                 log(f"talking_done queue-empty id={rid}")
-                self.broadcast({"type": "talking_done", "interrupted": False})
+                self._broadcast_talk({"type": "talking_done", "interrupted": False}, rid)
 
     def _announce_tts(self, engine: str, state: str) -> None:
         self._tts_state = (engine, state)
@@ -1677,6 +1790,7 @@ class Engine:
             engine = self._session_tts or self._omni or self._tts
         if engine is None:
             return np.zeros(0, dtype=np.float32), 24000
+        self._last_tts_engine = self._engine_label(engine)
         use_mood = str(mood or getattr(self, "_reply_mood", None) or "").strip().lower() or None
         try:
             with self._synth_lock:
@@ -1899,14 +2013,17 @@ class Engine:
         if not ended or audio.size < SAMPLE_RATE * 0.25:
             return
         self._wake_stt = True
-        threading.Thread(target=self._wake_transcribe, args=(audio,), name="capri-wake-stt", daemon=True).start()
+        started = time.perf_counter()
+        threading.Thread(
+            target=self._wake_transcribe, args=(audio, started), name="capri-wake-stt", daemon=True,
+        ).start()
 
     def _open_wake_follow(self, heard: str) -> None:
         """Wake-only utterance: rouse her and listen ~6s for the real command."""
         log(f"wake-only follow-up {heard!r}")
         self.begin_capture(hold=False, follow=WAKE_FOLLOW_S, wake=1.0)
 
-    def _wake_transcribe(self, audio: np.ndarray) -> None:
+    def _wake_transcribe(self, audio: np.ndarray, ended: float | None = None) -> None:
         if self._stt_error:
             self._wake_stt = False
             return
@@ -1931,7 +2048,15 @@ class Engine:
             self._open_wake_follow(text)
             return
         log(f"wake whisper hit {text!r} -> {command!r}")
-        self.broadcast({"type": "transcript", "text": command, "wake": "whisper"})
+        started = time.perf_counter() if ended is None else ended
+        turn = self._open_turn(started)
+        stt = int(round((time.perf_counter() - started) * 1000))
+        slot = self._ensure_slot(turn)
+        if slot is not None:
+            slot["stt"] = stt
+        self.broadcast({
+            "type": "transcript", "text": command, "wake": "whisper", "turn": turn, "stt": stt,
+        })
 
     def _wake_chunk(self, chunk: np.ndarray) -> None:
         self.wake_buf = np.concatenate([self.wake_buf, chunk])
@@ -2009,6 +2134,7 @@ class Engine:
             self.follow = False
             self.follow_s = 0.0
             self.buffer = np.zeros(0, dtype=np.float32)
+        ended = time.perf_counter()
         log(
             f"listen end reason={reason} speech_ms={speech_ms:.0f} "
             f"silence_ms={silence_ms:.0f} "
@@ -2029,26 +2155,37 @@ class Engine:
             return
         if self.cfg.get("debugSave"):
             self._debug_wav(audio)
+        turn = self._open_turn(ended)
         try:
             text = await asyncio.wait_for(asyncio.to_thread(self.transcribe, audio), timeout=15)
         except asyncio.TimeoutError:
+            self._drop_turn(turn)
             log("stt timeout after 15s")
             return
         except Exception as err:
+            self._drop_turn(turn)
             log(f"stt failed: {err}")
             return
         text = (text or "").strip()
         if not text:
+            self._drop_turn(turn)
             log("stt empty")
             return
         # wake phrase may leak into the first capture after openWakeWord / whisper follow-up
         command = wake_command_text(text)
         if command is not None:
             if not fold_words(command):
+                self._drop_turn(turn)
                 self._open_wake_follow(text)
                 return
             text = command
-        self.broadcast({"type": "transcript", "text": text, "followUp": follow})
+        stt = int(round((time.perf_counter() - ended) * 1000))
+        slot = self._ensure_slot(turn)
+        if slot is not None:
+            slot["stt"] = stt
+        self.broadcast({
+            "type": "transcript", "text": text, "followUp": follow, "turn": turn, "stt": stt,
+        })
 
     def transcribe(self, audio: np.ndarray) -> str:
         self.ensure_stt()
@@ -2150,8 +2287,10 @@ async def session(ws, engine: Engine) -> None:
             elif kind == "list_devices":
                 await ws.send(json.dumps({"type": "devices", "devices": engine.list_devices()}))
             elif kind == "speak_start":
+                engine.note_reply_turn(msg.get("id"), msg.get("turn"))
                 engine.arm_speak(msg.get("id"))
             elif kind == "speak":
+                engine.note_reply_turn(msg.get("id"), msg.get("turn"))
                 engine.enqueue_speak(
                     str(msg.get("text") or ""),
                     msg.get("id"),
@@ -2163,6 +2302,7 @@ async def session(ws, engine: Engine) -> None:
             elif kind == "greet":
                 engine.enqueue_greet(msg.get("greetId"), str(msg.get("text") or ""), msg.get("id"))
             elif kind == "speak_flush":
+                engine.note_reply_turn(msg.get("id"), msg.get("turn"))
                 engine.flush_speak(msg.get("id"))
             elif kind == "stop_speak":
                 engine.stop_speak(msg.get("id"))

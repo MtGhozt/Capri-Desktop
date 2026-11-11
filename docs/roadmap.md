@@ -19,14 +19,14 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ## Siguiente
 
-### 0.2.9 — El chat hace cosas en la PC (P2, en preparación)
+### 0.2.9 — El chat hace cosas en la PC (P2, publicada, v0.2.9)
 
 - **Hecho:** acciones de PC (volumen, ajustes de Windows, tema, batería/disco/RAM/IP); recorte de pantalla; ordenar ventanas (izq/der/max/min/restaurar, varias a la vez con una sola respuesta); buscar archivos en carpetas del usuario; fix de colisiones de comandos y "callate"; versión visible en Capri (chat y Ajustes).
 
 ### 0.3.0 — Velocidad
 
 - TTS por frase: empezar a hablar con la primera frase mientras el modelo sigue escribiendo.
-- Tiempos en el log: etapas de la respuesta y tiempo hasta el primer audio, de punta a punta.
+- **Hecho:** Tiempos en el log: etapas de la respuesta y tiempo hasta el primer audio, de punta a punta.
 - Ajustes con indicador de carga al abrir.
 - Spotify confirma que la canción arrancó.
 - Instalación: timeout de descarga colgada y progreso real por paquete.

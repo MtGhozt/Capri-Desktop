@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const { performance } = require('node:perf_hooks');
 const {
   PROVIDERS, BRAIN_GROUPS, isCloud, isAgent, supportsVision, requestFor, explain, provider, activeBrainIds,
 } = require('./chat-providers');
@@ -262,7 +263,7 @@ function createLlm({
     return full;
   }
 
-  async function chat({ user, image = null, onToken, onDone, onError, onMood }) {
+  async function chat({ user, image = null, onToken, onDone, onError, onMood, onTiming }) {
     cancel();
     abort = new AbortController();
     const signal = abort.signal;
@@ -273,6 +274,23 @@ function createLlm({
       controller.abort();
     }, TIMEOUT_MS);
     const started = Date.now();
+    // Request clock is the fetch that produced the reply. `sent` is the first try,
+    // so "text -> request" stays on the first call even when a later provider answers.
+    let reqAt = 0;
+    let firstAt = 0;
+    let sent = false;
+    const onRequest = () => {
+      const at = performance.now();
+      if (!sent) {
+        sent = true;
+        onTiming?.({ phase: 'request' });
+      }
+      reqAt = at;
+      firstAt = 0;
+    };
+    const onFirst = () => {
+      if (!firstAt) firstAt = performance.now();
+    };
 
     const cfg = loadConfig();
     turnExtras = '';
@@ -318,6 +336,7 @@ function createLlm({
         key: apiKey?.(target) || '',
         baseUrl: cfg.llm?.baseUrl,
       }), (piece) => {
+        onFirst();
         streamed = true; // she started answering, even if the cleaner still holds it: no fallback
         if (cleaner) cleaner.push(piece);
         else show(piece);
@@ -334,6 +353,10 @@ function createLlm({
       model: modelFor(cfg, used),
       outcome,
       ms: Date.now() - started,
+      ...(reqAt ? {
+        llmFull: Math.round(performance.now() - reqAt),
+        ...(firstAt ? { llmFirst: Math.round(firstAt - reqAt) } : {}),
+      } : {}),
     });
 
     const done = (text) => {
@@ -366,6 +389,7 @@ function createLlm({
 
     // One turn to whoever answers: an agent CLI on this PC, or an OpenAI-compatible server.
     const attempt = async (target) => {
+      onRequest();
       if (isAgent(target) && typeof runAgentChat === 'function') {
         if (jpeg) {
           throw Object.assign(new Error('agent vision fallback'), { code: 'no-vision' });
@@ -380,6 +404,7 @@ function createLlm({
         const leak = absorbToolCall(cleaned.text);
         if (!cleaned.text.trim() && !leak) throw Object.assign(new Error('empty'), { code: 'empty' });
         streamed = true;
+        onFirst();
         // tool-call JSON must not hit the bubble/TTS; done() absorbs and onDone replaces
         if (!leak) onToken(cleaned.text);
         return cleaned.text;
