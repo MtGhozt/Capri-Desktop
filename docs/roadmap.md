@@ -30,6 +30,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - Ajustes con indicador de carga al abrir.
 - Spotify confirma que la canción arrancó.
 - Instalación: timeout de descarga colgada y progreso real por paquete.
+- **Perfil automático según tu PC (idea de la comunidad):** al arrancar Capri lee GPU/VRAM/RAM y recomienda un perfil (voz OmniVoice CUDA vs Kokoro CPU, tamaño de Whisper, menos animaciones en PCs lentas). No cambia nada sola: sugiere y vos aceptás; después se puede cambiar en Ajustes.
 
 ## Próximo, por prioridad
 
@@ -62,6 +63,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - Fallback a modelos cloud gratis de Ollama (`3e6f529`).
 - Voz local gratis para todos (ex Fase 7), varias voces de referencia.
 - Retomar respuesta tras interrupción; decir "Capri" de nuevo mientras habla sin cortar/resetear la entrada de voz.
+- **Chat con Capri al lado (idea de la comunidad):** una ventanita de chat con Capri sentada al lado. Pedís algo (ej. «creame un código para X») y responde el proveedor de Cerebro (Claude, Gemini, etc.). Bloques de código con resaltado y botón Copiar; reutilizar la ventana de chat que ya existe. Falta el arte conceptual de la comunidad.
 - **Idiomas:** detectar el idioma de Windows (con selector en Ajustes) y traducir la interfaz (textos en un archivo por idioma); que el cerebro responda en ese idioma; Whisper ya entiende varios idiomas; pendiente: voces de Kokoro/OmniVoice por idioma y comandos directos (hoy en español). Versión grande, sin fecha.
 
 ### P5 — Personalidad y diversión
