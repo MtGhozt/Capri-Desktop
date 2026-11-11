@@ -7,10 +7,12 @@ const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
   '0.2.9': [
-    'Puedo subir/bajar el volumen de Windows, silenciar y abrir Configuración (Bluetooth, sonido, Wi‑Fi…).',
-    'Si preguntás por batería, disco, RAM o tu IP local, te contesto con datos reales de la PC.',
-    'También cambio modo oscuro/claro; todo con las mismas etiquetas ocultas del chat.',
-    'Recorte, ventanas y buscar archivos (PDF, fotos…) en tus carpetas.',
+    'Capri hace cosas en tu PC: volumen, ajustes de Windows, tema claro/oscuro, batería, disco, RAM e IP.',
+    '«Recortá la pantalla» abre el recorte de Windows.',
+    'Ordená ventanas: «poné Discord a la izquierda y Chrome a la derecha», maximizar, minimizar o restaurar.',
+    'Buscá archivos en tus carpetas y Capri te los muestra en el Explorador.',
+    '«Callate» corta la voz al instante, y los comandos chocan menos entre sí.',
+    'La versión se ve en el chat y en Ajustes, para reportar errores más fácil.',
   ],
   '0.2.8': [
     'Clima/feriados en carácter; si el modelo falla, te contesto igual sin cartel de error.',

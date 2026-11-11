@@ -63,15 +63,24 @@ test('upgrade: the new version lines, once', () => {
   assert.equal(bootNotes({ version: '0.2.6', lastSeenVersion: '0.2.6' }), null);
 });
 
-test('0.2.9 has short lines about PC volume/settings/info', () => {
+test('0.2.9 has short lines about PC actions, windows, files, callate and version', () => {
   const lines = notesFor('0.2.9');
   assert.equal(Array.isArray(lines), true);
-  assert.ok(lines.length >= 2 && lines.length <= 4);
+  assert.ok(lines.length >= 2 && lines.length <= 6);
   for (const line of lines) assert.ok(line.length < 140);
   const all = lines.join(' ');
-  assert.match(all, /volumen|Configuración|Bluetooth/i);
+  assert.match(all, /volumen|ajustes de Windows|tema/i);
   assert.match(all, /batería|disco|RAM|IP/i);
-  assert.match(all, /Recorte|ventanas|Snipping|archivos/i);
+  assert.match(all, /Recortá la pantalla|recorte/i);
+  assert.match(all, /ventanas|izquierda|derecha/i);
+  assert.match(all, /archivos|Explorador/i);
+  assert.match(all, /Callate/i);
+  assert.match(all, /versión|chat|Ajustes/i);
+});
+
+test('upgrade from 0.2.8 shows the 0.2.9 notes once', () => {
+  assert.deepEqual(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.8' }), NOTES['0.2.9']);
+  assert.equal(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.9' }), null);
 });
 
 test('an upgrade to a version without notes says nothing', () => {
