@@ -31,13 +31,17 @@ function sidecarConfig(cfg, state = {}) {
 
 // Ajustes › AUDIO says why she is quiet when you asked for VOZ, instead of staying silent.
 // A loading engine is not a failure: it gets its own wait line, and only a real one is reported.
-function voiceStatus(cfg, { running = true, tts = null } = {}) {
+function voiceStatus(cfg, { running = true, tts = null, sleeping = false } = {}) {
   if (String(cfg?.voice?.replyMode || 'blips').toLowerCase() !== 'voice') return '';
   if (String(cfg?.voice?.tts || 'off').toLowerCase() === 'off') return 'Voz apagada: elegí VOZ de nuevo o una carpeta de voz.';
   if (!running) return 'El sidecar de voz no arrancó.';
   if (tts?.state === 'downloading') return 'Descargando voz…';
   if (tts?.state === 'loading') return 'Cargando voz…';
-  if (tts?.engine === 'off') return 'TTS no arrancó: revisá voice.log.';
+  // DORMANT releases TTS on purpose: that is not a start failure.
+  if (tts?.engine === 'off') {
+    if (sleeping || tts?.reason === 'sleeping') return '';
+    return 'TTS no arrancó: revisá voice.log.';
+  }
   if (tts?.state === 'fallback') return 'Sin OmniVoice: habla con Kokoro.';
   return '';
 }

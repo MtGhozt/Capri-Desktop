@@ -353,6 +353,8 @@ function createVoiceInstall({
 
     const py = findPython311({ spawnSyncImpl });
     if (!py.ok) {
+      // Always reach voice.log (onLine), not only the in-memory "Ver detalles" buffer.
+      pushLine(py.message);
       busy = false;
       return emit({
         busy: false,
@@ -360,7 +362,7 @@ function createVoiceInstall({
         label: 'Error',
         needPython: true,
         error: py.message,
-        lines: [py.message],
+        lines: [...state.lines].slice(-40),
       });
     }
 
@@ -378,12 +380,13 @@ function createVoiceInstall({
     } catch (err) {
       busy = false;
       const message = `No se pudo descargar la voz: ${err.message || err}`;
+      pushLine(message);
       return emit({
         busy: false,
         phase: 'error',
         label: 'Error',
         error: message,
-        lines: [...state.lines, message].slice(-40),
+        lines: [...state.lines].slice(-40),
       });
     }
 
@@ -413,12 +416,13 @@ function createVoiceInstall({
     }
     if (!result.ok) {
       const message = result.message || 'Falló setup.ps1';
+      pushLine(message);
       return emit({
         busy: false,
         phase: 'error',
         label: 'Error',
         error: message,
-        lines: [...state.lines, message].slice(-40),
+        lines: [...state.lines].slice(-40),
         ok: false,
       });
     }

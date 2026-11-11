@@ -70,11 +70,13 @@ test('fullscreen game mutes wake in the sidecar payload (PTT still has a mic)', 
 });
 
 test('a loading OmniVoice says it is loading, not that TTS failed', () => {
-  const status = (tts) => voiceStatus(base(), { running: true, tts });
+  const status = (tts, extra = {}) => voiceStatus(base(), { running: true, tts, ...extra });
   assert.equal(status({ engine: 'omnivoice', state: 'loading' }), 'Cargando voz…');
   assert.equal(status({ engine: 'voice', state: 'downloading' }), 'Descargando voz…');
   assert.equal(status({ engine: 'omnivoice', state: 'ready' }), '');
   assert.match(status({ engine: 'kokoro', state: 'fallback' }), /Kokoro/);
   assert.match(status({ engine: 'off', state: 'off' }), /TTS no arrancó/);
+  assert.equal(status({ engine: 'off', state: 'off', reason: 'sleeping' }), '');
+  assert.equal(status({ engine: 'off', state: 'off' }, { sleeping: true }), '');
   assert.match(voiceStatus(base(), { running: false }), /sidecar/);
 });

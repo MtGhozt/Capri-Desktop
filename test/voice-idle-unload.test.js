@@ -135,6 +135,17 @@ assert announced == [("off", "off")], announced
 assert eng._omni_loading is False, "a load was started while folded"
 assert any(line.startswith("tts engine=off reason=sleeping") for line in logs), logs
 
+# waking from DORMANT starts TTS again (resume/unfold must not stay engine=off)
+started = []
+eng = bare()
+eng.cfg["sleeping"] = True
+eng._want_tts = False
+eng.stream = None
+eng.restart_stream = lambda: None
+eng.start_tts = lambda: started.append("start")
+eng.apply_cfg({"sleeping": False})
+assert started == ["start"], started
+
 # transcribe holds a local reference so an idle unload cannot null it mid-call
 class Seg:
     def __init__(self, text):

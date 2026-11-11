@@ -2074,7 +2074,11 @@ function voiceReplyOn() {
 
 // Ajustes › AUDIO: the shared helper (voice-config.js) with what only main knows.
 function voiceStatus(cfg) {
-  return ttsStatus(cfg, { running: voice?.running?.(), tts: lastTts });
+  return ttsStatus(cfg, {
+    running: voice?.running?.(),
+    tts: lastTts,
+    sleeping: overlayFolded,
+  });
 }
 
 function commentRange(value, fallbackMinutes) {
@@ -3634,7 +3638,8 @@ function main() {
           lastTts = {
             engine: String(payload.engine || ''),
             state: String(payload.state || ''),
-            reason: String(payload.reason || ''),
+            // engine=off reason=sleeping is intentional DORMANT, not a failed start.
+            reason: String(payload.reason || (payload.engine === 'off' && overlayFolded ? 'sleeping' : '')),
           };
           // replyMode=voice with nothing to speak with: the technical reason is already in the log
           // (sidecar side); say which state was reached and why she stays quiet.

@@ -97,7 +97,6 @@ threads = []
 eng.start_tts()
 eng.start_tts()
 eng.start_tts()
-assert SlowThenOkOmni.calls == 0  # thread may not have started yet
 # Give the single worker a moment; FakeOmni is constructed inside the thread.
 deadline = time.time() + 2
 while SlowThenOkOmni.calls < 1 and time.time() < deadline:

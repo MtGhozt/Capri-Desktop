@@ -41,6 +41,7 @@ ROOT = Path(__file__).resolve().parent
 MODELS = ROOT / "models"
 # Cross-process: only one OmniVoice load at a time (orphan sidecars / overlapping restarts).
 OMNI_LOCK_FILE = MODELS / ".omnivoice.lock"
+OMNI_BLOCK_FILE = MODELS / ".omni_blocked"
 OMNI_LOCK_STALE_S = 120.0
 OMNI_LOCK_WAIT_S = 60.0
 SAMPLE_RATE = 16000
@@ -578,8 +579,7 @@ class Engine:
                 self.cfg[key] = patch[key]
         # An explicit voice change may retry OmniVoice; a plain config resend must not.
         if any(self.cfg.get(key) != value for key, value in zip(TTS_SETTINGS, tts_before)):
-            self._omni_blocked = None
-            self._omni_notice_shown = False
+            self._clear_omni_block()
         if any(k in patch for k in ("wakeSensitivity", "wakeThreshold", "wakeMinSpeechMs", "wakeEnergy")):
             log(
                 f"wake config sensitivity={self.cfg.get('wakeSensitivity')} "
@@ -589,10 +589,12 @@ class Engine:
         if "wakeEnergy" in patch and isinstance(self._vad, EnergyVAD):
             self._vad.threshold = self.wake_energy()
         now = time.monotonic()
+        waking = False
         if bool(self.cfg.get("sleeping")):
             if not was_sleeping:
                 self._sleep_since = now
         else:
+            waking = was_sleeping
             self._sleep_since = 0.0
         if bool(self.cfg.get("enabled")):
             self._mic_off_since = 0.0
@@ -613,6 +615,9 @@ class Engine:
         local_llm_changed = self.cfg.get("localLlm", True) is not local_llm_before
         if local_llm_changed and self.reply_mode() == "voice" and not self.cfg.get("sleeping"):
             self._drop_tts("localLlm-change")
+            self.start_tts()
+        elif waking and self.reply_mode() == "voice" and not self.cfg.get("sleeping"):
+            # Leaving DORMANT: a fresh/off engine must start again (resume + unfold).
             self.start_tts()
         self._cfg_ready = True
 
@@ -1423,6 +1428,11 @@ class Engine:
             ms = (time.perf_counter() - t0) * 1000
             log(f"synth id={rid} {ms:.0f}ms samples={pcm.size} sr={sr}")
             if pcm.size == 0:
+                if gen == self._speak_gen and rid == self._live_id and self._accept_speak:
+                    why = "omnivoice-loading" if self._omni_loading else (
+                        "omnivoice-blocked" if self._omni_blocked else "no-engine"
+                    )
+                    self._finish_empty_synth(rid, why)
                 continue
             if gen != self._speak_gen or rid != self._live_id or not self._accept_speak:
                 log("speak drop after synth")
@@ -1471,11 +1481,10 @@ class Engine:
                 session = True
                 session_id = rid
                 self._set_speaking(True)
-                self._mark_play(rid)
                 log(f"talking id={rid}")
                 self._broadcast_talk({"type": "talking"}, rid)
             self._note_audio()
-            if not self._play(pcm, sr, gen):
+            if not self._play(pcm, sr, gen, rid=rid):
                 session = False
                 session_id = 0
                 self._set_speaking(False)
@@ -1493,8 +1502,14 @@ class Engine:
         self._tts_announced = True
         if state != "downloading" and getattr(self, "_downloads", 0) > 0:
             engine, state = "voice", "downloading"
-        log(f"tts state engine={engine} state={state}")
-        self.broadcast({"type": "tts_state", "engine": engine, "state": state})
+        reason = ""
+        if engine == "off" and bool(self.cfg.get("sleeping")):
+            reason = "sleeping"
+        log(f"tts state engine={engine} state={state}{f' reason={reason}' if reason else ''}")
+        payload = {"type": "tts_state", "engine": engine, "state": state}
+        if reason:
+            payload["reason"] = reason
+        self.broadcast(payload)
 
     def _set_download(self, on: bool) -> None:
         """A first-time Hugging Face download: say so, so the long wait is not a frozen bar."""
@@ -1573,6 +1588,39 @@ class Engine:
         with self._tts_lock:
             return gen == self._omni_gen
 
+    def _read_omni_block(self) -> str | None:
+        try:
+            text = OMNI_BLOCK_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        return text or None
+
+    def _write_omni_block(self, reason: str) -> None:
+        try:
+            MODELS.mkdir(parents=True, exist_ok=True)
+            OMNI_BLOCK_FILE.write_text(str(reason or "blocked")[:400], encoding="utf-8")
+        except OSError as err:
+            log(f"omni block file write failed: {err}")
+
+    def _clear_omni_block(self) -> None:
+        self._omni_blocked = None
+        self._omni_notice_shown = False
+        try:
+            OMNI_BLOCK_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def _ensure_kokoro(self):
+        with self._tts_lock:
+            if self._tts is None:
+                self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+            return self._tts
+
+    def _finish_empty_synth(self, rid: int, reason: str) -> None:
+        log(f"synth empty id={rid} reason={reason}")
+        self._broadcast_talk({"type": "talking"}, rid)
+        self._broadcast_talk({"type": "talking_done", "interrupted": False, "empty": True}, rid)
+
     def start_tts(self) -> None:
         mode = self.reply_mode()
         if mode != "voice":
@@ -1590,15 +1638,18 @@ class Engine:
             return
         self._want_tts = True
         if kind == "kokoro":
-            with self._tts_lock:
-                if self._tts is None:
-                    self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+            self._ensure_kokoro()
             log(f"tts engine=kokoro reason=tts=kokoro vram_free={free_vram_mib()} vram_usable=n/a")
             if isinstance(self._tts, NullTTS):
                 self._announce_tts("off", "off")
             else:
                 self._announce_tts("kokoro", "ready")
             return
+        # Survive sidecar restarts: a prior ImportError/VRAM block stays until TTS settings change.
+        if not self._omni_blocked:
+            saved = self._read_omni_block()
+            if saved:
+                self._omni_blocked = saved
         # Check+set+spawn under one lock so two start_tts calls never both spawn a load.
         with self._tts_lock:
             if self._omni is not None:
@@ -1623,16 +1674,22 @@ class Engine:
             self._announce_tts("omnivoice", "ready")
             return
         if action == "blocked":
-            # A permanent failure (no torch, unusable GPU): Kokoro until settings change or restart.
-            with self._tts_lock:
-                if self._tts is None:
-                    self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+            # A permanent failure (no torch, unusable GPU): Kokoro until settings change.
+            self._ensure_kokoro()
+            if not self._omni_notice_shown:
+                self._omni_notice_shown = True
+                self.broadcast({
+                    "type": "notice",
+                    "message": fallback_message(self._omni_blocked),
+                })
             if self._tts_state != ("kokoro", "fallback"):
                 log(f"tts engine=kokoro reason=omnivoice-blocked:{self._omni_blocked} vram_free={free_vram_mib()} vram_usable=n/a")
                 self._announce_tts("kokoro", "fallback")
             return
         if action == "loading":
-            self._announce_tts("omnivoice", "loading")
+            # Already loading: do not re-spam "Cargando voz…" on every speak/config.
+            if self._tts_state != ("omnivoice", "loading"):
+                self._announce_tts("omnivoice", "loading")
             return
         if action == "sleeping":
             # Folded into DORMANT: keep the VRAM free and load again on wake.
@@ -1655,20 +1712,24 @@ class Engine:
                 log("omnivoice lock busy: another sidecar is loading; staying on Kokoro without clone-failure notice")
                 if not self._omni_gen_alive(gen):
                     log(f"omnivoice load discarded reason=stale-gen gen={gen}")
+                    with self._tts_lock:
+                        if gen == self._omni_gen:
+                            self._omni_loading = False
                     return
                 with self._tts_lock:
                     self._omni_loading = False
                 if not self._want_tts:
                     self._announce_tts("off", "off")
                     return
-                with self._tts_lock:
-                    if self._tts is None:
-                        self._tts = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
+                self._ensure_kokoro()
                 log(f"tts engine=kokoro reason=omnivoice-lock-busy vram_free={free_vram_mib()} vram_usable=n/a")
                 self._announce_tts("kokoro", "ready")
                 return
             if not self._omni_gen_alive(gen):
                 log(f"omnivoice load discarded reason=stale-gen gen={gen}")
+                with self._tts_lock:
+                    if gen == self._omni_gen:
+                        self._omni_loading = False
                 return
             free, usable, _loaded = self._vram_budget()
             wav, txt = resolve_ref(ROOT, self.cfg.get("ttsRef"))
@@ -1709,10 +1770,14 @@ class Engine:
                 omni.close()
                 log(f"omnivoice unavailable: {err}")
                 if not self._omni_gen_alive(gen):
+                    with self._tts_lock:
+                        if gen == self._omni_gen:
+                            self._omni_loading = False
                     return
-                # No torch / no usable GPU: permanent for this session, so no retry loop on every reply.
-                if isinstance(err, (OmniVoiceUnavailable, ImportError)):
+                # No torch / no usable GPU: permanent until TTS settings change (survives restarts).
+                if isinstance(err, (OmniVoiceUnavailable, ImportError, ModuleNotFoundError)):
                     self._omni_blocked = str(err)
+                    self._write_omni_block(self._omni_blocked)
                     if not self._omni_notice_shown:
                         self._omni_notice_shown = True
                         self.broadcast({
@@ -1726,13 +1791,7 @@ class Engine:
                 if not self._want_tts:
                     self._announce_tts("off", "off")
                     return
-                kokoro = self._tts
-                if kokoro is None:
-                    kokoro = load_kokoro(MODELS, log, self.cfg.get("ttsSpeed"))
-                with self._tts_lock:
-                    if gen != self._omni_gen:
-                        return
-                    self._tts = kokoro
+                self._ensure_kokoro()
                 log(f"tts engine=kokoro reason=omnivoice-failed:{err} vram_free={free} vram_usable={usable}")
                 self._announce_tts("kokoro", "fallback")
                 return
@@ -1781,14 +1840,19 @@ class Engine:
                 release_omni_lock()
 
     def _synth(self, text: str, gain: bool = True, mood: str | None = None) -> tuple[np.ndarray, int]:
-        if self._omni_loading and self._omni is None:
-            # OmniVoice is on its way: stay silent here, the UI answers with blips.
-            return np.zeros(0, dtype=np.float32), 24000
-        engine = self._session_tts or self._omni or self._tts
-        if engine is None:
-            self.start_tts()
-            engine = self._session_tts or self._omni or self._tts
-        if engine is None:
+        # While OmniVoice loads or is blocked, speak with Kokoro instead of returning silence.
+        if self._omni is not None:
+            engine = self._omni
+        elif self._omni_loading or self._omni_blocked:
+            engine = self._ensure_kokoro()
+        else:
+            engine = self._session_tts or self._tts
+            if engine is None:
+                self.start_tts()
+                engine = self._session_tts or self._omni or self._tts
+            if engine is None or isinstance(engine, NullTTS):
+                engine = self._ensure_kokoro()
+        if engine is None or isinstance(engine, NullTTS):
             return np.zeros(0, dtype=np.float32), 24000
         self._last_tts_engine = self._engine_label(engine)
         use_mood = str(mood or getattr(self, "_reply_mood", None) or "").strip().lower() or None
@@ -1919,13 +1983,15 @@ class Engine:
         log(f"greet id={rid} cache={ident}")
         self._speak_q.put(("greet", rid, (ident, line)))
 
-    def _play(self, pcm: np.ndarray, sr: int, gen: int) -> bool:
+    def _play(self, pcm: np.ndarray, sr: int, gen: int, rid: int = 0) -> bool:
         stream = None
         block = 2048
         try:
             stream = sd.OutputStream(samplerate=int(sr), channels=1, dtype="float32")
             self._out = stream
             stream.start()
+            # play = audio ready -> first sample out (after OutputStream opens), not queue handoff.
+            self._mark_play(rid or self._live_id)
             for i in range(0, pcm.size, block):
                 if self._speak_stop.is_set() or gen != self._speak_gen:
                     self._abort_out()
@@ -1935,6 +2001,7 @@ class Engine:
             return True
         except Exception as err:
             log(f"playback failed: {err}")
+            self._mark_play(rid or self._live_id)
             return True
         finally:
             if self._out is stream and stream is not None:
