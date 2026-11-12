@@ -224,6 +224,13 @@ function verifyOmniImports(dir, { spawnSyncImpl = spawnSync } = {}) {
   }
 }
 
+function clearOmniBlock(dir) {
+  if (!dir) return;
+  try {
+    fs.rmSync(path.join(dir, 'models', '.omni_blocked'), { force: true });
+  } catch { /* ignore */ }
+}
+
 function runSetupPs1({
   dir,
   omniVoice = false,
@@ -443,6 +450,7 @@ function createVoiceInstall({
         });
       }
       pushLine(`OK: torch/omnivoice importan (${check.exe})`);
+      clearOmniBlock(dest);
     }
     pushLine('Listo.');
     const needVc = missingVcImpl();
@@ -492,6 +500,7 @@ module.exports = {
   ensureVoiceSources,
   syncManagedVoiceSources,
   verifyOmniImports,
+  clearOmniBlock,
   runSetupPs1,
   createVoiceInstall,
 };

@@ -20,6 +20,7 @@ const {
   ensureVoiceSources,
   syncManagedVoiceSources,
   verifyOmniImports,
+  clearOmniBlock,
   createVoiceInstall,
 } = require('../src/main/voice-install');
 
@@ -167,7 +168,7 @@ function fakeSpawn({ code = 0, lines = [] } = {}) {
   };
 }
 
-async function runInstall(t, { code, lines, verifyOmniImpl }) {
+async function runInstall(t, { code, lines, verifyOmniImpl, beforeStart }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-setup-src-'));
   const local = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-setup-local-'));
   t.after(() => {
@@ -177,6 +178,8 @@ async function runInstall(t, { code, lines, verifyOmniImpl }) {
   const voice = path.join(root, 'voice');
   fs.mkdirSync(path.join(voice, 'models'), { recursive: true });
   for (const rel of VOICE_FILES) fs.writeFileSync(path.join(voice, rel), `# ${rel}\n`);
+  const destDir = path.join(local, 'capri-desktop', 'voice');
+  beforeStart?.(destDir);
   const out = [];
   const installer = createVoiceInstall({
     root,
@@ -189,7 +192,7 @@ async function runInstall(t, { code, lines, verifyOmniImpl }) {
     verifyOmniImpl: verifyOmniImpl || (() => ({ ok: true, exe: 'C:\\fake\\.venv\\Scripts\\python.exe' })),
     onLine: (line) => out.push(line),
   });
-  return { res: await installer.start({ omniVoice: true }), lines: out };
+  return { res: await installer.start({ omniVoice: true }), lines: out, destDir };
 }
 
 test('setup output reaches onLine (and voice.log) line by line', async (t) => {
@@ -292,4 +295,46 @@ test('installer warns about the missing VC++ runtime before and after installing
   assert.equal(res.ok, true);
   assert.equal(res.needVc, true);
   assert.ok(res.lines.includes(VC_MESSAGE), 'the hint is in the install log');
+});
+
+test('block file present, setup succeeds with torch import ok → file is gone; failed setup leaves it', async (t) => {
+  const blockRel = path.join('models', '.omni_blocked');
+
+  // Success case: setup succeeds + torch imports ok → block file is removed
+  const ok = await runInstall(t, {
+    code: 0,
+    lines: ['setup ok'],
+    verifyOmniImpl: () => ({ ok: true, exe: 'C:\\fake\\.venv\\Scripts\\python.exe' }),
+    beforeStart: (dest) => {
+      fs.mkdirSync(path.join(dest, 'models'), { recursive: true });
+      fs.writeFileSync(path.join(dest, blockRel), 'blocked: missing torch');
+    },
+  });
+  assert.equal(ok.res.ok, true);
+  assert.equal(fs.existsSync(path.join(ok.destDir, blockRel)), false);
+
+  // Failed setup case: setup.ps1 exits non-zero → block file is untouched
+  const failSetup = await runInstall(t, {
+    code: 1,
+    lines: ['pip failed'],
+    beforeStart: (dest) => {
+      fs.mkdirSync(path.join(dest, 'models'), { recursive: true });
+      fs.writeFileSync(path.join(dest, blockRel), 'blocked: missing torch');
+    },
+  });
+  assert.equal(failSetup.res.ok, false);
+  assert.equal(fs.existsSync(path.join(failSetup.destDir, blockRel)), true);
+
+  // Failed setup case: torch verification fails → block file is untouched
+  const failImport = await runInstall(t, {
+    code: 0,
+    lines: ['setup ok'],
+    verifyOmniImpl: () => ({ ok: false, message: 'Torch/OmniVoice no importan' }),
+    beforeStart: (dest) => {
+      fs.mkdirSync(path.join(dest, 'models'), { recursive: true });
+      fs.writeFileSync(path.join(dest, blockRel), 'blocked: missing torch');
+    },
+  });
+  assert.equal(failImport.res.ok, false);
+  assert.equal(fs.existsSync(path.join(failImport.destDir, blockRel)), true);
 });
