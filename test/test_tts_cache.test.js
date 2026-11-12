@@ -133,6 +133,27 @@ test('TTS speaks byte units, drive letters and IPv4 with punto', () => {
   assert.match(lines[2], /ciento noventa y dos punto ciento sesenta y ocho/i);
 });
 
+test('TTS splits a laugh into comma beats without touching real words', () => {
+  const out = py(
+    'from tts_text import clean_for_tts; '
+    + 'print(clean_for_tts("¡Jajaja!").encode("utf-8").hex()); '
+    + 'print(clean_for_tts("Jajaja")); '
+    + 'print(clean_for_tts("jaja")); '
+    + 'print(clean_for_tts("caja")); '
+    + 'print(clean_for_tts("trabajo")); '
+    + 'print(clean_for_tts("Jajaja, tontito")); '
+    + 'print(clean_for_tts("jajajajajajajaja"))',
+  );
+  const lines = out.split(/\r?\n/);
+  assert.equal(lines[0], Buffer.from('¡ja, ja, ja!', 'utf8').toString('hex'));
+  assert.equal(lines[1], 'ja, ja, ja');
+  assert.equal(lines[2], 'ja, ja');
+  assert.equal(lines[3], 'caja');
+  assert.equal(lines[4], 'trabajo');
+  assert.equal(lines[5], 'ja, ja, ja, tontito');
+  assert.equal(lines[6], 'ja, ja, ja, ja'); // capped, not a list
+});
+
 test('TTS splits long phrases at commas for OmniVoice chunks', () => {
   const out = py(
     'from tts_text import split_for_tts; '

@@ -19,6 +19,8 @@ _DRIVE = re.compile(r"\b([A-Za-z]):(?!\d)")
 _IPV4 = re.compile(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b")
 _NUM = re.compile(r"\b\d{1,6}\b")
 _SPACE = re.compile(r"\s+")
+# laughs only: run of "ja/je/ji/..." syllables as a standalone token (caja, abeja untouched)
+_LAUGH = re.compile(r"\b(?:j[aeiou]){2,}\b", re.I)
 _TTS_CHUNK = 80
 _BYTE_WORDS = {"GB": "gigas", "MB": "megas", "TB": "teras"}
 
@@ -128,6 +130,12 @@ def split_for_tts(text: str, limit: int = _TTS_CHUNK) -> list[str]:
     return out
 
 
+def _laugh_beats(match: re.Match) -> str:
+    # cap at 4 beats so a long laugh does not become a list
+    raw = match.group(0)
+    return ", ".join(raw[i : i + 2].lower() for i in range(0, min(len(raw), 8), 2))
+
+
 def clean_for_tts(text: str) -> str:
     raw = str(text or "")
     raw = _MD_FENCE.sub(" ", raw)
@@ -157,5 +165,6 @@ def clean_for_tts(text: str) -> str:
     raw = _TIME.sub(_time_es, raw)
     raw = pause_for_tts(raw)
     raw = _NUM.sub(lambda m: int_es(int(m.group(0))), raw)
+    raw = _LAUGH.sub(_laugh_beats, raw)
     raw = raw.replace(">", " ").replace("<", " ")
     return _SPACE.sub(" ", raw).strip(" -—,:;")
