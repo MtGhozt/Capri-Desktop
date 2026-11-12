@@ -12,6 +12,22 @@ const path = require('node:path');
 const Module = require('node:module');
 const { TRAY } = require('../src/main/labels');
 
+// Load stopLeftoverVoice with a minimal electron stub so we can test it standalone.
+let stopLeftoverVoice;
+{
+  const _orig = Module._load;
+  Module._load = function stub(request, ...rest) {
+    if (request === 'electron') return { app: { getPath: () => os.tmpdir(), isPackaged: true } };
+    return _orig.call(this, request, ...rest);
+  };
+  try {
+    delete require.cache[require.resolve('../src/main/voice')];
+    ({ stopLeftoverVoice } = require('../src/main/voice'));
+  } finally {
+    Module._load = _orig;
+  }
+}
+
 function setup(t, cfg) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-voice-'));
   const dir = path.join(home, 'voice');
@@ -42,7 +58,7 @@ function setup(t, cfg) {
   const load = Module._load;
   Module._load = function stub(request, ...rest) {
     if (request === 'electron') return { app: { getPath: () => home, isPackaged: true } };
-    if (request === 'node:child_process') return { spawn };
+    if (request === 'node:child_process') return { spawn, spawnSync: spawn };
     return load.call(this, request, ...rest);
   };
   // kept for the whole test: the log asks Electron for its folder when it writes
@@ -130,4 +146,42 @@ test('a voice folder without .venv says so once too', (t) => {
   voice.start();
   voice.pttStart();
   assert.equal(events.filter((e) => e.type === 'voice-missing').length, 1);
+});
+
+// (b) stopLeftoverVoice: an orphan sidecar from a crashed run is stopped before the new spawn,
+// so it releases (and does not later delete) the OmniVoice lock.
+test('stopLeftoverVoice kills a leftover sidecar and clears its files', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-leftover-'));
+  const modelsDir = path.join(dir, 'models');
+  fs.mkdirSync(modelsDir, { recursive: true });
+  const pidFile = path.join(modelsDir, '.server.pid');
+  const lockFile = path.join(modelsDir, '.omnivoice.lock');
+  const fakePid = 99991;
+  fs.writeFileSync(pidFile, String(fakePid));
+  fs.writeFileSync(lockFile, `${fakePid}\n${Date.now() / 1000}\n`);
+  const killed = [];
+  const stopped = stopLeftoverVoice(dir, { kill: (pid) => killed.push(pid) });
+  assert.ok(stopped, 'should report leftover stopped');
+  assert.deepEqual(killed, [fakePid], 'one kill, not one per file');
+  assert.ok(!fs.existsSync(pidFile), '.server.pid should be deleted');
+  assert.ok(!fs.existsSync(lockFile), '.omnivoice.lock should be deleted');
+});
+
+// A pid file from before this boot can name a recycled pid: clear it, never kill it.
+test('stopLeftoverVoice ignores a pid file older than the boot', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-leftover-old-'));
+  const modelsDir = path.join(dir, 'models');
+  fs.mkdirSync(modelsDir, { recursive: true });
+  const pidFile = path.join(modelsDir, '.server.pid');
+  const lockFile = path.join(modelsDir, '.omnivoice.lock');
+  fs.writeFileSync(pidFile, '99991');
+  fs.writeFileSync(lockFile, '99991\n1\n');
+  fs.utimesSync(pidFile, 0, 0);
+  fs.utimesSync(lockFile, 0, 0);
+  const killed = [];
+  const stopped = stopLeftoverVoice(dir, { kill: (pid) => killed.push(pid) });
+  assert.equal(stopped, false);
+  assert.deepEqual(killed, []);
+  assert.ok(!fs.existsSync(pidFile), 'stale .server.pid should be deleted');
+  assert.ok(!fs.existsSync(lockFile), 'stale .omnivoice.lock should be deleted');
 });

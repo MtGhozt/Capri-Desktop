@@ -1,8 +1,9 @@
 'use strict';
 
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { app } = require('electron');
 const { sidecarConfig } = require('./voice-config');
@@ -28,6 +29,50 @@ function resolvePython(dir) {
   const nix = unixPython(dir);
   if (fs.existsSync(nix)) return nix;
   return null;
+}
+
+function killProc(pid) {
+  const n = Number(pid);
+  if (!n || n <= 0 || n === process.pid) return;
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/PID', String(n), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+    return;
+  }
+  try { process.kill(n, 'SIGTERM'); } catch { /* already gone */ }
+}
+
+// The same taskkill voice.stop() uses, but waited on: a leftover that still holds the OmniVoice
+// lock would delete the new sidecar's lock when it finally exits.
+function killProcNow(pid) {
+  const n = Number(pid);
+  if (!n || n <= 0 || n === process.pid) return false;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/PID', String(n), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+  } else {
+    try { process.kill(n, 'SIGTERM'); } catch { /* already gone */ }
+  }
+  return true;
+}
+
+// A sidecar left over from a crash still holds models/.omnivoice.lock, so the new one would wait
+// and load the clone twice. Both files name its pid; they are written by the sidecar itself.
+function stopLeftoverVoice(dir, { kill = killProcNow } = {}) {
+  if (!dir) return false;
+  const files = ['.server.pid', '.omnivoice.lock'].map((name) => path.join(dir, 'models', name));
+  const bootedAt = Date.now() - os.uptime() * 1000; // older than this boot: a recycled pid, not ours
+  const pids = new Set();
+  for (const file of files) {
+    try {
+      if (fs.statSync(file).mtimeMs < bootedAt) continue;
+      const pid = parseInt(fs.readFileSync(file, 'utf8').trim().split('\n')[0], 10);
+      if (Number.isInteger(pid) && pid > 0 && pid !== process.pid) pids.add(pid);
+    } catch { /* missing file */ }
+  }
+  for (const pid of pids) kill(pid);
+  for (const file of files) {
+    try { fs.rmSync(file, { force: true }); } catch { /* locked for a moment */ }
+  }
+  return pids.size > 0;
 }
 
 function resolveVoiceDir(root, cfg) {
@@ -122,11 +167,7 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown, missingVc = m
     const proc = child;
     const pid = proc.pid;
     child = null;
-    if (process.platform === 'win32' && pid) {
-      spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
-      return;
-    }
-    try { proc.kill(); } catch { /* already gone */ }
+    killProc(pid);
   }
 
   function disconnect() {
@@ -229,6 +270,7 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown, missingVc = m
       voiceMissing(`Voice sidecar is off: no venv in ${dir}. Run setup.ps1 there. Chat still works.`);
       return;
     }
+    stopLeftoverVoice(dir);
     token = crypto.randomBytes(24).toString('hex');
     retries = 0;
     if (missingVc()) vcMissing();
@@ -392,4 +434,4 @@ function createVoice({ root, loadConfig, onEvent, markNoticeShown, missingVc = m
   };
 }
 
-module.exports = { createVoice, resolveVoiceDir, checkVoiceDir };
+module.exports = { createVoice, resolveVoiceDir, checkVoiceDir, stopLeftoverVoice };

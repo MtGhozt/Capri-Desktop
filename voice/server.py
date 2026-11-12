@@ -1423,6 +1423,16 @@ class Engine:
                 greet_id, text = payload if isinstance(payload, tuple) and len(payload) == 2 else ("", "")
                 pcm, sr = self._greet_audio(str(greet_id), str(text))
             else:
+                # A clone line spoken by Kokoro is the wrong person: hold the reply until the clone
+                # is up (or a real failure already fell back), still honouring stop/flush.
+                while self._omni_loading and not self._omni_blocked and self._want_tts:
+                    if gen != self._speak_gen or rid != self._live_id or not self._accept_speak:
+                        break
+                    time.sleep(0.05)
+                if gen != self._speak_gen or rid != self._live_id or not self._accept_speak:
+                    self._synth_busy = False
+                    log("speak drop before synth")
+                    continue
                 pcm, sr = self._synth(str(payload))
             self._synth_busy = False
             ms = (time.perf_counter() - t0) * 1000
@@ -1707,24 +1717,31 @@ class Engine:
                 gen = self._omni_gen
         held_lock = False
         try:
-            held_lock = try_acquire_omni_lock()
-            if not held_lock:
-                log("omnivoice lock busy: another sidecar is loading; staying on Kokoro without clone-failure notice")
+            while not held_lock:
                 if not self._omni_gen_alive(gen):
                     log(f"omnivoice load discarded reason=stale-gen gen={gen}")
                     with self._tts_lock:
                         if gen == self._omni_gen:
                             self._omni_loading = False
                     return
-                with self._tts_lock:
-                    self._omni_loading = False
-                if not self._want_tts:
-                    self._announce_tts("off", "off")
-                    return
-                self._ensure_kokoro()
-                log(f"tts engine=kokoro reason=omnivoice-lock-busy vram_free={free_vram_mib()} vram_usable=n/a")
-                self._announce_tts("kokoro", "ready")
-                return
+                held_lock = try_acquire_omni_lock()
+                if not held_lock:
+                    if not self._omni_gen_alive(gen):
+                        log(f"omnivoice load discarded reason=stale-gen gen={gen}")
+                        with self._tts_lock:
+                            if gen == self._omni_gen:
+                                self._omni_loading = False
+                        return
+                    if not self._want_tts:
+                        with self._tts_lock:
+                            if gen == self._omni_gen:
+                                self._omni_loading = False
+                        self._announce_tts("off", "off")
+                        return
+                    log("omnivoice lock busy: another sidecar is loading; staying on Cargando voz… and waiting for lock release")
+                    if self._tts_state != ("omnivoice", "loading"):
+                        self._announce_tts("omnivoice", "loading")
+                    time.sleep(0.5)
             if not self._omni_gen_alive(gen):
                 log(f"omnivoice load discarded reason=stale-gen gen={gen}")
                 with self._tts_lock:
@@ -1959,6 +1976,11 @@ class Engine:
                 pcm, sr = cached
                 log(f"greet play id={ident} cached samples={pcm.size} sr={sr}")
                 return self._apply_gain(pcm), sr
+        if self._omni_loading and not self._omni_blocked:
+            # An uncached greeting in the fallback voice is the wrong person: skip it this boot,
+            # the pregen caches it once the clone is up.
+            log(f"greet skip id={ident} reason=omnivoice-loading")
+            return np.zeros(0, dtype=np.float32), 24000
         pcm, sr = self._synth(str(text), gain=False)
         if pcm.size == 0:
             return pcm, sr
@@ -2384,6 +2406,11 @@ async def amain() -> None:
         log("CAPRI_VOICE_TOKEN missing")
         sys.exit(1)
     MODELS.mkdir(parents=True, exist_ok=True)
+    server_pid_file = MODELS / ".server.pid"
+    try:
+        server_pid_file.write_text(str(os.getpid()), encoding="utf-8")
+    except OSError:
+        pass
     loop = asyncio.get_running_loop()
     engine = Engine(loop, token)
     engine.restart_stream()
@@ -2398,6 +2425,10 @@ async def amain() -> None:
         try:
             await asyncio.Future()
         finally:
+            try:
+                server_pid_file.unlink(missing_ok=True)
+            except Exception:
+                pass
             engine.close()
 
 

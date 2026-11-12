@@ -633,7 +633,7 @@ function followUpSec(cfg) {
 // Her line to the sidecar, when her voice is on. The speak id, or 0 when it was not sent.
 // The current user turn is on the async context; greetings and comments are not, so they stay untimed.
 function startSpeakTurn() {
-  if (!ttsOn() || !speakQueue) return 0;
+  if (!voiceReplyOn() || !speakQueue) return 0;
   const turn = currentTurn();
   const speakId = speakQueue.start(turn) || 0;
   if (speakId && turn && voice?.connected?.()) turns.expectAudio(turn);
@@ -1859,7 +1859,7 @@ async function maybeAutoLook() {
   lastAutoLookAt = Date.now();
   const line = 'Mirá mi pantalla un segundo y comentá algo breve de lo que ves.';
   openChat('look');
-  const speakId = ttsOn() ? speakQueue?.start() : 0;
+  const speakId = voiceReplyOn() ? speakQueue?.start() : 0;
   if (!speakId) speakQueue?.stop();
   llmBusy = true;
   try {
@@ -2059,11 +2059,8 @@ async function gameLeave() {
   gameHadLlm = false;
 }
 
-function ttsOn() {
-  return voiceReplyOn() && !ttsLoading; // while OmniVoice boots the bubble answers with blips
-}
-
-// Same as ttsOn() without the loading check: a cached greeting is a wav, no engine needed.
+// Whether a spoken line is wanted. Loading TTS does not gate it: the sidecar holds the reply
+// until the clone is up, so a reply is never dropped into silence nor spoken by Kokoro.
 function voiceReplyOn() {
   const cfg = config.load();
   if (cfg.muted) return false;
@@ -3690,7 +3687,7 @@ function main() {
         && !overlayFolded
         && !chatVisible.get()
         && !ttsLoading
-        && ttsOn()
+        && voiceReplyOn()
         && !voiceTalking
         && !llmBusy
         && !gameMode?.active()
