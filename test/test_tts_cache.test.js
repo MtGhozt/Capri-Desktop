@@ -282,8 +282,9 @@ test('the fallback notice names Torch, CUDA, VRAM and other failures apart', () 
     + 'print(tts.fallback_message("boom while loading"))',
   );
   const [missing, arch, vram, oom, other] = out.split(/\r?\n/);
-  assert.match(missing, /Torch/);
-  assert.match(missing, /Reinstal/);
+  assert.match(missing, /OmniVoice/);
+  assert.match(missing, /NVIDIA/);
+  assert.match(missing, /reinstal/i);
   assert.match(arch, /Torch/);
   assert.match(vram, /memoria/);
   assert.match(oom, /memoria/);

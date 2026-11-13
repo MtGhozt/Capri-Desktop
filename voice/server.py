@@ -357,7 +357,8 @@ def download(url: str, dest: Path) -> None:
     if dest.exists() and dest.stat().st_size > 1000:
         return
     log(f"downloading {dest.name}")
-    tmp = dest.with_suffix(dest.suffix + ".part")
+    # Per-pid temp: a sidecar still downloading during a reinstall must not collide with the new one.
+    tmp = dest.with_suffix(dest.suffix + f".{os.getpid()}.part")
     req = urllib.request.Request(url, headers={"User-Agent": "capri-desktop"})
     try:
         with urllib.request.urlopen(req, context=ssl_context()) as res, open(tmp, "wb") as out:
@@ -366,7 +367,10 @@ def download(url: str, dest: Path) -> None:
         # old root store or an antivirus MITM: never disable verification, say where to look
         log(f"download {dest.name} certificate failed: {err} (posible antivirus inspeccionando HTTPS)")
         raise
-    tmp.replace(dest)
+    if dest.exists() and dest.stat().st_size > 1000:
+        tmp.unlink(missing_ok=True)  # another process finished first: keep its file
+    else:
+        tmp.replace(dest)
 
 
 def ssl_context() -> ssl.SSLContext:
@@ -1655,6 +1659,17 @@ class Engine:
             else:
                 self._announce_tts("kokoro", "ready")
             return
+        # A light install (setup.ps1 without -OmniVoice) has no torch by design: Kokoro is its
+        # normal engine here, not a fallback. preload_torch records the miss once (cached after).
+        if kind == "auto" and not self.cfg.get("ttsRef") and not self.cfg.get("sleeping"):
+            if not preload_torch(log):
+                self._ensure_kokoro()
+                log(f"tts engine=kokoro reason=no-torch vram_free={free_vram_mib()} vram_usable=n/a")
+                if isinstance(self._tts, NullTTS):
+                    self._announce_tts("off", "off")
+                else:
+                    self._announce_tts("kokoro", "ready")
+                return
         # Survive sidecar restarts: a prior ImportError/VRAM block stays until TTS settings change.
         if not self._omni_blocked:
             saved = self._read_omni_block()

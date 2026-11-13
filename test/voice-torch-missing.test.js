@@ -3,6 +3,7 @@
 // A voice folder without torch must not retry OmniVoice on every reply, and must not announce a
 // download: the RX 6550M support case repeated "omnivoice unavailable" and "Descargando voz…".
 // Cloned-voice + restart must not leave the UI on "Cargando voz…" or synth 0 samples.
+// A light install on the default voice goes straight to Kokoro: no loading, no notice, no block.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -11,6 +12,7 @@ const { py, skip } = require('./voice-py');
 const CHECK = `
 import threading
 import numpy as np
+import heavy
 import server
 
 logs = []
@@ -91,7 +93,8 @@ eng._load_omni_bg(1)
 assert eng._omni_blocked, logs
 assert eng._omni_loading is False, "loading flag stuck after torch miss"
 notices = [e for e in events if e.get("type") == "notice"]
-assert len(notices) == 1 and "Torch" in notices[0]["message"], events
+assert len(notices) == 1, events
+assert "OmniVoice" in notices[0]["message"] and "NVIDIA" in notices[0]["message"], notices
 assert not [e for e in events if e.get("type") == "download"], "announced Descargando without torch"
 assert eng._tts is not None, "did not fall back to Kokoro"
 assert server.OMNI_BLOCK_FILE.is_file(), "block file missing"
@@ -144,6 +147,27 @@ eng4.apply_cfg({"sleeping": False, "replyMode": "voice"})
 assert eng4.cfg.get("sleeping") is False
 assert eng4._tts_state[0] == "kokoro", eng4._tts_state
 assert not any(e.get("engine") == "off" and e.get("reason") == "sleeping" for e in events), events
+
+# Light install (auto, default voice, no torch): Kokoro is the normal engine, not a fallback.
+heavy._missing = True
+try:
+    server.OMNI_BLOCK_FILE.unlink(missing_ok=True)
+except Exception:
+    pass
+events.clear(); logs.clear(); FakeOmni.calls = 0
+eng5 = bare()
+eng5.cfg["ttsRef"] = None
+eng5._omni_loading = False
+eng5._omni_gen = 0
+eng5.start_tts()
+assert eng5._tts_state == ("kokoro", "ready"), eng5._tts_state
+assert FakeOmni.calls == 0, "OmniVoice attempted without torch"
+assert not [e for e in events if e.get("type") == "notice"], events
+assert not [e for e in events if e.get("type") == "tts_state" and e.get("state") == "loading"], events
+assert not [line for line in logs if "omnivoice" in line], logs
+assert not server.OMNI_BLOCK_FILE.is_file(), "block file written on a light install"
+assert eng5._tts is not None, "Kokoro not loaded"
+assert eng5._omni_loading is False, "a load was spawned without torch"
 
 print("TORCH_MISSING_OK")
 `;

@@ -69,11 +69,15 @@ def _download(url: str, dest: Path, log) -> None:
     if dest.exists() and dest.stat().st_size > 1000:
         return
     log(f"downloading {dest.name}")
-    tmp = dest.with_suffix(dest.suffix + ".part")
+    # Per-pid temp: a sidecar still downloading during a reinstall must not collide with the new one.
+    tmp = dest.with_suffix(dest.suffix + f".{os.getpid()}.part")
     req = urllib.request.Request(url, headers={"User-Agent": "capri-desktop"})
     with urllib.request.urlopen(req) as res, open(tmp, "wb") as out:
         out.write(res.read())
-    tmp.replace(dest)
+    if dest.exists() and dest.stat().st_size > 1000:
+        tmp.unlink(missing_ok=True)  # another process finished first: keep its file
+    else:
+        tmp.replace(dest)
 
 
 def ref_cache_key(wav: Path, txt: Path) -> str:
@@ -171,7 +175,7 @@ def fallback_message(err) -> str:
     """One short Spanish line for a Kokoro fallback: VRAM, CUDA and load errors are not the same."""
     text = str(err or "").lower()
     if "no module named 'torch'" in text or "no module named 'omnivoice'" in text:
-        return "Falta Torch en la carpeta de voz; uso la voz normal. Reinstalá la voz desde Ajustes › Oído."
+        return "Tu voz necesita OmniVoice; marcá OmniVoice en Ajustes › Oído y reinstalá la voz (requiere NVIDIA)."
     if "not supported by torch" in text:
         return "Esta versión de Torch no puede usar tu GPU para clonar voz; uso la voz normal."
     if "vram" in text or "out of memory" in text or " oom" in text:
