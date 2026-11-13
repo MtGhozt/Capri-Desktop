@@ -23,6 +23,10 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 - **Hecho:** acciones de PC (volumen, ajustes de Windows, tema, batería/disco/RAM/IP); recorte de pantalla; ordenar ventanas (izq/der/max/min/restaurar, varias a la vez con una sola respuesta); buscar archivos en carpetas del usuario; fix de colisiones de comandos y "callate"; versión visible en Capri (chat y Ajustes).
 
+### 0.2.10 — Arreglos de voz (publicada)
+
+- **Hecho:** sin la casilla OmniVoice la voz va directo a la normal (sin «Cargando voz…» ni aviso de Torch); con dos Capri abiertos o un proceso de voz colgado se espera y se usa la voz clonada; reinstalar la voz desde Ajustes ya arregla la clonada y el aviso dice qué hacer (marcar OmniVoice, requiere NVIDIA); la risa suena a «ja, ja, ja».
+
 ### 0.3.0 — Velocidad
 
 - TTS por frase: empezar a hablar con la primera frase mientras el modelo sigue escribiendo.

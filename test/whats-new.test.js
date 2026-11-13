@@ -78,13 +78,23 @@ test('0.2.9 has short lines about PC actions, windows, files, callate and versio
   assert.match(all, /versión|chat|Ajustes/i);
 });
 
+test('0.2.10 has 3–4 short lines about the light voice install, the voice lock and the laugh', () => {
+  const lines = notesFor('0.2.10');
+  assert.equal(Array.isArray(lines), true);
+  assert.ok(lines.length >= 3 && lines.length <= 4);
+  for (const line of lines) assert.ok(line.length < 120);
+  const all = lines.join(' ');
+  assert.match(all, /voz|OmniVoice/i);
+  assert.match(all, /risa|ja, ja, ja/i);
+});
+
 test('upgrade from 0.2.8 shows the 0.2.9 notes once', () => {
   assert.deepEqual(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.8' }), NOTES['0.2.9']);
   assert.equal(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.9' }), null);
 });
 
 test('an upgrade to a version without notes says nothing', () => {
-  assert.equal(bootNotes({ version: '0.2.10', lastSeenVersion: '0.2.9' }), null);
+  assert.equal(bootNotes({ version: '0.2.3', lastSeenVersion: '0.2.2' }), null);
 });
 
 test('"¿qué hay de nuevo?" is recognized, also with the wake word', () => {

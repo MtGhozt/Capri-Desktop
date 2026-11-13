@@ -6,6 +6,12 @@
 const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
+  '0.2.10': [
+    'Sin la casilla de OmniVoice hablo directo con la voz normal: sin «Cargando voz…» ni aviso de Torch.',
+    'Si abrís Capri dos veces o hay un proceso de voz colgado, espero y sigo con tu voz clonada, no con la normal.',
+    'Reinstalar la voz desde Ajustes ya arregla la clonada, y el aviso dice qué hacer (marcar OmniVoice, requiere NVIDIA).',
+    'Mi risa suena a «ja, ja, ja», no a una "a" larga.',
+  ],
   '0.2.9': [
     'Capri hace cosas en tu PC: volumen, ajustes de Windows, tema claro/oscuro, batería, disco, RAM e IP.',
     '«Recortá la pantalla» abre el recorte de Windows.',
