@@ -1,6 +1,22 @@
 # Changelog
 
-## 0.2.9 (en preparación, sin publicar)
+## 0.2.11 (etiqueta `v0.2.11`)
+
+### Juegos y overlay
+
+- **En juegos Capri no aparece ni captura el mouse:** también en Minecraft; el overlay deja de interferir mientras No molestar está activo.
+- **Ajustes:** se quitó el interruptor inerte «Dron en No molestar» (entrar a un juego ya no muestra el dron); la clave `gaming.drone` se sigue leyendo en configs viejas.
+
+### Privacidad y Ajustes
+
+- **Ciudad:** el campo ya no muestra un ejemplo con una ubicación real.
+- **Acceso directo:** interruptor en Ajustes para crear el acceso directo en el escritorio.
+
+### Arreglos internos
+
+- Modelo local más estable y confirmación de Salir corregida.
+
+## 0.2.9 (publicada, etiqueta `v0.2.9`)
 
 ### PC (P2 parte 1)
 
@@ -8,7 +24,7 @@
 - **Datos de la PC al modelo:** batería, disco libre por unidad, RAM e IP local se inyectan en `turnExtras` / `contextSnippet` (como el clima) cuando la pregunta lo pide, para que Capri responda en carácter.
 - Solo allowlist; PowerShell/Windows async con timeout; fallos → línea amable, sin crash. Windows only.
 
-## 0.2.8 (en preparación, sin publicar)
+## 0.2.8 (publicada, etiqueta `v0.2.8`)
 
 ### Clima y feriados
 

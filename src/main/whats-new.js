@@ -6,6 +6,12 @@
 const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
+  '0.2.11': [
+    'En juegos (también Minecraft) ya no aparezco ni bloqueo el mouse.',
+    'El campo de ciudad en Ajustes ya no muestra un ejemplo con una ubicación real.',
+    'Podés crear el acceso directo del escritorio desde Ajustes con un interruptor.',
+    'Arreglos internos: modelo local más estable y la confirmación de Salir.',
+  ],
   '0.2.10': [
     'Sin la casilla de OmniVoice hablo directo con la voz normal: sin «Cargando voz…» ni aviso de Torch.',
     'Si abrís Capri dos veces o hay un proceso de voz colgado, espero y sigo con tu voz clonada, no con la normal.',

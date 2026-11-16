@@ -27,6 +27,10 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 - **Hecho:** sin la casilla OmniVoice la voz va directo a la normal (sin «Cargando voz…» ni aviso de Torch); con dos Capri abiertos o un proceso de voz colgado se espera y se usa la voz clonada; reinstalar la voz desde Ajustes ya arregla la clonada y el aviso dice qué hacer (marcar OmniVoice, requiere NVIDIA); la risa suena a «ja, ja, ja».
 
+### 0.2.11 — Juegos y privacidad (publicada)
+
+- **Hecho:** Capri no aparece ni bloquea el mouse en juegos (también Minecraft); el campo de ciudad ya no muestra un ejemplo con ubicación real; interruptor en Ajustes para el acceso directo del escritorio; arreglos de modelo local y confirmación de Salir; se quitó el interruptor inerte «Dron en No molestar» de Ajustes.
+
 ### 0.3.0 — Velocidad
 
 - TTS por frase: empezar a hablar con la primera frase mientras el modelo sigue escribiendo.

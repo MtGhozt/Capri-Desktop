@@ -1498,13 +1498,6 @@ export class AppMenu {
       labels: ['NO', 'SÍ'],
       onChange: (on) => this.act('music-dance', on),
     });
-    section('NO MOLESTAR', 'behavior', 'gaming');
-    toggle('Dron en No molestar', {
-      setting: 'behavior',
-      on: cfg.gaming?.drone !== false,
-      labels: ['NO', 'SÍ'],
-      onChange: (on) => this.act('drone-mode', on),
-    });
     section('APARIENCIA', 'bubble');
     toggle('Animaciones de apps', {
       setting: 'bubble',

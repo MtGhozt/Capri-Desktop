@@ -88,9 +88,26 @@ test('0.2.10 has 3–4 short lines about the light voice install, the voice lock
   assert.match(all, /risa|ja, ja, ja/i);
 });
 
+test('0.2.11 has 4–5 short lines about games, city field, desktop shortcut and Salir', () => {
+  const lines = notesFor('0.2.11');
+  assert.equal(Array.isArray(lines), true);
+  assert.ok(lines.length >= 4 && lines.length <= 5);
+  for (const line of lines) assert.ok(line.length < 120);
+  const all = lines.join(' ');
+  assert.match(all, /juegos|Minecraft/i);
+  assert.match(all, /ciudad/i);
+  assert.match(all, /acceso directo|escritorio/i);
+  assert.match(all, /Salir|modelo local/i);
+});
+
 test('upgrade from 0.2.8 shows the 0.2.9 notes once', () => {
   assert.deepEqual(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.8' }), NOTES['0.2.9']);
   assert.equal(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.9' }), null);
+});
+
+test('upgrade from 0.2.10 shows the 0.2.11 notes once', () => {
+  assert.deepEqual(bootNotes({ version: '0.2.11', lastSeenVersion: '0.2.10' }), NOTES['0.2.11']);
+  assert.equal(bootNotes({ version: '0.2.11', lastSeenVersion: '0.2.11' }), null);
 });
 
 test('an upgrade to a version without notes says nothing', () => {
