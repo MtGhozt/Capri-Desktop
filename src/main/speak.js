@@ -3,8 +3,9 @@
 const BREAK = /(?<!\d)[.!?…]+(?:["»”')\]]+)?(?:\s+|$)|[\n\r]+/g;
 const LONG = 180;
 const SHORT = 20;
+const FIRST_COMMA = 25; // first speak of a turn: cut at the first comma once we have ~this many chars
 
-function pullSentences(buf) {
+function pullSentences(buf, { eager = false } = {}) {
   const sentences = [];
   let last = 0;
   BREAK.lastIndex = 0;
@@ -16,7 +17,13 @@ function pullSentences(buf) {
     last = end;
   }
   let rest = buf.slice(last);
-  if (rest.length >= LONG) {
+  if (eager && !sentences.length) {
+    const comma = rest.indexOf(', ');
+    if (comma >= FIRST_COMMA) {
+      sentences.push(rest.slice(0, comma + 1).trim());
+      rest = rest.slice(comma + 2);
+    }
+  } else if (rest.length >= LONG) {
     const cut = Math.max(rest.lastIndexOf(', '), rest.lastIndexOf(' '), rest.lastIndexOf(' '));
     if (cut >= 40) {
       sentences.push(rest.slice(0, cut + 1).trim());
@@ -57,10 +64,18 @@ function createSpeakQueue({ send }) {
   let held = '';
   let mood = null;
   let turn = 0;
+  let firstSent = false;
 
   function emit(text) {
     const line = String(text || '').trim();
     if (!line || !live) return;
+    // First speak of the turn: never hold — first audio as soon as a sentence (or early comma) lands.
+    if (!firstSent) {
+      firstSent = true;
+      held = '';
+      send(withTurn({ type: 'speak', text: line, id: live, mood: mood || undefined }, turn));
+      return;
+    }
     if (line.length < SHORT) {
       held = held ? `${held} ${line}` : line;
       return;
@@ -73,7 +88,7 @@ function createSpeakQueue({ send }) {
   function feed(piece) {
     if (!live) return;
     buf += piece || '';
-    const { sentences, rest } = pullSentences(buf);
+    const { sentences, rest } = pullSentences(buf, { eager: !firstSent });
     buf = rest;
     for (const sentence of sentences) emit(sentence);
   }
@@ -85,6 +100,7 @@ function createSpeakQueue({ send }) {
     held = '';
     mood = null;
     turn = Math.round(Number(turnId)) || 0;
+    firstSent = false;
     send(withTurn({ type: 'speak_start', id: live }, turn));
     return live;
   }
@@ -104,6 +120,7 @@ function createSpeakQueue({ send }) {
       if (out) send(withTurn({ type: 'speak', text: out, id: target, mood: mood || undefined }, msgTurn));
       live = 0;
       turn = 0;
+      firstSent = false;
     }
     send(withTurn({ type: 'speak_flush', id: target || 0 }, msgTurn));
   }
@@ -117,6 +134,7 @@ function createSpeakQueue({ send }) {
       held = '';
       mood = null;
       turn = 0;
+      firstSent = false;
     }
     send(withTurn({ type: 'stop_speak', id: target || 0 }, msgTurn));
   }
@@ -124,4 +142,4 @@ function createSpeakQueue({ send }) {
   return { start, feed, flush, stop, setMood };
 }
 
-module.exports = { createSpeakQueue, pullSentences, packPhrases, SHORT };
+module.exports = { createSpeakQueue, pullSentences, packPhrases, SHORT, FIRST_COMMA };

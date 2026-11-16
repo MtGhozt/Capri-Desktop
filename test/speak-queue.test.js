@@ -13,17 +13,43 @@ test('joins phrases shorter than 20 chars with the next one', () => {
   ]);
 });
 
-test('speak queue holds a short sentence until flush or a longer one', () => {
+test('first speak is emitted before the second sentence arrives', () => {
+  const sent = [];
+  const q = createSpeakQueue({ send: (msg) => sent.push(msg) });
+  q.start();
+  q.feed('Ok. ');
+  const afterFirst = sent.filter((m) => m.type === 'speak');
+  assert.equal(afterFirst.length, 1);
+  assert.equal(afterFirst[0].text, 'Ok.');
+  q.feed('Me duermo un rato más, choom.');
+  const speaks = sent.filter((m) => m.type === 'speak').map((m) => m.text);
+  assert.equal(speaks[0], 'Ok.');
+  assert.ok(speaks.length >= 2);
+  assert.match(speaks[1], /Me duermo/);
+});
+
+test('later short sentences still pack; first of the turn does not', () => {
   const sent = [];
   const q = createSpeakQueue({ send: (msg) => sent.push(msg) });
   const id = q.start();
+  q.feed('Listo choom, ya arranco con esto bien. '); // first: long enough sentence
   q.feed('Ok. ');
-  q.feed('Me duermo. ');
-  q.feed('Chau, nos vemos mañana choom.');
+  q.feed('Ya. ');
+  q.feed('Después vemos el resto del plan juntos.');
   q.flush(id);
   const speaks = sent.filter((m) => m.type === 'speak').map((m) => m.text);
+  assert.match(speaks[0], /Listo choom/);
+  assert.ok(speaks.some((t) => /Ok\. Ya\./.test(t) || /Después vemos/.test(t)));
+});
+
+test('first speak can cut at a comma after ~25 chars', () => {
+  const sent = [];
+  const q = createSpeakQueue({ send: (msg) => sent.push(msg) });
+  q.start();
+  q.feed('Bueno ahora mismo te digo, ');
+  const speaks = sent.filter((m) => m.type === 'speak');
   assert.equal(speaks.length, 1);
-  assert.match(speaks[0], /Ok\. Me duermo\./);
+  assert.match(speaks[0].text, /Bueno ahora mismo te digo,/);
 });
 
 test('the user turn id rides the speak messages that already exist', () => {
