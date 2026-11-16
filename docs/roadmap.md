@@ -73,6 +73,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - Retomar respuesta tras interrupción; decir "Capri" de nuevo mientras habla sin cortar/resetear la entrada de voz.
 - **Chat con Capri al lado (idea de la comunidad):** una ventanita de chat con Capri sentada al lado. Pedís algo (ej. «creame un código para X») y responde el proveedor de Cerebro (Claude, Gemini, etc.). Bloques de código con resaltado y botón Copiar; reutilizar la ventana de chat que ya existe. Falta el arte conceptual de la comunidad.
 - **Idiomas:** detectar el idioma de Windows (con selector en Ajustes) y traducir la interfaz (textos en un archivo por idioma); que el cerebro responda en ese idioma; Whisper ya entiende varios idiomas; pendiente: voces de Kokoro/OmniVoice por idioma y comandos directos (hoy en español). Versión grande, sin fecha.
+- **Voz con GPU AMD/Intel (idea de la comunidad):** probar DirectML (ONNX Runtime o torch-directml) empezando por Kokoro en ONNX; OmniVoice depende de CUDA y queda solo NVIDIA. ROCm en Windows todavía no es confiable. Necesita un tester con AMD. Mientras tanto, AMD usa Kokoro por CPU (el perfil automático lo recomienda).
 
 ### P5 — Personalidad y diversión
 
