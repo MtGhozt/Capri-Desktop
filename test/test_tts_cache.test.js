@@ -6,6 +6,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { skip } = require('./voice-py');
+
+// CI has no voice/.venv: the tts tests skip there, the tts_text ones still run (stdlib only).
+const SKIP = skip();
 
 function py(code) {
   const voice = path.join(__dirname, '..', 'voice');
@@ -22,7 +26,7 @@ function py(code) {
   return String(result.stdout || '').trim();
 }
 
-test('ref cache key changes when the wav or transcript changes', () => {
+test('ref cache key changes when the wav or transcript changes', { skip: SKIP }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-ref-'));
   const wav = path.join(dir, 'capri_ref_short.wav');
   const txt = path.join(dir, 'capri_ref_short.txt');
@@ -46,7 +50,7 @@ test('ref cache key changes when the wav or transcript changes', () => {
   assert.notEqual(b, c);
 });
 
-test('ttsRef null resolves to design mode, not a missing default wav', () => {
+test('ttsRef null resolves to design mode, not a missing default wav', { skip: SKIP }, () => {
   const out = py(
     'from pathlib import Path; from tts import resolve_ref, design_instruct, DEFAULT_TTS_DESIGN; '
     + 'import tempfile; '
@@ -64,7 +68,7 @@ test('ttsRef null resolves to design mode, not a missing default wav', () => {
   assert.match(lines[3], /young adult/);
 });
 
-test('clamps OmniVoice diffusion steps', () => {
+test('clamps OmniVoice diffusion steps', { skip: SKIP }, () => {
   const out = py(
     'from tts import tts_steps; print(tts_steps(None)); print(tts_steps(12)); print(tts_steps(3)); print(tts_steps(99))',
   );
@@ -75,7 +79,7 @@ test('clamps OmniVoice diffusion steps', () => {
   assert.equal(high, 32);
 });
 
-test('normalizes PCM peak to about -1 dBFS', () => {
+test('normalizes PCM peak to about -1 dBFS', { skip: SKIP }, () => {
   const out = py(
     'import numpy as np; from tts import normalize_pcm; '
     + 'x=normalize_pcm(np.array([0.1,-0.2,0.05], dtype=np.float32)); '
@@ -171,7 +175,7 @@ test('TTS splits long phrases at commas for OmniVoice chunks', () => {
   assert.equal(lines[2], 'True');
 });
 
-test('missing mood prompt falls back to the playful default', () => {
+test('missing mood prompt falls back to the playful default', { skip: SKIP }, () => {
   const out = py(
     'from tts import pick_mood_prompt; '
     + 'prompts={"burla":"B","seria":"S"}; '
@@ -187,7 +191,7 @@ test('missing mood prompt falls back to the playful default', () => {
   assert.equal(lines[3], "('DEFAULT', 'playful')");
 });
 
-test('reference transcripts read utf-8 BOM and Windows cp1252', () => {
+test('reference transcripts read utf-8 BOM and Windows cp1252', { skip: SKIP }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-ref-enc-'));
   const txt = path.join(dir, 'ref.txt');
   const read = () => py(
@@ -204,7 +208,7 @@ test('reference transcripts read utf-8 BOM and Windows cp1252', () => {
   assert.equal(read(), expected);
 });
 
-test('a missing clone transcript says it fell back to voice-design', () => {
+test('a missing clone transcript says it fell back to voice-design', { skip: SKIP }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-ref-notice-'));
   const wav = path.join(dir, 'ref.wav');
   fs.writeFileSync(wav, 'RIFF');
@@ -228,7 +232,7 @@ test('a missing clone transcript says it fell back to voice-design', () => {
   assert.match(notices, /transcripci/i);
 });
 
-test('an unsupported CUDA compute capability is a GPU reason, not a warning', () => {
+test('an unsupported CUDA compute capability is a GPU reason, not a warning', { skip: SKIP }, () => {
   const out = py(
     'import tts\n'
     + 'class Cuda:\n'
@@ -243,7 +247,7 @@ test('an unsupported CUDA compute capability is a GPU reason, not a warning', ()
   assert.match(out, /not supported/);
 });
 
-test('an RTX 4060 (sm_89) runs the sm_86 cubin torch ships', () => {
+test('an RTX 4060 (sm_89) runs the sm_86 cubin torch ships', { skip: SKIP }, () => {
   const out = py(
     'import tts\n'
     + 'class Cuda:\n'
@@ -257,7 +261,7 @@ test('an RTX 4060 (sm_89) runs the sm_86 cubin torch ships', () => {
   assert.equal(out, 'None');
 });
 
-test('a GPU from another major version is still rejected', () => {
+test('a GPU from another major version is still rejected', { skip: SKIP }, () => {
   const out = py(
     'import tts\n'
     + 'class Cuda:\n'
@@ -272,7 +276,7 @@ test('a GPU from another major version is still rejected', () => {
   assert.match(out, /not supported/);
 });
 
-test('the fallback notice names Torch, CUDA, VRAM and other failures apart', () => {
+test('the fallback notice names Torch, CUDA, VRAM and other failures apart', { skip: SKIP }, () => {
   const out = py(
     'import tts\n'
     + 'print(tts.fallback_message("No module named \'torch\'"))\n'
@@ -292,7 +296,7 @@ test('the fallback notice names Torch, CUDA, VRAM and other failures apart', () 
   assert.doesNotMatch(other, /memoria|GPU/);
 });
 
-test('mood prompts are built once, on first use, not all at boot', () => {
+test('mood prompts are built once, on first use, not all at boot', { skip: SKIP }, () => {
   const out = py(
     'import tempfile; from pathlib import Path; from tts import OmniVoiceTTS\n'
     + 'd = Path(tempfile.mkdtemp()); (d / "b.wav").write_bytes(b"x"); (d / "b.txt").write_text("hola")\n'
