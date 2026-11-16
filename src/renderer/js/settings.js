@@ -38,6 +38,18 @@ for (const tab of SETTINGS_TABS) {
 nav.firstElementChild.classList.add('is-active');
 
 menu.open = true;
+// Until getMenu lands: never leave the panel blank (reuse appmenu body/hint styles).
+const loadingPlate = document.createElement('div');
+loadingPlate.className = 'appmenu__plate';
+const loadingBody = document.createElement('div');
+loadingBody.className = 'appmenu__body';
+const loading = document.createElement('div');
+loading.className = 'appmenu__hint';
+loading.textContent = 'Cargando…';
+loadingBody.append(loading);
+loadingPlate.append(loadingBody);
+menuEl.append(loadingPlate);
+
 let pendingHint = '';
 window.addEventListener('capri-settings-tab', (event) => {
   const tab = SETTINGS_TABS.find((item) => item.id === event.detail);
@@ -75,7 +87,8 @@ Promise.all([
     nav.querySelector('.is-active')?.classList.remove('is-active');
     [...nav.children].find((item) => item.textContent === 'Cerebro')?.classList.add('is-active');
   }
-  menu.render(state);
+  menu.render(state); // replaces the Cargando… plate
 }).catch((err) => {
   console.error('[capri] settings load failed', err);
+  loading.textContent = 'No pude cargar los ajustes.';
 });

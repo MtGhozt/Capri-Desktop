@@ -36,7 +36,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - **Hecho:** TTS por frase: Main corta por oración (`speak.js`) y el sidecar sintetiza N+1 mientras suena N (`_synth_loop` / `_play_loop`, prefetch 2).
 - **Hecho:** Primera frase más corta: el primer `speak` del turno sale al cerrar oración o al primer coma ~25 chars (sin hold); el resto sigue empaquetando.
 - **Hecho:** Tiempos en el log: etapas de la respuesta y tiempo hasta el primer audio, de punta a punta.
-- Ajustes con indicador de carga al abrir.
+- **Hecho:** Ajustes con indicador de carga al abrir («Cargando…» hasta que llega getMenu).
 - Spotify confirma que la canción arrancó.
 - Instalación: timeout de descarga colgada y progreso real por paquete.
 - **Hecho:** Perfil automático según tu PC: al arrancar (y desde Ajustes › Comportamiento) recomienda OmniVoice CUDA vs Kokoro, tamaño de Whisper y animaciones ligeras. No cambia nada sola: Aplicar / Ahora no.

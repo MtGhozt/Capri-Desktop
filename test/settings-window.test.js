@@ -2,6 +2,8 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { createSettingsWindow } = require('../src/main/settings-window');
 
 test('settings window is created once and focused when opened again', () => {
@@ -18,4 +20,12 @@ test('settings window is created once and focused when opened again', () => {
   assert.equal(first, second);
   assert.equal(windows.length, 1);
   assert.equal(first.focuses, 1);
+});
+
+test('settings shows Cargando… until getMenu resolves (no blank panel)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'settings.js'), 'utf8');
+  assert.match(src, /Cargando…/);
+  assert.match(src, /appmenu__hint/);
+  assert.match(src, /getMenu\(\{ folded: false \}\)/);
+  assert.match(src, /menu\.render\(state\)/);
 });
