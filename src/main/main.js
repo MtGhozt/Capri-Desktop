@@ -2336,8 +2336,11 @@ function applyMenuAction(id, value) {
     }
     case 'desktop-shortcut': {
       try {
-        const desk = app.getPath('desktop');
-        const link = path.join(desk, 'Capri.lnk');
+        const link = path.join(app.getPath('desktop'), 'Capri.lnk');
+        if (value === false) { // the Comportamiento toggle turned it off
+          if (fs.existsSync(link)) fs.unlinkSync(link);
+          return { ok: true, message: 'Acceso directo quitado del Escritorio.' };
+        }
         const ok = shell.writeShortcutLink(link, {
           target: process.execPath,
           cwd: path.dirname(process.execPath),
@@ -2886,6 +2889,7 @@ function menuState(extra = {}) {
       current: d.id === current,
     })),
     login: app.getLoginItemSettings(loginItemOptions()).openAtLogin,
+    deskShortcut: fs.existsSync(path.join(app.getPath('desktop'), 'Capri.lnk')),
     online: t.online(PORT),
   };
 }

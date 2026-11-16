@@ -1399,6 +1399,12 @@ export class AppMenu {
       labels: ['NO', 'SÍ'],
       onChange: (on) => this.act('startup', on),
     });
+    toggle('Acceso directo en Escritorio', {
+      setting: 'behavior',
+      on: Boolean(state.deskShortcut),
+      labels: ['NO', 'SÍ'],
+      onChange: (on) => this.act('desktop-shortcut', on),
+    });
 
     section('RECORDATORIOS', 'reminders');
     const pending = Array.isArray(cfg.reminders) ? cfg.reminders : [];
@@ -2771,6 +2777,7 @@ export class AppMenu {
       case 'theme': cfg.theme = value; return true;
       case 'drag-lock': cfg.locked = value === 'locked' || value === true; return true;
       case 'startup': this.lastState.login = Boolean(value); return true;
+      case 'desktop-shortcut': this.lastState.deskShortcut = Boolean(value); return true;
       case 'drone-mode': cfg.gaming = { ...(cfg.gaming || {}), drone: Boolean(value) }; return true;
       case 'comments': cfg.comments = { ...(cfg.comments || {}), enabled: Boolean(value) }; return true;
       case 'greetings': cfg.behavior = { ...(cfg.behavior || {}), greetings: Boolean(value) }; return true;
@@ -2799,6 +2806,7 @@ export class AppMenu {
     const keep = this.settingsMode || id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'music-player'
       || id === 'model-provider' || id === 'spotify-connect' || id === 'spotify-disconnect' || id === 'drag-lock' || id === 'theme'
       || id === 'startup' || id === 'gaming-mode' || id === 'drone-mode' || id === 'comments' || id === 'comments-range'
+      || id === 'desktop-shortcut'
       || id === 'greetings' || id === 'unlock-greeting' || id === 'caresses' || id === 'music-dance'
       || id === 'app-fx' || id === 'scanlines' || id === 'game-list'
       || id === 'time-zone' || id === 'time-format' || id === 'weather-place' || id === 'reminder-update' || id === 'reminder-delete';

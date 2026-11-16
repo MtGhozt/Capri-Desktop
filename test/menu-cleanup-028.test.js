@@ -25,6 +25,21 @@ test('Iniciar con Windows is back in Comportamiento and reads state.login', () =
   assert.match(main, /getLoginItemSettings\(loginItemOptions\(\)\)\.openAtLogin/);
 });
 
+test('Acceso directo en Escritorio toggles the shortcut from Comportamiento', () => {
+  const menu = fs.readFileSync(menuPath, 'utf8');
+  assert.match(menu, /toggle\('Acceso directo en Escritorio'/);
+  assert.match(menu, /on:\s*Boolean\(state\.deskShortcut\)/);
+  assert.match(menu, /this\.act\('desktop-shortcut', on\)/);
+  // the row flips at once and the menu stays open, like Iniciar con Windows
+  assert.match(menu, /case 'desktop-shortcut': this\.lastState\.deskShortcut = Boolean\(value\)/);
+  assert.match(menu, /\|\| id === 'desktop-shortcut'/);
+  const main = fs.readFileSync(mainPath, 'utf8');
+  // state reads the .lnk; off removes it, on (and the first-run guide, no value) creates it
+  assert.match(main, /deskShortcut: fs\.existsSync\(path\.join\(app\.getPath\('desktop'\), 'Capri\.lnk'\)\)/);
+  assert.match(main, /case 'desktop-shortcut': \{[\s\S]{0,200}?value === false[\s\S]{0,200}?unlinkSync\(link\)/);
+  assert.match(main, /shell\.writeShortcutLink\(link/);
+});
+
 test('settings tabs rename Memoria/Oído and add Recordatorios', () => {
   assert.deepEqual(SETTINGS_TABS.map((tab) => tab.id), [
     'model', 'agents', 'memory', 'hearing', 'apps', 'bubble', 'music', 'shortcuts',
