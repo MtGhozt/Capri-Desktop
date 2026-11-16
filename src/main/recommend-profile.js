@@ -15,19 +15,61 @@ const THRESHOLDS = {
   WHISPER_LOW: 'base',
 };
 
-function recommendProfile({ gpu, vramMB, ramMB, cores } = {}) {
+// Same cubins the voice Torch build ships (see voice/tts.py cuda_arch_reason + test_tts_cache).
+const TORCH_ARCHS = ['sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120'];
+
+function parseComputeCap(raw) {
+  const m = String(raw || '').trim().match(/^(\d+)\.(\d+)$/);
+  if (!m) return null;
+  return { major: Number(m[1]), minor: Number(m[2]) };
+}
+
+// Forward-compat within a major: sm_86 covers sm_89; another major (or below every build) does not.
+function cudaArchSupported(computeCap, archs = TORCH_ARCHS) {
+  const cap = typeof computeCap === 'object' && computeCap
+    ? computeCap
+    : parseComputeCap(computeCap);
+  if (!cap) return false;
+  const built = [];
+  for (const name of archs) {
+    const digits = String(name).trim().toLowerCase()
+      .replace(/^compute_/, '')
+      .replace(/^sm_/, '')
+      .replace(/a$/, '');
+    if (digits.length >= 2 && /^\d+$/.test(digits)) {
+      built.push({ major: Number(digits.slice(0, -1)), minor: Number(digits.slice(-1)) });
+    }
+  }
+  return built.some((b) => b.major === cap.major && b.minor <= cap.minor);
+}
+
+function recommendProfile({ gpu, vramMB, ramMB, cores, computeCap } = {}) {
   const nvidia = String(gpu || '').toLowerCase() === 'nvidia';
   const vram = Number(vramMB) || 0;
   const ram = Number(ramMB) || 0;
   const nCores = Number(cores) || 0;
-  const voice = nvidia && vram >= THRESHOLDS.OMNI_VRAM_MB ? 'omnivoice-cuda' : 'kokoro';
   const low = (ram > 0 && ram < THRESHOLDS.LOW_RAM_MB) || (nCores > 0 && nCores < THRESHOLDS.LOW_CORES);
   const whisper = low ? THRESHOLDS.WHISPER_LOW : THRESHOLDS.WHISPER_OK;
   const lightAnimations = Boolean(low);
+
+  let voice = 'kokoro';
+  let archReason = '';
+  if (nvidia && vram >= THRESHOLDS.OMNI_VRAM_MB) {
+    const cap = parseComputeCap(computeCap);
+    if (!cap) {
+      archReason = 'No pude leer la arquitectura CUDA de la GPU; mejor Kokoro';
+    } else if (!cudaArchSupported(cap)) {
+      archReason = `La GPU (sm_${cap.major}${cap.minor}) no es compatible con OmniVoice; mejor Kokoro`;
+    } else {
+      voice = 'omnivoice-cuda';
+    }
+  }
+
   const voiceLabel = voice === 'omnivoice-cuda' ? 'OmniVoice' : 'Kokoro';
-  const reason = lightAnimations
+  const bits = lightAnimations
     ? `${voiceLabel}, Whisper ${whisper}, animaciones ligeras`
     : `${voiceLabel}, Whisper ${whisper}`;
+  const reason = archReason || bits;
   return { voice, whisper, lightAnimations, reason };
 }
 
@@ -52,6 +94,7 @@ function detectHardware({ readVramImpl = readVram, osImpl = os } = {}) {
       vramMB: vram?.totalMiB ?? 0,
       ramMB,
       cores,
+      computeCap: vram?.computeCap || null,
     };
   } catch {
     return null;
@@ -104,6 +147,9 @@ function shouldOfferBubble({
 
 module.exports = {
   THRESHOLDS,
+  TORCH_ARCHS,
+  parseComputeCap,
+  cudaArchSupported,
   recommendProfile,
   hardwareFingerprint,
   detectHardware,
