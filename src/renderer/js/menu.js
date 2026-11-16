@@ -1495,6 +1495,10 @@ export class AppMenu {
       labels: ['NO', 'SÍ'],
       onChange: (on) => this.act('music-dance', on),
     });
+    action('Recomendar perfil para mi PC', {
+      setting: 'behavior',
+      onClick: () => this.act('recommend-profile'),
+    });
     section('APARIENCIA', 'bubble');
     toggle('Animaciones de apps', {
       setting: 'bubble',

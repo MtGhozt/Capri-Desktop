@@ -38,7 +38,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - Ajustes con indicador de carga al abrir.
 - Spotify confirma que la canción arrancó.
 - Instalación: timeout de descarga colgada y progreso real por paquete.
-- **Perfil automático según tu PC (idea de la comunidad):** al arrancar Capri lee GPU/VRAM/RAM y recomienda un perfil (voz OmniVoice CUDA vs Kokoro CPU, tamaño de Whisper, menos animaciones en PCs lentas). No cambia nada sola: sugiere y vos aceptás; después se puede cambiar en Ajustes.
+- **Hecho:** Perfil automático según tu PC: al arrancar (y desde Ajustes › Comportamiento) recomienda OmniVoice CUDA vs Kokoro, tamaño de Whisper y animaciones ligeras. No cambia nada sola: Aplicar / Ahora no.
 
 ## Próximo, por prioridad
 

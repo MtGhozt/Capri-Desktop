@@ -1155,6 +1155,32 @@ async function boot() {
         };
         break;
       }
+      case 'profile-ask': { // auto profile from PC hardware (Aplicar / Ahora no)
+        const prevAction = panel.onAction;
+        panel.say({
+          kind: 'info',
+          badge: 'PERFIL',
+          line: cmd.text,
+          hold: null,
+          actions: [
+            { id: 'profile-apply', label: 'Aplicar', primary: true },
+            { id: 'profile-later', label: 'Ahora no' },
+          ],
+        });
+        panel.onAction = (id) => {
+          if (id === 'profile-apply' || id === 'profile-later') {
+            host.menuAction({
+              id: 'profile-answer',
+              value: id === 'profile-apply' ? 'apply' : 'dismiss',
+            }).catch(() => {});
+            panel.onAction = prevAction;
+            panel.hide();
+            return;
+          }
+          prevAction?.(id);
+        };
+        break;
+      }
       case 'quit-ask': { // Salir / "ciérrate": Sí / No before she actually quits
         // Solid window: no click-through / hover passthrough until confirm closes (+~300 ms).
         holdQuitConfirm(true);

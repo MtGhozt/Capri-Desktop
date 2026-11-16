@@ -74,6 +74,10 @@ const { createComments } = require('./comments');
 const { createGameMode, FOCUS_LOSS_DEBOUNCE_MS } = require('./game-mode');
 const { createGameQuiet } = require('./game-quiet');
 const { vramText } = require('./vram');
+const {
+  recommendProfile, detectHardware, hardwareFingerprint, shouldOfferBubble,
+  applyPatch, bubbleLine, matchesConfig,
+} = require('./recommend-profile');
 const { logEvent, voiceLogPath } = require('./log');
 const { createTurnTiming, currentTurn, enterTurn, fromSidecar } = require('./timing');
 const turns = createTurnTiming({ log: (line) => logEvent(voiceLogPath(), line) });
@@ -727,6 +731,49 @@ function answerUpdatePrompt(value) {
     return { ok: true };
   }
   return { ok: true }; // later
+}
+
+let pendingProfile = null;
+
+function maybeOfferProfile({ force = false } = {}) {
+  if (gameQuiet.active()) return { ok: true, skipped: 'game' };
+  const cfg = config.load();
+  const hw = detectHardware();
+  if (!hw) return { ok: true, skipped: 'detect' };
+  const rec = recommendProfile(hw);
+  if (force && matchesConfig(cfg, rec)) {
+    sendCommand('line', { badge: 'PERFIL', text: 'Ya estás en el perfil que te conviene.' });
+    return { ok: true, skipped: 'match' };
+  }
+  if (!shouldOfferBubble({
+    cfg,
+    rec,
+    hw,
+    force,
+    firstRun: !cfg.welcomed,
+    gameQuiet: gameQuiet.active(),
+  })) {
+    return { ok: true, skipped: 'no-offer' };
+  }
+  pendingProfile = { rec, hw };
+  sendCommand('profile-ask', { text: bubbleLine(rec) });
+  return { ok: true, offered: true };
+}
+
+function answerProfilePrompt(value) {
+  const pending = pendingProfile;
+  pendingProfile = null;
+  if (!pending?.rec || !pending?.hw) return { ok: true };
+  const answer = String(value || '');
+  if (answer === 'apply') {
+    updateConfig(applyPatch(pending.rec));
+    return { ok: true, applied: true };
+  }
+  if (answer === 'dismiss') {
+    updateConfig({ profile: { dismissedHw: hardwareFingerprint(pending.hw) } });
+    return { ok: true, dismissed: true };
+  }
+  return { ok: true };
 }
 
 // One of her direct-command lines (lines-es.js), said and shown where the command came from:
@@ -2312,6 +2359,10 @@ function applyMenuAction(id, value) {
       return runUpdateCheck({ force: true });
     case 'update-answer':
       return answerUpdatePrompt(value);
+    case 'recommend-profile':
+      return maybeOfferProfile({ force: true });
+    case 'profile-answer':
+      return answerProfilePrompt(value);
     case 'share-logs': {
       const file = voiceLogPath();
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -3816,6 +3867,10 @@ function main() {
     setTimeout(scanIfStale, 20000); // after her voice is up: the disk is busy enough before
     setTimeout(() => maybeOpenSetupHint().catch((err) => logEvent(voiceLogPath(), `[capri] setup hint failed: ${err.message}`)), 2500);
     setTimeout(() => runUpdateCheck().catch((err) => appLog(`updates check failed: ${err.message}`)), 8000);
+    // after welcome / what's-new: one optional profile bubble (never over a game / first run)
+    setTimeout(() => {
+      try { maybeOfferProfile(); } catch (err) { appLog(`profile offer failed: ${err.message}`); }
+    }, 12000);
     // warm CLI PATH cache so Ajustes › Cerebro does not stall the first open
     setTimeout(() => { try { detectAgents(); } catch { /* PATH oddities */ } }, 2500);
 

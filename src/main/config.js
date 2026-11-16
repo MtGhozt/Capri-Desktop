@@ -46,6 +46,9 @@ const DEFAULTS = {
     lastCheck: 0,
     skippedVersion: '',
   },
+  profile: {
+    dismissedHw: '',         // hardware fingerprint after "Ahora no" on the auto profile bubble
+  },
   guide: {
     welcome: false,          // Claude Code "plug me in" onboarding
     setupHint: false,        // first-run: opened Cerebro because nothing could answer yet
@@ -287,6 +290,7 @@ function load() {
     ...saved,
     llm: { ...DEFAULTS.llm, ...(saved.llm || {}) },
     updates: { ...DEFAULTS.updates, ...(saved.updates || {}) },
+    profile: { ...DEFAULTS.profile, ...(saved.profile || {}) },
     guide: { ...DEFAULTS.guide, ...(saved.guide || {}) },
     idle: {
       ...DEFAULTS.idle,
@@ -353,6 +357,7 @@ function save(patch) {
     ...patch,
     llm: { ...DEFAULTS.llm, ...(current.llm || {}), ...(patch.llm || {}) },
     updates: { ...DEFAULTS.updates, ...(current.updates || {}), ...(patch.updates || {}) },
+    profile: { ...DEFAULTS.profile, ...(current.profile || {}), ...(patch.profile || {}) },
     guide: { ...DEFAULTS.guide, ...(current.guide || {}), ...(patch.guide || {}) },
     idle: {
       ...DEFAULTS.idle,
