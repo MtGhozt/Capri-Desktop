@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { app } = require('electron');
+const { PROVIDERS } = require('./chat-providers');
 
 const DEFAULTS = {
   scale: 0.6,        // sprite scale, 0.6 ≈ 250px tall
@@ -212,6 +213,27 @@ function migrateGeminiModel(llm) {
   return { llm: value, changed };
 }
 
+// The local model used to live in llm.model alone; the provider migration copied whatever model
+// was current into the local slots, and a cloud name means nothing to LM Studio. Put it back.
+function migrateLocalModel(llm) {
+  const value = { ...(llm || {}) };
+  let changed = false;
+  const cloud = (name) => Object.values(PROVIDERS).some((p) => !p.local && p.model === name);
+  if (!value.localModel) {
+    value.localModel = value.model;
+    changed = true;
+  }
+  if (cloud(value.localModel)) {
+    value.localModel = DEFAULTS.llm.localModel;
+    changed = true;
+  }
+  if (cloud(value.models?.local)) {
+    value.models = { ...value.models, local: DEFAULTS.llm.localModel };
+    changed = true;
+  }
+  return { llm: value, changed };
+}
+
 function file() {
   return path.join(app.getPath('userData'), 'config.json');
 }
@@ -303,11 +325,9 @@ function load() {
     cache.lang = 'es';
     dirty = true;
   }
-  // The local model used to live in llm.model alone: keep hers when moving to a provider.
-  if (!cache.llm.localModel) {
-    cache.llm.localModel = cache.llm.model;
-    dirty = true;
-  }
+  const localModel = migrateLocalModel(cache.llm);
+  cache.llm = localModel.llm;
+  if (localModel.changed) dirty = true;
   // [calm] → mood map: drop the old single calm ref from config.json
   if (cache.voice && 'ttsRefCalm' in cache.voice) {
     delete cache.voice.ttsRefCalm;
@@ -394,4 +414,5 @@ module.exports = {
   reviveMigratedTts,
   migrateBrainOrder,
   migrateGeminiModel,
+  migrateLocalModel,
 };

@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
+const { modelForProvider } = require('./chat-models');
+const { PROVIDERS } = require('./chat-providers');
 
 function defaultBin() {
   const name = process.platform === 'win32' ? 'lms.exe' : 'lms';
@@ -110,7 +112,7 @@ function createLms({ loadConfig, onStatus }) {
       return 'failed';
     }
 
-    const model = llm.model || 'google/gemma-4-e2b';
+    const model = modelForProvider(llm, 'local', PROVIDERS);
     const ctx = String(llm.contextLength || 8192);
     const gpu = String(llm.gpu || 'max');
     const loaded = await run(

@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { switchProvider, setProviderModel, modelForProvider } = require('../src/main/chat-models');
 const { PROVIDERS } = require('../src/main/chat-providers');
-const { migrateBrainOrder, migrateGeminiModel } = require('../src/main/config');
+const { migrateBrainOrder, migrateGeminiModel, migrateLocalModel } = require('../src/main/config');
 
 const providers = {
   local: { model: 'google/gemma-4-e2b', local: true },
@@ -92,4 +92,25 @@ test('a hand-picked gemini model is left alone', () => {
   assert.equal(custom.changed, false);
   assert.equal(custom.llm.model, 'gemini-2.5-pro');
   assert.equal(custom.llm.models.gemini, 'gemini-2.5-pro');
+});
+
+test('a cloud model copied into the local slots goes back to the local default', () => {
+  const migrated = migrateLocalModel({
+    provider: 'gemini',
+    model: 'gemini-flash-lite-latest',
+    localModel: 'gemini-flash-lite-latest',
+    models: { gemini: 'gemini-flash-lite-latest', local: 'gemini-flash-lite-latest' },
+  });
+  assert.equal(migrated.changed, true);
+  assert.equal(migrated.llm.localModel, 'google/gemma-4-e2b');
+  assert.equal(migrated.llm.models.local, 'google/gemma-4-e2b');
+  assert.equal(migrated.llm.model, 'gemini-flash-lite-latest'); // the cloud answer stays
+});
+
+test('the legacy local-model copy never takes a cloud model, and a hand-picked one stays', () => {
+  const cloud = migrateLocalModel({ provider: 'gemini', model: 'gemini-flash-lite-latest', models: {} });
+  assert.equal(cloud.llm.localModel, 'google/gemma-4-e2b');
+
+  const custom = migrateLocalModel({ provider: 'local', model: 'my-local-llama', models: {} });
+  assert.equal(custom.llm.localModel, 'my-local-llama');
 });
