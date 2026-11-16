@@ -106,3 +106,21 @@ test('configured apps go through gameOnScreen too', () => {
   const windows = { fgExe: 'C:\\emu\\Dolphin.exe', fgFull: true };
   assert.equal(gameOnScreen(windows, ['dolphin.exe']), true);
 });
+
+test('game mode takes any fullscreen window that is not a known non-game', () => {
+  // javaw runs the game from wherever the launcher put it: no games folder needed
+  assert.equal(gameOnScreen({ fgExe: 'C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe', fgFull: true }), true);
+  assert.equal(gameOnScreen({ fgExe: 'C:\\Users\\Matias\\Downloads\\SomeGame\\game.exe', fgFull: true }), true);
+  // ...but the shell, browsers, terminals and overlays never do
+  for (const exe of [
+    'C:\\Windows\\explorer.exe',
+    'C:\\Windows\\System32\\taskmgr.exe',
+    'C:\\Program Files\\Windows Terminal\\WindowsTerminal.exe',
+    'C:\\Program Files\\BraveSoftware\\Brave-Browser\\brave.exe',
+  ]) {
+    assert.equal(gameOnScreen({ fgExe: exe, fgFull: true }), false, exe);
+  }
+  // her comments stay strict: an unconfigured emu or a stray javaw in front is nothing
+  assert.equal(isGameExe('C:\\emu\\Dolphin.exe'), false);
+  assert.equal(isGameExe('C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe'), false);
+});

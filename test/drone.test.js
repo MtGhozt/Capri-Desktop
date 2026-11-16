@@ -36,3 +36,15 @@ test('game drone mode hides dormant and restores it when still dormant', () => {
   assert.match(app, /case 'game-drone':[\s\S]*?drone\.hide\(\);[\s\S]*?machine\.get\(\) === 'DORMANT'[\s\S]*?dormant\.show\(\)/);
   assert.match(app, /if \(!droneActive\) \{[\s\S]*?dormant\.show\(\)/);
 });
+
+test('entering a game no longer starts the drone', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const from = main.indexOf('async function gameEnter');
+  const enter = main.slice(from, main.indexOf('async function gameLeave', from));
+  assert.ok(from > 0, 'gameEnter exists');
+  assert.doesNotMatch(enter, /game-drone/);
+  assert.doesNotMatch(enter, /gaming\?\.drone/);
+  // Leaving still hides it, so nothing can stay on screen over her after the game.
+  const leave = main.slice(main.indexOf('async function gameLeave'), main.indexOf('function voiceReplyOn'));
+  assert.match(leave, /sendCommand\('game-drone', \{ on: false \}\)/);
+});

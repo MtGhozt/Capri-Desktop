@@ -77,3 +77,31 @@ test('the game wake brings her back with no bubble and no chime', () => {
   assert.match(app, /silent \? Promise\.resolve\(\) : bubble\.birth/);
   assert.match(app, /if \(!silent\) bubble\.show\(\)/);
 });
+
+test('hover while she is asleep under a fullscreen window keeps click-through', () => {
+  // Her chip sits over the fullscreen window: a hover there must not make her take clicks.
+  assert.match(main, /if \(on && overlayFolded && lastWindows\?\.fgFull\) return;/);
+  // An unchanged hover ask is not written to the window again.
+  assert.match(main, /if \(on === lastInteractive\) return;[\s\S]{0,120}?lastInteractive = on;\s*setClickThrough\(!on/);
+  assert.match(main, /let lastInteractive = null/);
+  // ...and any non-hover change invalidates that dedupe, so the next ask is applied.
+  assert.match(main, /if \(reason !== 'hover-on' && reason !== 'hover-off'\) lastInteractive = null/);
+});
+
+test('the hover re-send and the pointer poll never go faster than a second', () => {
+  const resync = app.match(/host\.setInteractive\(interactive\);\s*\}, (\d+)\)/);
+  assert.ok(resync, 'the periodic re-send exists');
+  assert.ok(Number(resync[1]) >= 1000, `re-send every ${resync[1]} ms`);
+  const watch = app.match(/const WATCH_MS = (\d+)/);
+  assert.ok(watch, 'the pointer poll exists');
+  assert.ok(Number(watch[1]) >= 1000, `pointer poll every ${watch[1]} ms`);
+});
+
+test('an auto wake over a game never toggles the chat', () => {
+  // The wake listen (and the line it heard) never reach the renderer while a game is on.
+  assert.match(main, /quietWake = Boolean\(gameMode\?\.active\(\)\) && payload\.wake === true/);
+  assert.match(main, /const hideWake = quietWake\s*\|\| \(payload\?\.type === 'transcript'/);
+  assert.match(main, /if \(!hideWake\) \{\s*if \(overlay\?\.webContents/);
+  // openChat itself stays behind the game-quiet policy for every source, wake included.
+  assert.match(main, /function openChat[\s\S]{0,200}gameQuiet\.active\(\)/);
+});

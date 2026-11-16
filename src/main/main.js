@@ -143,6 +143,7 @@ let ttsLoading = false;
 let lastTts = null; // last tts_state from the sidecar: engine ('off' | 'kokoro' | 'omnivoice') + state
 let voiceTalking = false;
 let voiceListening = false;
+let quietWake = false; // the capture running now began as an auto wake over a game
 let voiceMic = { open: true, needed: true, message: '' };
 let llmBusy = false;
 let voiceQueue = [];
@@ -355,8 +356,11 @@ let clickThrough = true;
 let lastThrough = null; // last value written to the log: hover flips it on every click
 let handedBackAt = 0; // when she last gave the keyboard back to the window before her
 let quitSolid = false; // ¿Salir? visible: ignoreMouseEvents stays off until clear + grace
+let lastInteractive = null; // last hover state she acted on: an unchanged ask costs nothing
 function setClickThrough(on, reason = 'state') {
   clickThrough = Boolean(on);
+  // Anything but hover moved her: the next hover ask has to be applied, not deduped away.
+  if (reason !== 'hover-on' && reason !== 'hover-off') lastInteractive = null;
   if (!overlay || overlay.isDestroyed()) return;
   // ¿Salir? / open menu: never re-enable ignoreMouseEvents (hover can stay false after Win+L).
   // A game owns the screen: clicks always pass through, whatever she last asked for.
@@ -2042,11 +2046,7 @@ async function gameEnter(windows) {
   followUp.cancel();
   // Brief line, then quiet. Wake mute is set by createGameMode; sidecar stays up for PTT.
   try { speakLine(pickLine('juegoEntrar')); } catch { /* pool missing in old builds */ }
-  sendCommand('sleep'); // DORMANT / hidden; drone may replace her
-  if (config.load().gaming?.drone !== false) {
-    sendCommand('game-drone', { on: true });
-    gameLog('drone visible before unload');
-  }
+  sendCommand('sleep'); // DORMANT / hidden
   if (lms?.status() === 'booting') await lms.whenReady(); // a load in flight would land anyway
   gameHadLlm = lms?.status() === 'ready';
   await lms?.unloadAll?.();
@@ -2055,9 +2055,6 @@ async function gameEnter(windows) {
     return;
   }
   gameLog(`game on after unload wakeMuted=${Boolean(voice?.wakeMuted?.())} ${vramText()}`);
-  if (config.load().gaming?.drone !== false) {
-    gameLog(`drone ready ${vramText()}`);
-  }
 }
 
 async function gameLeave() {
@@ -3099,6 +3096,10 @@ async function runDirectSegments(segments) {
 function registerIpc() {
   ipcMain.on('overlay:interactive', (_e, on) => {
     if (gameQuiet.active()) return; // hover never takes click-through away during a game
+    // Asleep under a fullscreen window: her chip sits over it, clicks keep passing through.
+    if (on && overlayFolded && lastWindows?.fgFull) return;
+    if (on === lastInteractive) return; // unchanged: the window already agrees
+    lastInteractive = on;
     setClickThrough(!on, on ? 'hover-on' : 'hover-off');
   });
   ipcMain.on('renderer:log', (_e, payload = {}) => {
@@ -3672,7 +3673,9 @@ function main() {
         }
         if (payload?.type === 'listening') {
           voiceListening = true;
-          openChat('wake');
+          // An auto wake while a game owns the screen: its capture runs, nothing shows.
+          quietWake = Boolean(gameMode?.active()) && payload.wake === true;
+          openChat('wake'); // gated inside: no focus or chat while a game is on
         }
         if (payload?.type === 'stopped') voiceListening = false;
         if (payload?.type === 'mic') {
@@ -3684,11 +3687,18 @@ function main() {
         }
         if (payload?.type === 'devices') rebuildTray();
         goodnight.onVoiceEvent(payload); // her goodnight line over: now she folds
-        if (overlay?.webContents && !overlay.webContents.isDestroyed() && !overlay.webContents.isLoading()) {
-          overlay.webContents.send('voice:event', payload);
-        } else {
-          voiceQueue.push(payload);
+        // The wake listen and the line it heard never reach the renderer over a game: no
+        // unfold, no chat. PTT and follow-up carry no wake marker and keep flowing.
+        const hideWake = quietWake
+          || (payload?.type === 'transcript' && Boolean(payload.wake) && gameMode?.active());
+        if (!hideWake) {
+          if (overlay?.webContents && !overlay.webContents.isDestroyed() && !overlay.webContents.isLoading()) {
+            overlay.webContents.send('voice:event', payload);
+          } else {
+            voiceQueue.push(payload);
+          }
         }
+        if (payload?.type === 'transcript') quietWake = false; // that capture had its say
       },
     });
     createOverlay();

@@ -1,7 +1,9 @@
 'use strict';
 
-// What counts as "a game took the screen": a fullscreen foreground window whose exe lives
-// where games are installed, or an app the user listed in config.json -> gaming.apps.
+// What counts as "a game took the screen". Two rules: game mode (gameOnScreen) takes any
+// fullscreen window that isn't a known non-game — so a game outside the usual folders (javaw
+// from a launcher) still enters — while her comments (isGameExe) stay strict: a games folder
+// or an app the user listed in config.json -> gaming.apps.
 // Entries may be strings (allow) or { match, ignore: true } / "!exe" (never treat as a game).
 
 const GAME_DIRS = [
@@ -21,10 +23,20 @@ const GAME_DIRS = [
 ];
 
 const NEVER_GAME_EXES = new Set([
+  // her own stack and the recorders
   'capri.exe', 'electron.exe', 'recordly.exe',
   'snippingtool.exe', 'obs.exe', 'obs64.exe',
-  'chrome.exe', 'msedge.exe', 'firefox.exe', 'opera.exe',
-  'code.exe', 'cursor.exe', 'devenv.exe', 'notepad.exe',
+  // shell and system: fullscreen one and no game took the screen
+  'explorer.exe', 'searchhost.exe', 'startmenuexperiencehost.exe', 'taskmgr.exe',
+  'windowsterminal.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe',
+  // overlays that sit on top of a game
+  'gamebar.exe', 'nvidia share.exe', 'nvidia overlay.exe',
+  // browsers: maximized or fullscreen, never a game
+  'chrome.exe', 'msedge.exe', 'firefox.exe', 'opera.exe', 'opera_gx.exe',
+  'brave.exe', 'vivaldi.exe', 'librewolf.exe', 'zen.exe',
+  // editors and terminals
+  'code.exe', 'code - insiders.exe', 'cursor.exe', 'devenv.exe',
+  'notepad.exe', 'notepad++.exe', 'sublime_text.exe', 'opencode.exe', 'warp.exe',
 ]);
 
 function normalizePath(value) {
@@ -71,23 +83,27 @@ function isAllowlistedExe(exePath, apps = []) {
   });
 }
 
-function isGameExe(exePath, apps = []) {
+// Game mode's rule (via gameOnScreen): anything that isn't a known non-game counts, so a game
+// enters even outside the folders below — javaw from a launcher, an itch zip anywhere on disk.
+function isAnyGameExe(exePath, apps = []) {
   const exe = normalizePath(exePath);
   if (!exe) return false;
-  if (NEVER_GAME_EXES.has(exe.split('\\').pop())) return false;
   if (isIgnoredExe(exe, apps)) return false;
-  if (exe.includes('\\windowsapps\\')) {
-    if (isAllowlistedExe(exe, apps)) return true;
-    if (exe.includes('\\windowsapps\\microsoft.')) return false;
-    return /\\windowsapps\\[^\\]*(?:game|games|gaming|xbox|minecraft)[^\\]*\\/i.test(exe);
-  }
-  if (GAME_DIRS.some((dir) => exe.includes(dir))) return true;
-  return isAllowlistedExe(exe, apps);
+  if (NEVER_GAME_EXES.has(exe.split('\\').pop())) return false;
+  if (isAllowlistedExe(exe, apps)) return true;
+  return !exe.includes('\\windowsapps\\microsoft.');
+}
+
+// Her comments' rule: only a games folder or a configured app is "a game".
+function isGameExe(exePath, apps = []) {
+  const exe = normalizePath(exePath);
+  if (!isAnyGameExe(exe, apps)) return false;
+  return isAllowlistedExe(exe, apps) || GAME_DIRS.some((dir) => exe.includes(dir));
 }
 
 /** The window watcher says whether the foreground window covers its monitor. */
 function gameOnScreen(windows, apps = []) {
-  return Boolean(windows?.fgFull) && isGameExe(windows?.fgExe, apps);
+  return Boolean(windows?.fgFull) && isAnyGameExe(windows?.fgExe, apps);
 }
 
 /** Exe basename suitable for gaming.apps (allow or ignore). */
