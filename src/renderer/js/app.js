@@ -1281,7 +1281,8 @@ async function boot() {
     config.guide = { ...config.guide, extras: true };
   }
   // after an update only: one bubble with what changed in this version
-  if (config.whatsNew?.length) {
+  // never over a pending Salir confirm: it would replace Sí/No and the window couldn't close
+  if (config.whatsNew?.length && !quitConfirm) {
     panel.say({ kind: 'info', badge: 'NUEVO', line: config.whatsNew.join(' '), hold: 9000 });
   }
 }
