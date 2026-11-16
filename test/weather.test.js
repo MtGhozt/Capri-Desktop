@@ -7,8 +7,8 @@ const { temporalContext } = require('../src/main/llm');
 
 const GEO = {
   results: [{
-    name: 'San José', country: 'Costa Rica', country_code: 'CR',
-    latitude: 9.93, longitude: -84.08, timezone: 'America/Costa_Rica',
+    name: 'Madrid', country: 'España', country_code: 'ES',
+    latitude: 40.42, longitude: -3.70, timezone: 'Europe/Madrid',
   }],
 };
 
@@ -57,11 +57,11 @@ test('context snippet includes weather and holidays when online', async () => {
     ]),
   });
   const text = await weather.contextSnippet({
-    place: 'San José, Costa Rica',
-    timeZone: 'America/Costa_Rica',
+    place: 'Madrid, España',
+    timeZone: 'Europe/Madrid',
     at: new Date('2026-11-08T18:00:00.000Z'),
   });
-  assert.match(text, /Clima en San José/);
+  assert.match(text, /Clima en Madrid/);
   assert.match(text, /24°C/);
   assert.match(text, /lluvia/i);
   assert.match(text, /Feriados próximos/);
@@ -69,20 +69,20 @@ test('context snippet includes weather and holidays when online', async () => {
 
   const withExtras = temporalContext({
     now: new Date('2026-11-08T18:00:00.000Z'),
-    timeZone: 'America/Costa_Rica',
+    timeZone: 'Europe/Madrid',
     extras: text,
   });
   assert.match(withExtras, /Hora local/);
-  assert.match(withExtras, /Clima en San José/);
+  assert.match(withExtras, /Clima en Madrid/);
 });
 
 test('offline or empty place: silent empty context, honest direct answers', async () => {
   const offline = createWeather({
     fetchImpl: async () => { throw new Error('offline'); },
   });
-  assert.equal(await offline.contextSnippet({ place: 'San José' }), '');
+  assert.equal(await offline.contextSnippet({ place: 'Madrid' }), '');
   assert.match(
-    await offline.answerDirect('¿va a llover hoy?', { place: 'San José' }),
+    await offline.answerDirect('¿va a llover hoy?', { place: 'Madrid' }),
     /no puedo consultar el clima/i,
   );
 
@@ -109,8 +109,8 @@ test('direct rain and holiday questions use real data', async () => {
     ]),
   });
   const rain = await weather.answerDirect('¿va a llover hoy?', {
-    place: 'San José',
-    timeZone: 'America/Costa_Rica',
+    place: 'Madrid',
+    timeZone: 'Europe/Madrid',
     at: new Date('2026-11-08T18:00:00.000Z'),
   });
   assert.match(rain, /sí apunta a lluvia/i);
@@ -118,20 +118,20 @@ test('direct rain and holiday questions use real data', async () => {
   assert.doesNotMatch(rain, /chance/i);
 
   const dry = await weather.answerDirect('¿va a llover mañana?', {
-    place: 'San José',
-    timeZone: 'America/Costa_Rica',
+    place: 'Madrid',
+    timeZone: 'Europe/Madrid',
     at: new Date('2026-11-08T18:00:00.000Z'),
   });
   assert.match(dry, /no parece que llueva/i);
 
   const holiday = await weather.answerDirect('¿hoy es feriado?', {
-    place: 'San José',
-    timeZone: 'America/Costa_Rica',
+    place: 'Madrid',
+    timeZone: 'Europe/Madrid',
     at: new Date('2026-11-08T18:00:00.000Z'),
   });
   assert.match(holiday, /es feriado: Feriado de prueba/);
 
-  assert.equal(await weather.answerDirect('abre Discord', { place: 'San José' }), null);
+  assert.equal(await weather.answerDirect('abre Discord', { place: 'Madrid' }), null);
 });
 
 test('weather fallback still works when the LLM path would throw', async () => {
@@ -145,14 +145,14 @@ test('weather fallback still works when the LLM path would throw', async () => {
   });
   // Primary path feeds facts via temporalExtras; answerDirect remains the offline fallback.
   const snippet = await weather.contextSnippet({
-    place: 'San José',
-    timeZone: 'America/Costa_Rica',
+    place: 'Madrid',
+    timeZone: 'Europe/Madrid',
     at: new Date('2026-11-08T18:00:00.000Z'),
   });
   assert.match(snippet, /en carácter/i);
   const fallback = await weather.answerDirect('¿va a llover hoy?', {
-    place: 'San José',
-    timeZone: 'America/Costa_Rica',
+    place: 'Madrid',
+    timeZone: 'Europe/Madrid',
     at: new Date('2026-11-08T18:00:00.000Z'),
   });
   assert.match(fallback, /lluvia/i);
@@ -187,10 +187,23 @@ test('weather cache avoids a second network hit within the TTL', async () => {
       return { ok: false, status: 404, json: async () => null };
     },
   });
-  await weather.contextSnippet({ place: 'San José', timeZone: 'America/Costa_Rica' });
+  await weather.contextSnippet({ place: 'Madrid', timeZone: 'Europe/Madrid' });
   const first = hits;
-  await weather.contextSnippet({ place: 'San José', timeZone: 'America/Costa_Rica' });
+  await weather.contextSnippet({ place: 'Madrid', timeZone: 'Europe/Madrid' });
   assert.equal(hits, first);
+});
+
+test('no city by default, and an empty city gives no location', async () => {
+  const { DEFAULTS } = require('../src/main/config');
+  assert.equal(DEFAULTS.weatherPlace, '');
+
+  let hits = 0;
+  const weather = createWeather({
+    fetchImpl: async () => { hits += 1; return { ok: false, status: 404, json: async () => null }; },
+  });
+  assert.equal(await weather.contextSnippet({ place: '' }), '');
+  assert.deepEqual(await weather.resolvePlace(''), { ok: true, label: '' });
+  assert.equal(hits, 0); // nothing to geocode: no location, no request
 });
 
 test('menu exposes the city field next to the time zone', () => {
@@ -200,6 +213,9 @@ test('menu exposes the city field next to the time zone', () => {
   assert.match(menu, /Ciudad \/ país \(clima\)/);
   assert.match(menu, /weather-place/);
   assert.match(menu, /No encontré esa ciudad/);
+  assert.match(menu, /Ej\.: Madrid, España/); // example only, never a real city as a value
+  assert.match(menu, /Vacío = sin clima ni feriados/);
+  assert.doesNotMatch(menu, /San José|San Jose/);
   const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
   assert.match(main, /case 'weather-place'/);
   assert.match(main, /resolvePlace/);

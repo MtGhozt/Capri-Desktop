@@ -12,7 +12,7 @@
 
 ### Clima y feriados
 
-- **Clima y feriados junto a la hora local:** en Ajustes › Comportamiento, al lado de «País / zona horaria», podés poner una ciudad/país opcional. Capri consulta Open-Meteo (geocoding + forecast) y Nager.Date (feriados), sin API key, con caché corta y fallo silencioso si no hay red. Esos datos van al contexto temporal del modelo (`temporalExtras`) para que responda en carácter; si el LLM falla o está offline, cae al texto directo sin mostrar `chat:error`. Si la ciudad no existe, Ajustes muestra «No encontré esa ciudad»; si resuelve, el nombre canónico (p. ej. San José, Costa Rica).
+- **Clima y feriados junto a la hora local:** en Ajustes › Comportamiento, al lado de «País / zona horaria», podés poner una ciudad/país opcional. Capri consulta Open-Meteo (geocoding + forecast) y Nager.Date (feriados), sin API key, con caché corta y fallo silencioso si no hay red. Esos datos van al contexto temporal del modelo (`temporalExtras`) para que responda en carácter; si el LLM falla o está offline, cae al texto directo sin mostrar `chat:error`. Si la ciudad no existe, Ajustes muestra «No encontré esa ciudad»; si resuelve, el nombre canónico (p. ej. Madrid, España).
 - **Textos de clima en español:** «probabilidad» (no «chance»).
 
 ### Recordatorios

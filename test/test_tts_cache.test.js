@@ -163,7 +163,7 @@ test('TTS splits long phrases at commas for OmniVoice chunks', () => {
     'from tts_text import split_for_tts; '
     + 'parts = split_for_tts('
     + '"Hola choom, hoy apunta a lluvia leve, probabilidad alta, máx veintisiete, '
-    + 'mín diecinueve, y mañana sigue igual en San José."'
+    + 'mín diecinueve, y mañana sigue igual en Madrid."'
     + ', 80); '
     + 'print(len(parts)); '
     + 'print("|".join(parts)); '

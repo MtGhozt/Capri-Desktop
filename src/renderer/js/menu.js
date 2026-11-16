@@ -1384,12 +1384,12 @@ export class AppMenu {
     const placeRow = build('div', 'appmenu__row appmenu__name-row');
     placeRow.dataset.setting = 'behavior';
     placeRow.append(build('span', 'appmenu__label', 'Ciudad / país (clima)'));
-    const placeInput = this.textInput(build, cfg.weatherPlace || '', 'San José, Costa Rica', 80);
+    const placeInput = this.textInput(build, cfg.weatherPlace || '', 'Ej.: Madrid, España', 80);
     placeInput.addEventListener('change', () => this.act('weather-place', placeInput.value.trim()));
     placeRow.append(placeInput);
     body.append(placeRow);
     const placeHint = build('div', 'appmenu__hint', this.placeNote
-      || 'Opcional. Clima (Open-Meteo) y feriados (Nager.Date); sin red, no inventa.');
+      || 'Vacío = sin clima ni feriados.');
     placeHint.dataset.setting = 'behavior';
     if (this.placeNote) placeHint.classList.add('is-place-resolved');
     body.append(placeHint);

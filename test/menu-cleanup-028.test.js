@@ -115,18 +115,18 @@ test('resolvePlace reports label, notFound, or offline without inventing', async
       ok: true,
       json: async () => ({
         results: [{
-          name: 'San José', country: 'Costa Rica', country_code: 'CR',
-          latitude: 9.93, longitude: -84.08, timezone: 'America/Costa_Rica',
+          name: 'Madrid', country: 'España', country_code: 'ES',
+          latitude: 40.42, longitude: -3.70, timezone: 'Europe/Madrid',
         }],
       }),
     }),
   });
-  assert.deepEqual(await ok.resolvePlace('San Jose'), {
+  assert.deepEqual(await ok.resolvePlace('Madrid'), {
     ok: true,
-    label: 'San José, Costa Rica',
+    label: 'Madrid, España',
     loc: {
-      name: 'San José', country: 'Costa Rica', countryCode: 'CR',
-      latitude: 9.93, longitude: -84.08, timezone: 'America/Costa_Rica',
+      name: 'Madrid', country: 'España', countryCode: 'ES',
+      latitude: 40.42, longitude: -3.70, timezone: 'Europe/Madrid',
     },
   });
 
@@ -138,7 +138,7 @@ test('resolvePlace reports label, notFound, or offline without inventing', async
   const offline = createWeather({
     fetchImpl: async () => { throw new Error('offline'); },
   });
-  assert.deepEqual(await offline.resolvePlace('San José'), { offline: true });
+  assert.deepEqual(await offline.resolvePlace('Madrid'), { offline: true });
   assert.deepEqual(await offline.resolvePlace(''), { ok: true, label: '' });
 });
 
