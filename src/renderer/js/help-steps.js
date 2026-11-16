@@ -112,12 +112,11 @@ export const HELP_STEPS = {
   gaming: {
     title: 'No molestar',
     section: 'behavior',
-    note: 'Con una app a pantalla completa (juegos, películas, presentaciones), Capri no se despierta con «Hey Capri» ni habla sola.',
+    note: 'No molestar: con una app a pantalla completa (juegos, películas, presentaciones), Capri no se despierta con «Hey Capri» ni habla sola.',
     steps: [
       '«Silenciar en esta app»: se queda callada con esta app aunque no esté a pantalla completa.',
       '«No silenciar nunca»: sigue activa con esta app aunque esté a pantalla completa.',
       '«Sacar de la lista»: vuelve a la detección automática.',
-      '«Dron en No molestar» (SÍ/NO): en pantalla completa puede soltar GPU pesada y mostrar el dron ligero.',
     ],
   },
   brain: {

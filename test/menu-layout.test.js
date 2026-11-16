@@ -9,7 +9,7 @@ const { QUICK_MENU_ITEMS, SETTINGS_TABS, unionRects, placeHelpPanel } = require(
 
 test('quick menu contains only compact controls and settings entry', () => {
   assert.deepEqual(QUICK_MENU_ITEMS.map((item) => item.id), [
-    'mic', 'mic-device', 'reply-mode', 'model-provider', 'fixes', 'clip-save', 'do-something', 'behavior', 'drone-mode', 'theme', 'settings', 'quit',
+    'mic', 'mic-device', 'reply-mode', 'model-provider', 'fixes', 'clip-save', 'do-something', 'behavior', 'theme', 'settings', 'quit',
   ]);
 });
 

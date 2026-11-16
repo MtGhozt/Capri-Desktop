@@ -89,7 +89,7 @@ function resolvedTimeZone(zone) {
 
 export const QUICK_MENU_ITEMS = [
   { id: 'mic' }, { id: 'mic-device' }, { id: 'reply-mode' }, { id: 'model-provider' },
-  { id: 'fixes' }, { id: 'clip-save' }, { id: 'do-something' }, { id: 'behavior' }, { id: 'drone-mode' }, { id: 'theme' }, { id: 'settings' }, { id: 'quit' },
+  { id: 'fixes' }, { id: 'clip-save' }, { id: 'do-something' }, { id: 'behavior' }, { id: 'theme' }, { id: 'settings' }, { id: 'quit' },
 ];
 
 export const SETTINGS_TABS = [
@@ -497,9 +497,6 @@ export class AppMenu {
     row('Hacer algo', '', 'do-something', () => this.act('do-something'));
     row('Comportamiento', cfg.locked ? 'FIJO' : 'NORMAL', 'behavior',
       (anchor) => openSubmenu('behavior', [{ id: 'normal', label: 'NORMAL' }, { id: 'locked', label: 'FIJO' }], cfg.locked ? 'locked' : 'normal', 'drag-lock', anchor));
-    row('Dron en No molestar', cfg.gaming?.drone === false ? 'NO' : 'SÍ', 'drone-mode',
-      (anchor) => openSubmenu('drone-mode', [{ id: false, label: 'NO' }, { id: true, label: 'SÍ' }],
-        cfg.gaming?.drone !== false, 'drone-mode', anchor));
     row('No molestar', cfg.gaming?.fgKey || 'SIN APP ACTIVA', 'game-list',
       (anchor) => openSubmenu('game-list', [
         { id: 'allow', label: 'SILENCIAR EN ESTA APP' },
