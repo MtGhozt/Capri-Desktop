@@ -6,6 +6,9 @@
 const { gameOnScreen } = require('./game-detect');
 
 const EXIT_DELAY_MS = 30_000;
+// What the app waits after focus is lost: long enough that a popup or a quick alt-tab over the
+// game never brings her up mid-flicker (main passes it as exitDelayMs).
+const FOCUS_LOSS_DEBOUNCE_MS = 10_000;
 
 function createGameMode({
   enabled = () => true,
@@ -72,4 +75,4 @@ function createGameMode({
   };
 }
 
-module.exports = { createGameMode, EXIT_DELAY_MS };
+module.exports = { createGameMode, EXIT_DELAY_MS, FOCUS_LOSS_DEBOUNCE_MS };

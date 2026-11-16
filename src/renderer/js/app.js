@@ -466,7 +466,7 @@ async function boot() {
     folding = false;
     refreshHit();
   };
-  const unfold = async ({ chat = false, source = 'overlay' } = {}) => {
+  const unfold = async ({ chat = false, source = 'overlay', silent = false } = {}) => {
     if (chat) chatSource = source;
     if (capri.stowed) {
       host.setConfig({ visible: true });
@@ -476,7 +476,7 @@ async function boot() {
       folding = true;
       foldingAt = performance.now();
       refreshHit();
-      voice.wakeArp();
+      if (!silent) voice.wakeArp();
       const from = dormant.rect();
       const boot = bubble.boot;
       const next = boot === 'booting' ? 'BOOTING' : boot === 'failed' ? 'OFFLINE' : 'ONLINE';
@@ -493,7 +493,7 @@ async function boot() {
             await tween(capri.p, { collapse: 0, alpha: 1, glitch: 0.25, split: 2 }, 320);
             await tween(capri.p, { glitch: 0, split: 0 }, 180);
           })(),
-          bubble.birth(from, { animate: true }),
+          silent ? Promise.resolve() : bubble.birth(from, { animate: true }),
         ]);
         showVhs(false);
         dormant.hide();
@@ -504,7 +504,7 @@ async function boot() {
         capri.drawFrame();
         machine.set(next);
         host.setFolded(false);
-        bubble.show();
+        if (!silent) bubble.show();
       }
       folding = false;
     }
@@ -1198,7 +1198,7 @@ async function boot() {
         holdQuitConfirm(false);
         break;
       case 'wake':
-        await unfold();
+        await unfold({ silent: cmd.silent === true }); // game coming back: her portrait, no bubble
         break;
       case 'satellite': // the whole sequence, on demand (tray)
         await unfold();

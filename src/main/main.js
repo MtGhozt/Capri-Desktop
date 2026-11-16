@@ -71,7 +71,8 @@ const { stripWakeWord, wakeTranscriptOk } = require('./command-text');
 const { GREETINGS, pickGreeting } = require('./greetings');
 const { windowContext } = require('./context');
 const { createComments } = require('./comments');
-const { createGameMode } = require('./game-mode');
+const { createGameMode, FOCUS_LOSS_DEBOUNCE_MS } = require('./game-mode');
+const { createGameQuiet } = require('./game-quiet');
 const { vramText } = require('./vram');
 const { logEvent, voiceLogPath } = require('./log');
 const { createTurnTiming, currentTurn, enterTurn, fromSidecar } = require('./timing');
@@ -150,6 +151,8 @@ let previousForeground = null;
 let menuKeyboard = false; // her menu has a text field open (Corregir lo último): it needs the keyboard
 let lastHeard = '';       // the last thing Whisper wrote, before her fixes (Corregir lo último)
 let gameMode = null;
+// A game on the screen: no show()/focus()/moveTop(), click-through stays on (game-quiet.js).
+const gameQuiet = createGameQuiet({ isActive: () => Boolean(gameMode?.active()) });
 let reminders = null;
 let weather = null;
 let gameWork = Promise.resolve();
@@ -207,6 +210,7 @@ function fitOverlay() {
 // clicked anymore. Off then on puts in a new one; her place on top and her size are set again too.
 function rearmOverlay() {
   if (!overlay || overlay.isDestroyed()) return;
+  if (gameQuiet.active()) return; // a game owns the screen: clicks stay passed through
   overlay.setIgnoreMouseEvents(false);
   overlay.setAlwaysOnTop(true, 'screen-saver');
   fitOverlay();
@@ -252,6 +256,7 @@ function resyncOverlay(reason = 'resync') {
 // Back on top of everything, the taskbar included (it comes up over her when it's clicked). Twice:
 // the taskbar can come up again a moment later, as its menus and previews open.
 function raiseOverlay() {
+  if (gameQuiet.active()) return; // never moveTop() over a game
   for (const wait of [0, 400]) {
     setTimeout(() => {
       if (!overlay || overlay.isDestroyed()) return;
@@ -354,7 +359,10 @@ function setClickThrough(on, reason = 'state') {
   clickThrough = Boolean(on);
   if (!overlay || overlay.isDestroyed()) return;
   // ¿Salir? / open menu: never re-enable ignoreMouseEvents (hover can stay false after Win+L).
-  const through = (quitSolid || menuGuard?.menuOpen) ? false : clickThrough;
+  // A game owns the screen: clicks always pass through, whatever she last asked for.
+  const through = gameQuiet.active()
+    ? true
+    : (quitSolid || menuGuard?.menuOpen) ? false : clickThrough;
   // Hover can flip dozens of times/sec at the hit edge — only act (and log) on real changes.
   if (through === lastThrough) return;
   lastThrough = through;
@@ -468,6 +476,7 @@ function captureForeground() {
 
 function openChat(source = 'overlay') {
   if (!overlay) return;
+  if (gameQuiet.active()) return; // no show()/focus() and no chat while a game is on
   if (!chatVisible.get()) previousForeground = captureForeground();
   chatVisible.set(true, source);
   overlay.setFocusable(true);
@@ -495,6 +504,7 @@ function closeChat(source = 'overlay') {
 // Her menu's text fields (Corregir lo último): the keyboard while they're open, given back after.
 function menuKeyboardOn(on) {
   if (!overlay) return;
+  if (on && gameQuiet.active()) return; // never pull the window up over a game
   if (on) {
     if (!menuKeyboard && !chatVisible.get()) previousForeground = captureForeground();
     menuKeyboard = true;
@@ -1003,6 +1013,7 @@ function setQuitSolid(on) {
     quitSolidTimer = 0;
   }
   if (on) {
+    if (gameQuiet.active()) return; // ¿Salir? never comes up over a game
     quitSolid = true;
     if (!overlay || overlay.isDestroyed()) return;
     setClickThrough(false);
@@ -2025,6 +2036,7 @@ function queueGame(step) {
 async function gameEnter(windows) {
   gameWasFolded = overlayFolded;
   gameLog(`game on exe=${windows?.fgExe || '?'} ${vramText()}`);
+  setClickThrough(true, 'game'); // clicks pass through over the game from here on
   llm?.cancel();
   goodnight.cancel();
   followUp.cancel();
@@ -2051,7 +2063,8 @@ async function gameEnter(windows) {
 async function gameLeave() {
   gameLog(`game off ${vramText()}`);
   sendCommand('game-drone', { on: false });
-  if (!gameWasFolded) sendCommand('wake');
+  gameQuiet.restore(overlay); // visible again, clicks passing through, chat untouched
+  if (!gameWasFolded) sendCommand('wake', { silent: true });
   if (gameHadLlm) await lms?.reload?.();
   try { speakLine(pickLine('juegoSalir')); } catch { /* pool missing */ }
   gameLog(`game off after reload ${vramText()}`);
@@ -3084,7 +3097,10 @@ async function runDirectSegments(segments) {
 }
 
 function registerIpc() {
-  ipcMain.on('overlay:interactive', (_e, on) => setClickThrough(!on, on ? 'hover-on' : 'hover-off'));
+  ipcMain.on('overlay:interactive', (_e, on) => {
+    if (gameQuiet.active()) return; // hover never takes click-through away during a game
+    setClickThrough(!on, on ? 'hover-on' : 'hover-off');
+  });
   ipcMain.on('renderer:log', (_e, payload = {}) => {
     const kind = String(payload.kind || 'error').slice(0, 30);
     const message = String(payload.message || '').slice(0, 2000);
@@ -3722,7 +3738,7 @@ function main() {
       enabled: () => config.load().gaming?.mode !== 'off',
       apps: () => config.load().gaming?.apps || [],
       setWakeMuted: (on) => voice?.setWakeMuted?.(on),
-      exitDelayMs: 0,
+      exitDelayMs: FOCUS_LOSS_DEBOUNCE_MS, // focus must be gone 10 s: a flicker never ends game mode
       onDecision: (decision) => gameLog(`game decision=${decision.reason} rule=${decision.rule} exe=${decision.exe || '?'} full=${decision.full}`),
       onEnter: (windows) => queueGame(() => gameEnter(windows)),
       onExit: () => queueGame(gameLeave),

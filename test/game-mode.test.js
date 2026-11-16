@@ -5,7 +5,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createGameMode, EXIT_DELAY_MS } = require('../src/main/game-mode.js');
+const { createGameMode, EXIT_DELAY_MS, FOCUS_LOSS_DEBOUNCE_MS } = require('../src/main/game-mode.js');
 
 const GAME = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Hades\\Hades.exe';
 const game = { fgExe: GAME, fgFull: true };
@@ -54,6 +54,26 @@ function harness({ enabled = true, apps = [] } = {}) {
 
 test('the wait after the game is thirty seconds', () => {
   assert.equal(EXIT_DELAY_MS, 30_000);
+});
+
+test('a short focus loss keeps game mode (a flicker never brings her up)', () => {
+  const { mode, events, timers } = harness();
+  mode.update(game);
+  mode.update(desktop); // a popup or a quick alt-tab took the focus
+  timers.tick(FOCUS_LOSS_DEBOUNCE_MS);
+  assert.equal(mode.active(), true);
+  assert.equal(events.length, 2); // still away: wakeMuted + enter only
+  timers.tick(EXIT_DELAY_MS);
+  assert.equal(mode.active(), false);
+});
+
+test('the app waits for the focus-loss debounce, never exits at once', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.equal(FOCUS_LOSS_DEBOUNCE_MS, 10_000);
+  assert.doesNotMatch(main, /exitDelayMs:\s*0\b/);
+  assert.match(main, /exitDelayMs: FOCUS_LOSS_DEBOUNCE_MS/);
 });
 
 test('a fullscreen game takes her off the GPU once, even over many updates', () => {
