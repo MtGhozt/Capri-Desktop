@@ -33,7 +33,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ### 0.3.0 — Velocidad
 
-- TTS por frase: empezar a hablar con la primera frase mientras el modelo sigue escribiendo.
+- **Hecho:** TTS por frase: Main corta por oración (`speak.js`) y el sidecar sintetiza N+1 mientras suena N (`_synth_loop` / `_play_loop`, prefetch 2).
 - **Hecho:** Tiempos en el log: etapas de la respuesta y tiempo hasta el primer audio, de punta a punta.
 - Ajustes con indicador de carga al abrir.
 - Spotify confirma que la canción arrancó.
