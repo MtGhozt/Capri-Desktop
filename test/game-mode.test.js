@@ -192,6 +192,26 @@ test('OFF leaves at once, even in the middle of a game', () => {
   assert.deepEqual(events, [['wakeMuted', true], 'enter', ['wakeMuted', false], 'exit', ['wakeMuted', true], 'enter']);
 });
 
+test('game detected + manual off → not quiet until that process changes', () => {
+  const { mode } = harness();
+  mode.update(game);
+  assert.equal(mode.active(), true);
+  mode.dismiss(game);
+  assert.equal(mode.active(), false);
+  // Same game still fullscreen: stay out (manual override wins).
+  mode.update(game);
+  assert.equal(mode.active(), false);
+  // Manual on clears the suppress and re-enters.
+  mode.clearSuppress();
+  mode.update(game);
+  assert.equal(mode.active(), true);
+  mode.dismiss(game);
+  assert.equal(mode.active(), false);
+  // A different game process: suppress lifts, quiet can return.
+  mode.update({ fgExe: 'D:\\Epic Games\\Fortnite\\Fortnite.exe', fgFull: true });
+  assert.equal(mode.active(), true);
+});
+
 test('OFF from the start does nothing at all', () => {
   const { mode, events } = harness({ enabled: false });
   mode.update(game);
