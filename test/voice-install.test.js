@@ -12,11 +12,14 @@ const { VC_MESSAGE } = require('../src/main/vc-runtime');
 const {
   PYTHON_URL,
   VOICE_FILES,
+  STALL_MESSAGE,
   voiceInstallDir,
   hasVoiceSources,
   bundledVoiceDir,
   findPython311,
   isBlockedVoicePath,
+  downloadVoiceFile,
+  downloadVoiceSources,
   ensureVoiceSources,
   syncManagedVoiceSources,
   verifyOmniImports,
@@ -337,4 +340,63 @@ test('block file present, setup succeeds with torch import ok → file is gone; 
   });
   assert.equal(failImport.res.ok, false);
   assert.equal(fs.existsSync(path.join(failImport.destDir, blockRel)), true);
+});
+
+test('downloadVoiceFile aborts when no bytes arrive for the stall timeout', async () => {
+  let t = 0;
+  const now = () => t;
+  const delay = async (ms) => { t += ms; };
+  const fetchImpl = async () => ({
+    ok: true,
+    headers: { get: () => '1000' },
+    body: {
+      getReader: () => ({
+        read: () => new Promise(() => {}), // never yields bytes
+        cancel: async () => {},
+      }),
+    },
+  });
+  await assert.rejects(
+    () => downloadVoiceFile('https://example/x', fetchImpl, { stallMs: 1000, now, delay }),
+    (err) => {
+      assert.equal(err.code, 'STALL');
+      assert.match(err.message, /colgó/);
+      assert.match(err.message, /reintentar/i);
+      assert.equal(err.message, STALL_MESSAGE);
+      return true;
+    },
+  );
+});
+
+test('downloadVoiceSources reports per-file name and percent progress', async (t) => {
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-dl-prog-'));
+  t.after(() => fs.rmSync(dest, { recursive: true, force: true }));
+  const labels = [];
+  const progresses = [];
+  const fetchImpl = async (url) => {
+    if (String(url).includes('setup.ps1') && !String(url).includes('/voice/setup.ps1')) {
+      return { ok: true }; // resolveVoiceTag probe
+    }
+    const body = Buffer.from(`content-for-${path.posix.basename(String(url))}`);
+    return {
+      ok: true,
+      headers: { get: (h) => (String(h).toLowerCase() === 'content-length' ? String(body.length) : null) },
+      arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+    };
+  };
+  // Force GitHub path (no bundled voice in empty root) and inject progress via downloadFile wrapper.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-dl-root-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  await downloadVoiceSources({
+    destRoot: dest,
+    version: '0.0.0',
+    fetchImpl,
+    onProgress: (p) => {
+      if (p.label) labels.push(p.label);
+      if (p.progress != null) progresses.push(p.progress);
+    },
+  });
+  assert.ok(labels.some((l) => /\.py\s+\d+%/.test(l) || /setup\.ps1\s+\d+%/.test(l)));
+  assert.ok(progresses.length > 0);
+  assert.ok(progresses.some((n) => n > 0));
 });

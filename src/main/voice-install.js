@@ -137,7 +137,16 @@ function syncManagedVoiceSources({ root, destRoot, version, onSync } = {}) {
   return { ok: true, synced };
 }
 
-async function downloadVoiceFile(url, fetchImpl) {
+const STALL_MS = 60_000;
+const STALL_MESSAGE = 'La descarga se colgó (sin datos 60 s). Tocá Instalar voz para reintentar.';
+
+// Stream the body; abort if no bytes arrive for stallMs. onBytes(received, total) for the progress bar.
+async function downloadVoiceFile(url, fetchImpl, {
+  onBytes,
+  stallMs = STALL_MS,
+  now = () => Date.now(),
+  delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) {
   const res = await fetchImpl(url, {
     headers: { 'User-Agent': 'Capri-Desktop', Accept: 'application/octet-stream' },
   });
@@ -146,7 +155,57 @@ async function downloadVoiceFile(url, fetchImpl) {
     err.status = res.status;
     throw err;
   }
-  return Buffer.from(await res.arrayBuffer());
+  const total = Number(res.headers?.get?.('content-length')) || 0;
+  if (!res.body || typeof res.body.getReader !== 'function') {
+    const buf = Buffer.from(await res.arrayBuffer());
+    onBytes?.(buf.length, total || buf.length);
+    return buf;
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  let lastByteAt = now();
+  let finished = false;
+
+  const watch = async () => {
+    while (!finished) {
+      await delay(250);
+      if (finished) return;
+      if (now() - lastByteAt >= stallMs) {
+        finished = true;
+        const err = new Error(STALL_MESSAGE);
+        err.code = 'STALL';
+        try { await reader.cancel(); } catch { /* already closed */ }
+        throw err;
+      }
+    }
+  };
+
+  const pump = async () => {
+    try {
+      while (!finished) {
+        const { done, value } = await reader.read();
+        if (done) {
+          finished = true;
+          break;
+        }
+        if (value?.byteLength) {
+          chunks.push(Buffer.from(value));
+          received += value.byteLength;
+          lastByteAt = now();
+          onBytes?.(received, total);
+        }
+      }
+      return Buffer.concat(chunks);
+    } catch (err) {
+      finished = true;
+      if (err?.code === 'STALL') throw err;
+      if (String(err?.message || '').includes('colgó')) throw err;
+      throw err;
+    }
+  };
+
+  return Promise.race([pump(), watch()]);
 }
 
 async function resolveVoiceTag(version, { fetchImpl = fetch } = {}) {
@@ -166,22 +225,49 @@ async function downloadVoiceSources({
   version,
   fetchImpl = fetch,
   onProgress,
+  downloadFile = downloadVoiceFile,
 } = {}) {
   const tag = await resolveVoiceTag(version, { fetchImpl });
   const base = `https://raw.githubusercontent.com/${REPO}/${tag}/voice`;
-  onProgress?.({ phase: 'download', label: 'Descargando…', line: `Descargando voz (${tag})…` });
-  for (const rel of VOICE_FILES) {
-    if (isBlockedVoicePath(rel)) continue;
-    onProgress?.({ phase: 'download', label: 'Descargando…', line: `Descargando… ${rel}` });
-    const buf = await downloadVoiceFile(`${base}/${rel}`, fetchImpl);
+  const files = VOICE_FILES.filter((rel) => !isBlockedVoicePath(rel));
+  onProgress?.({
+    phase: 'download', label: 'Descargando…', progress: 0,
+    line: `Descargando voz (${tag})…`,
+  });
+  for (let i = 0; i < files.length; i += 1) {
+    const rel = files[i];
+    const name = path.posix.basename(rel);
+    const buf = await downloadFile(`${base}/${rel}`, fetchImpl, {
+      onBytes: (received, total) => {
+        const filePct = total > 0
+          ? Math.min(99, Math.round((received / total) * 100))
+          : 0;
+        const frac = total > 0 ? received / total : 0;
+        const overall = Math.min(99, Math.round(((i + frac) / files.length) * 100));
+        onProgress?.({
+          phase: 'download',
+          label: `${name} ${filePct}%`,
+          progress: overall,
+          line: `Descargando… ${rel} (${i + 1}/${files.length})`,
+        });
+      },
+    });
     writeVoiceFile(destRoot, rel, buf);
+    const donePct = Math.round(((i + 1) / files.length) * 100);
+    onProgress?.({
+      phase: 'download',
+      label: `${name} 100%`,
+      progress: donePct,
+      line: `Listo ${rel} (${i + 1}/${files.length})`,
+    });
   }
   for (const rel of OPTIONAL_FILES) {
     if (isBlockedVoicePath(rel)) continue;
     try {
-      const buf = await downloadVoiceFile(`${base}/${rel}`, fetchImpl);
+      const buf = await downloadFile(`${base}/${rel}`, fetchImpl);
       writeVoiceFile(destRoot, rel, buf);
-    } catch {
+    } catch (err) {
+      if (err?.code === 'STALL') throw err;
       // hey_capri.onnx is public locally but usually not on GitHub
     }
   }
@@ -380,19 +466,27 @@ function createVoiceInstall({
         version: typeof version === 'function' ? version() : version,
         fetchImpl,
         onProgress: (p) => {
-          emit({ phase: p.phase || 'download', label: p.label || 'Descargando…' });
+          emit({
+            phase: p.phase || 'download',
+            label: p.label || 'Descargando…',
+            ...(p.progress != null ? { progress: p.progress } : {}),
+          });
           if (p.line) pushLine(p.line);
         },
       });
     } catch (err) {
       busy = false;
-      const message = `No se pudo descargar la voz: ${err.message || err}`;
+      const stalled = err?.code === 'STALL' || /colgó/i.test(String(err?.message || ''));
+      const message = stalled
+        ? String(err.message || STALL_MESSAGE)
+        : `No se pudo descargar la voz: ${err.message || err}`;
       pushLine(message);
       return emit({
         busy: false,
         phase: 'error',
         label: 'Error',
         error: message,
+        progress: 0,
         lines: [...state.lines].slice(-40),
       });
     }
@@ -491,12 +585,16 @@ module.exports = {
   PYTHON_URL,
   VOICE_FILES,
   OPTIONAL_FILES,
+  STALL_MS,
+  STALL_MESSAGE,
   voiceInstallDir,
   hasVoiceSources,
   bundledVoiceDir,
   hasNvidiaGpu,
   findPython311,
   isBlockedVoicePath,
+  downloadVoiceFile,
+  downloadVoiceSources,
   ensureVoiceSources,
   syncManagedVoiceSources,
   verifyOmniImports,

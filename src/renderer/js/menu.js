@@ -927,7 +927,14 @@ export class AppMenu {
     const installRow = build('div', 'appmenu__voice-install');
     const installBtns = build('div', 'appmenu__voice-install-btns');
     const installed = Boolean(voice.installed || install.installed);
-    const installBtn = build('button', `appmenu__toggle-btn is-active${installBusy ? ' is-busy' : ''}`, installBusy ? 'Instalando…' : installed ? 'Voz ya instalada ✓' : 'Instalar voz');
+    const installBtn = build(
+      'button',
+      `appmenu__toggle-btn is-active${installBusy ? ' is-busy' : ''}`,
+      installBusy ? 'Instalando…'
+        : install.phase === 'error' ? 'Reintentar'
+          : installed ? 'Voz ya instalada ✓'
+            : 'Instalar voz',
+    );
     installBtn.type = 'button';
     installBtn.dataset.state = 'on';
     installBtn.disabled = installBusy;
@@ -1010,7 +1017,10 @@ export class AppMenu {
       progress.append(build('div', 'appmenu__voice-progress-label', install.label || (installBusy ? 'Descargando…' : '')));
       const bar = build('div', 'appmenu__voice-progress-bar');
       const fill = build('span');
-      fill.style.width = install.phase === 'done' ? '100%' : install.phase === 'install' ? '70%' : '35%';
+      const pct = Number(install.progress);
+      fill.style.width = Number.isFinite(pct)
+        ? `${Math.max(0, Math.min(100, pct))}%`
+        : install.phase === 'done' ? '100%' : install.phase === 'install' ? '70%' : '35%';
       bar.append(fill);
       progress.append(bar);
       installRow.append(progress);
