@@ -140,7 +140,12 @@ function refreshAgentsAsync() {
 function detectAgents(opts = {}) {
   const now = Date.now();
   // custom which (tests) always bypasses; production PATH scans are cached
-  if (!opts.force && !opts.execFileSync && agentsCache) {
+  if (!opts.force && !opts.execFileSync) {
+    // Cold cache: never block Ajustes/Oído on where + --version (up to 15s per CLI).
+    if (!agentsCache) {
+      refreshAgentsAsync();
+      return [];
+    }
     // Menus: serve stale immediately; refresh in the background after TTL.
     if (now - agentsCacheAt >= AGENTS_CACHE_MS) refreshAgentsAsync();
     return agentsCache;

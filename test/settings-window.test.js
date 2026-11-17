@@ -2,6 +2,8 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { createSettingsWindow } = require('../src/main/settings-window');
 
 test('settings window is created once and focused when opened again', () => {
@@ -18,4 +20,13 @@ test('settings window is created once and focused when opened again', () => {
   assert.equal(first, second);
   assert.equal(windows.length, 1);
   assert.equal(first.focuses, 1);
+});
+
+test('settings shows Cargando… then light getMenu, then full (Oído does not stall)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'settings.js'), 'utf8');
+  assert.match(src, /Cargando…/);
+  assert.match(src, /getMenu\(\{ folded: false, light: true \}\)/);
+  assert.match(src, /getMenu\(\{ folded: false, light: false \}\)/);
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(main, /setImmediate\(\(\) => \{ try \{ voice\?\.listDevices\(\)/);
 });
