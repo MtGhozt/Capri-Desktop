@@ -2,6 +2,7 @@
 
 // Follows the window feed: a fullscreen game means she gets off the GPU; thirty seconds
 // after it is gone (a loading screen or an alt-tab doesn't count) she comes back.
+// A manual No molestar off dismisses the current process until it changes; on always works.
 
 const { gameOnScreen } = require('./game-detect');
 
@@ -9,6 +10,11 @@ const EXIT_DELAY_MS = 30_000;
 // What the app waits after focus is lost: long enough that a popup or a quick alt-tab over the
 // game never brings her up mid-flicker (main passes it as exitDelayMs).
 const FOCUS_LOSS_DEBOUNCE_MS = 10_000;
+
+function exeKey(windows) {
+  const exe = String(windows?.fgExe || '').replace(/\//g, '\\').toLowerCase();
+  return exe.split('\\').pop() || '';
+}
 
 function createGameMode({
   enabled = () => true,
@@ -22,6 +28,8 @@ function createGameMode({
 } = {}) {
   let active = false;
   let pendingExit = null;
+  let suppressKey = null; // manual off: stay out until this exe basename changes
+  let lastKey = '';
 
   const cancelExit = () => {
     if (pendingExit !== null) {
@@ -38,12 +46,33 @@ function createGameMode({
     onExit();
   };
 
+  function dismiss(windows) {
+    const key = exeKey(windows) || lastKey;
+    if (key) suppressKey = key;
+    leave();
+  }
+
+  function clearSuppress() {
+    suppressKey = null;
+  }
+
   function update(windows) {
+    const key = exeKey(windows);
+    if (key && suppressKey && key !== suppressKey) suppressKey = null;
+    if (key) lastKey = key;
+
     if (!enabled()) {
       leave(); // switched to OFF while she was away
       return;
     }
     if (gameOnScreen(windows, apps())) {
+      if (suppressKey && key === suppressKey) {
+        onDecision({
+          reason: 'suppressed', rule: 'manual-off', exe: windows?.fgExe, full: Boolean(windows?.fgFull),
+        });
+        leave();
+        return;
+      }
       onDecision({ reason: 'enter', rule: 'fullscreen-game', exe: windows?.fgExe, full: Boolean(windows?.fgFull) });
       cancelExit();
       if (!active) {
@@ -64,6 +93,8 @@ function createGameMode({
 
   return {
     update,
+    dismiss,
+    clearSuppress,
     stop: () => {
       cancelExit();
       if (active) {

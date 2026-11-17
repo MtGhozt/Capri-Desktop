@@ -2471,7 +2471,16 @@ function applyMenuAction(id, value) {
       updateConfig({ userName: name });
       return { ok: true, message: `Te voy a llamar ${name}.` };
     }
-    case 'gaming-mode': updateConfig({ gaming: { mode: value === 'off' ? 'off' : 'auto' } }); break;
+    case 'gaming-mode': {
+      // Manual No molestar always wins: apply now (never wait for the next window tick).
+      // Off suppresses this process until it changes; on clears that suppress.
+      const off = value === 'off';
+      updateConfig({ gaming: { mode: off ? 'off' : 'auto' } });
+      if (off) gameMode?.dismiss?.(lastWindows);
+      else gameMode?.clearSuppress?.();
+      gameMode?.update?.(lastWindows);
+      break;
+    }
     case 'drone-mode': updateConfig({ gaming: { drone: Boolean(value) } }); break;
     case 'game-list':
     case 'game-allow':
@@ -2483,6 +2492,8 @@ function applyMenuAction(id, value) {
         : id === 'game-forget' || value === 'remove' ? 'remove'
           : 'allow';
       updateConfig({ gaming: { apps: patchGamingApps(config.load().gaming?.apps, exe, action) } });
+      // Ignore/allow must take effect now, not after the next focus change.
+      gameMode?.update?.(lastWindows);
       return action === 'remove'
         ? { ok: true, message: `${path.basename(exe, path.extname(exe))} quitado de la lista ✓` }
         : { ok: true };
