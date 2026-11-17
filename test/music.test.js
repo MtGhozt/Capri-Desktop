@@ -87,13 +87,20 @@ test('her song phrases map to music.herSong (default)', () => {
 });
 
 test('voseo and generic song requests reach playback, not a fake title', () => {
-  for (const said of ['Poné una canción', 'Ponés reproducir bohemian rhapsody', 'Reproducí neon genesis']) {
+  for (const said of ['Ponés reproducir bohemian rhapsody', 'Reproducí neon genesis']) {
     assert.equal(parseMusicCommand(said)?.action, 'query', said);
   }
   assert.deepEqual(parseMusicCommand('Ponés reproducir bohemian rhapsody'), {
     action: 'query', query: 'bohemian rhapsody',
   });
-  for (const said of ['Ponés reproducir cualquier canción', 'Poné cualquier tema', 'Pon algo de música', 'cualquier canción']) {
+  for (const said of [
+    'Poné una canción',
+    'poné música',
+    'Ponés reproducir cualquier canción',
+    'Poné cualquier tema',
+    'Pon algo de música',
+    'cualquier canción',
+  ]) {
     assert.deepEqual(parseMusicCommand(said), { action: 'start' }, said);
   }
   assert.deepEqual(parseMusicCommand('Poné reproducir neon genesis en Spotify'), {

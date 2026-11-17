@@ -10,9 +10,11 @@ const HER_SONG = /^(?:(?:pon|ponme|reproduce|reproduceme|toca|play) )?(?:tu canc
 const SONG = '(?: (?:la |el )?(?:musica|cancion|tema|rola|pista))?';
 // Accents are already folded, so poné/ponés/reproducí/tocá arrive as pone/pones/reproduci/toca.
 const PLAY_VERB = '(?:pon|ponme|pone|pones|poneme|reproduce|reproduceme|reproduci|toca)';
+// Vague play = start/resume, never search the words "una canción" as a title.
 const GENERIC_PLAY = new RegExp(
   `^(?:${PLAY_VERB}(?: reproducir)? )?`
-  + '(?:cualquier (?:cancion|tema|rola|musica)|algo de musica|un poco de musica)$',
+  + '(?:(?:una |la |alguna |cualquier )?(?:cancion|tema|rola|musica)'
+  + '|algo de musica|un poco de musica)$',
 );
 // Pause before any "pon <query>" search: "pon pausa a la música" is pause, not a song named pausa.
 const PAUSE = new RegExp(
