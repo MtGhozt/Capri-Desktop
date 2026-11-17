@@ -34,9 +34,15 @@ const NEVER_GAME_EXES = new Set([
   // browsers: maximized or fullscreen, never a game
   'chrome.exe', 'msedge.exe', 'firefox.exe', 'opera.exe', 'opera_gx.exe',
   'brave.exe', 'vivaldi.exe', 'librewolf.exe', 'zen.exe',
-  // editors and terminals
-  'code.exe', 'code - insiders.exe', 'cursor.exe', 'devenv.exe',
+  // editors / agents / terminals
+  'code.exe', 'code - insiders.exe', 'cursor.exe', 'devenv.exe', 'antigravity.exe',
   'notepad.exe', 'notepad++.exe', 'sublime_text.exe', 'opencode.exe', 'warp.exe',
+  // chat, music, launchers: F11/borderless must not look like a game
+  'discord.exe', 'discordptb.exe', 'discordcanary.exe',
+  'spotify.exe',
+  'steam.exe', 'steamwebhelper.exe',
+  'epicgameslauncher.exe', 'epicwebhelper.exe',
+  'whatsapp.exe', 'telegram.exe',
 ]);
 
 function normalizePath(value) {
