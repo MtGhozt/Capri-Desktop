@@ -6,6 +6,12 @@
 const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
+  '0.2.12': [
+    'Discord, Spotify y otras apps normales ya no cuentan como juego.',
+    'No molestar siempre obedece si lo apagás o prendés a mano.',
+    'Ajustes › Oído abre sin trabarse.',
+    '«Poné música» / «poné una canción» sin título reanuda, no busca esas palabras.',
+  ],
   '0.2.11': [
     'En juegos (también Minecraft) ya no aparezco ni bloqueo el mouse.',
     'El campo de ciudad en Ajustes ya no muestra un ejemplo con una ubicación real.',

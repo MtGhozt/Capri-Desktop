@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.12 (etiqueta `v0.2.12`)
+
+### Detección de juegos y No molestar
+
+- **Discord, Spotify y apps normales** ya no cuentan como juego (solo fullscreen/borderless real, con denylist).
+- **No molestar** siempre obedece el toggle manual (bandeja, atajo, voz, burbuja) aunque haya un juego detectado.
+
+### Ajustes y música
+
+- **Ajustes › Oído** abre sin trabarse (escaneo de agentes y dispositivos en diferido).
+- **«Poné música» / «poné una canción»** sin título reanuda o arranca el player elegido; no busca esas palabras.
+
 ## 0.2.11 (etiqueta `v0.2.11`)
 
 ### Juegos y overlay
