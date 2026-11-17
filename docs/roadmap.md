@@ -31,6 +31,10 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 - **Hecho:** Capri no aparece ni bloquea el mouse en juegos (también Minecraft); el campo de ciudad ya no muestra un ejemplo con ubicación real; interruptor en Ajustes para el acceso directo del escritorio; arreglos de modelo local y confirmación de Salir; se quitó el interruptor inerte «Dron en No molestar» de Ajustes.
 
+### 0.2.12 — Hotfix detección de juegos (publicada)
+
+- **Hecho:** Discord/Spotify y apps normales fuera de la detección de juegos; No molestar siempre obedece el toggle manual; Ajustes › Oído sin freeze al abrir; «poné música» / «una canción» sin título = start/resume.
+
 ### 0.3.0 — Velocidad
 
 - TTS por frase: empezar a hablar con la primera frase mientras el modelo sigue escribiendo.

@@ -100,6 +100,18 @@ test('0.2.11 has 4–5 short lines about games, city field, desktop shortcut and
   assert.match(all, /Salir|modelo local/i);
 });
 
+test('0.2.12 has short lines about false games, No molestar, Oído and vague music', () => {
+  const lines = notesFor('0.2.12');
+  assert.equal(Array.isArray(lines), true);
+  assert.ok(lines.length >= 4 && lines.length <= 5);
+  for (const line of lines) assert.ok(line.length < 120);
+  const all = lines.join(' ');
+  assert.match(all, /Discord|Spotify/i);
+  assert.match(all, /No molestar/i);
+  assert.match(all, /O[ií]do/i);
+  assert.match(all, /m[uú]sica|canci[oó]n/i);
+});
+
 test('upgrade from 0.2.8 shows the 0.2.9 notes once', () => {
   assert.deepEqual(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.8' }), NOTES['0.2.9']);
   assert.equal(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.9' }), null);
@@ -108,6 +120,11 @@ test('upgrade from 0.2.8 shows the 0.2.9 notes once', () => {
 test('upgrade from 0.2.10 shows the 0.2.11 notes once', () => {
   assert.deepEqual(bootNotes({ version: '0.2.11', lastSeenVersion: '0.2.10' }), NOTES['0.2.11']);
   assert.equal(bootNotes({ version: '0.2.11', lastSeenVersion: '0.2.11' }), null);
+});
+
+test('upgrade from 0.2.11 shows the 0.2.12 notes once', () => {
+  assert.deepEqual(bootNotes({ version: '0.2.12', lastSeenVersion: '0.2.11' }), NOTES['0.2.12']);
+  assert.equal(bootNotes({ version: '0.2.12', lastSeenVersion: '0.2.12' }), null);
 });
 
 test('an upgrade to a version without notes says nothing', () => {
