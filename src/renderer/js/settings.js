@@ -64,14 +64,8 @@ window.addEventListener('capri-setup-hint', (event) => {
   menu.settingsSection = 'model';
   if (menu.lastState) menu.render(menu.lastState);
 });
-console.time('settings:load');
-Promise.all([
-  document.fonts.load('500 14px Rajdhani'),
-  document.fonts.load('600 14px Rajdhani'),
-  document.fonts.load('400 11px JetBrains'),
-  window.host.getMenu({ folded: false }),
-]).then(([, , , state]) => {
-  console.timeEnd('settings:load');
+
+function applyState(state) {
   document.documentElement.dataset.theme = state.cfg.theme;
   // Same about.version as Acerca de (menu:get → app.getVersion())
   const ver = String(state?.about?.version || '').replace(/^v/i, '').trim();
@@ -88,6 +82,24 @@ Promise.all([
     [...nav.children].find((item) => item.textContent === 'Cerebro')?.classList.add('is-active');
   }
   menu.render(state); // replaces the Cargando… plate
+}
+
+console.time('settings:load');
+// Fast paint (light): skip PATH agent scans / apps / found. Then full getMenu fills Oído devices.
+Promise.all([
+  document.fonts.load('500 14px Rajdhani'),
+  document.fonts.load('600 14px Rajdhani'),
+  document.fonts.load('400 11px JetBrains'),
+  window.host.getMenu({ folded: false, light: true }),
+]).then(async ([, , , light]) => {
+  console.timeEnd('settings:load');
+  applyState(light);
+  try {
+    const full = await window.host.getMenu({ folded: false, light: false });
+    applyState(full);
+  } catch (err) {
+    console.error('[capri] settings full refresh failed', err);
+  }
 }).catch((err) => {
   console.error('[capri] settings load failed', err);
   loading.textContent = 'No pude cargar los ajustes.';

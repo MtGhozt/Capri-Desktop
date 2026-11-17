@@ -3225,8 +3225,10 @@ function registerIpc() {
     return { found: true, dir, file: fs.existsSync(file) };
   });
   ipcMain.handle('menu:get', (_e, extra = {}) => {
-    // listDevices can stall; overlay quick menu (light) does not need a fresh mic list every open
-    if (!extra.light) voice?.listDevices();
+    // Mic enumeration is async via the sidecar; never hold menu:get on it (Oído used to freeze).
+    if (!extra.light) {
+      setImmediate(() => { try { voice?.listDevices(); } catch { /* sidecar down */ } });
+    }
     const state = menuState(extra);
     structuredClone(state);
     return state;

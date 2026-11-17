@@ -15,6 +15,9 @@ test('detectAgents serves cache immediately and refreshes in the background afte
   assert.match(src, /setImmediate/);
   assert.match(src, /if \(now - agentsCacheAt >= AGENTS_CACHE_MS\) refreshAgentsAsync\(\)/);
   assert.match(src, /return agentsCache/);
+  // Cold cache must not block Ajustes › Oído on where + --version.
+  assert.match(src, /if \(!agentsCache\)/);
+  assert.match(src, /return \[\]/);
 });
 
 test('detectAgents marks PATH hits; all five CLIs are wired when present', () => {

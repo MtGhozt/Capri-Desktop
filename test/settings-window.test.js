@@ -22,10 +22,13 @@ test('settings window is created once and focused when opened again', () => {
   assert.equal(first.focuses, 1);
 });
 
-test('settings shows Cargando… until getMenu resolves (no blank panel)', () => {
+test('settings shows Cargando… then light getMenu, then full (Oído does not stall)', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'settings.js'), 'utf8');
   assert.match(src, /Cargando…/);
   assert.match(src, /appmenu__hint/);
-  assert.match(src, /getMenu\(\{ folded: false \}\)/);
+  assert.match(src, /getMenu\(\{ folded: false, light: true \}\)/);
+  assert.match(src, /getMenu\(\{ folded: false, light: false \}\)/);
   assert.match(src, /menu\.render\(state\)/);
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(main, /setImmediate\(\(\) => \{ try \{ voice\?\.listDevices\(\)/);
 });
