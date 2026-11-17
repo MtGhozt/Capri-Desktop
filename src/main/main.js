@@ -22,7 +22,7 @@ const {
 const {
   isLookCommand, consentNotice, captureScreenJpeg, createCaptureShield, keepCaptureFile, shouldAutoLook, AUTO_LOOK_MS,
 } = require('./screen-look');
-const { patchGamingApps, gameAppKey } = require('./game-detect');
+const { patchGamingApps, gameAppKey, windowedGameInFront } = require('./game-detect');
 const { probeProvider } = require('./llm-probe');
 const { checkForUpdate } = require('./updates');
 const { aboutInfo, isAllowedOpenUrl } = require('./about');
@@ -45,7 +45,7 @@ const {
 } = require('./reminders');
 const { createWeather, isWeatherOrHolidayQuestion } = require('./weather');
 const pcActions = require('./pc-actions');
-const { parsePcCommand } = pcActions;
+const { parsePcCommand, filterReplySnip } = pcActions;
 const { isQuitCommand } = require('./quit-command');
 const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
@@ -67,7 +67,7 @@ const {
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
 const { parseFixCommand, readTranscript } = require('./fix-command');
-const { stripWakeWord, wakeTranscriptOk } = require('./command-text');
+const { stripWakeWord, wakeTranscriptOk, isSttHallucination } = require('./command-text');
 const { GREETINGS, pickGreeting } = require('./greetings');
 const { windowContext } = require('./context');
 const { createComments } = require('./comments');
@@ -1178,6 +1178,11 @@ const hearingFixes = () => cleanFixes(config.load().hearing?.fixes);
 // as said: "cuando digo jarbis quiero decir Jarvis" must still say jarbis.
 function hearTranscript(payload) {
   const said = String(payload?.text || '');
+  // Known Whisper noise (YouTube outros, Amara…): never become a turn.
+  if (said.trim() && isSttHallucination(said)) {
+    logEvent(voiceLogPath(), `[capri] stt hallucination dropped: ${JSON.stringify(said.trim().slice(0, 200))}`);
+    return { ...payload, missed: true };
+  }
   // A whisper wake must open with "Capri": video speech that mentions her midway is not an order.
   if (payload?.wake === 'whisper' && !wakeTranscriptOk(said)) {
     logEvent(voiceLogPath(), `[capri] wake miss: heard ${JSON.stringify(said.slice(0, 200))} (no Capri at the start)`);
@@ -3476,7 +3481,11 @@ function registerIpc() {
               logEvent(voiceLogPath(), `[capri] tool-call leak: ${payload.toolLeak}`);
             }
             if (payload?.action) {
-              void runReplyAction(payload.action);
+              const action = filterReplySnip(payload.action, line);
+              if (action) void runReplyAction(action);
+              else if (payload.action.kind === 'snip') {
+                logEvent(voiceLogPath(), '[capri] snip dropped: user did not ask to snip');
+              }
             } else if (reminderAsked && promisesReminder(payload?.text || said)) {
               // no [remind:...] tag means nothing was saved: say it instead of letting her promise stand
               showLine('No quedó agendado ningún recordatorio: repetímelo con la hora.', {
@@ -3948,14 +3957,17 @@ function main() {
         if (barUp || start || (rest && data.taskbar && !lastWindows?.taskbar)) raiseOverlay();
         lastWindows = data;
         gameMode?.update(data);
-        // Comment mode: stay above the fullscreen game (re-assert; exclusive FS can still cover us).
-        if (gameMode?.active() && normalizeGamingMode(config.load().gaming?.mode) === 'comment') {
+        const cfg = config.load();
+        const gameApps = cfg.gaming?.apps || [];
+        // Comment + fullscreen game, or a known windowed game: keep Capri above (no game-mode enter).
+        if (gameMode?.active() && normalizeGamingMode(cfg.gaming?.mode) === 'comment') {
+          gameQuiet.pin(overlay);
+        } else if (!gameMode?.active() && windowedGameInFront(data, gameApps)) {
           gameQuiet.pin(overlay);
         }
         maybeGameComment(); // comment mode: voice-only, respects interval + quiet gates
-        const cfg = config.load();
         comments?.observe(cfg.llm?.shareScreen === true
-          ? windowContext(data, { apps: cfg.gaming?.apps || [] })
+          ? windowContext(data, { apps: gameApps })
           : null);
         overlay?.webContents.send('windows:update', data);
       },

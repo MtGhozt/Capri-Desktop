@@ -112,6 +112,12 @@ function gameOnScreen(windows, apps = []) {
   return Boolean(windows?.fgFull) && isAnyGameExe(windows?.fgExe, apps);
 }
 
+/** Known game (steamapps/common, other GAME_DIRS, or gaming.apps) but windowed — pin Capri only. */
+function windowedGameInFront(windows, apps = []) {
+  if (!windows?.fgExe || windows.fgFull) return false;
+  return isGameExe(windows.fgExe, apps);
+}
+
 /** Exe basename suitable for gaming.apps (allow or ignore). */
 function gameAppKey(exePath) {
   const exe = normalizePath(exePath);
@@ -140,6 +146,7 @@ module.exports = {
   GAME_DIRS,
   isGameExe,
   gameOnScreen,
+  windowedGameInFront,
   normalizePath,
   normalizeAppEntry,
   isIgnoredExe,

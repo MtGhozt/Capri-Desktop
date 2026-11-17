@@ -12,11 +12,19 @@ const JPEG_QUALITY = 70;
 const AUTO_LOOK_MS = 10 * 60_000;
 const USER_ACTIVE_IDLE_SEC = 90;
 
-// Whole-utterance only (after normalize): "no sé qué ves de malo" stays with the model.
+// Look phrase (after normalize). Whole utterance, or after ≤2 leading filler words
+// ("jugar", "oye", "che"…): "no sé qué ves de malo" must stay with the model.
 const LOOK_RE = /^(?:mira(?:me)? (?:mi |la )?pantalla|mira esto|que ves|que hay en(?: mi)? pantalla|describe(?:me)?(?: mi)? pantalla|ve(?: me)?(?: mi)? pantalla)$/;
 
 function isLookCommand(text) {
-  return LOOK_RE.test(normalizeCommandText(text).replace(/\s+por favor$/, '').trim());
+  const said = normalizeCommandText(text).replace(/\s+por favor$/, '').trim();
+  if (!said) return false;
+  if (LOOK_RE.test(said)) return true;
+  const words = said.split(/\s+/);
+  for (let n = 1; n <= 2 && n < words.length; n += 1) {
+    if (LOOK_RE.test(words.slice(n).join(' '))) return true;
+  }
+  return false;
 }
 
 function consentNotice({ label, model, cloud } = {}) {

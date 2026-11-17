@@ -54,4 +54,23 @@ function normalizeCommandText(text) {
     .trim();
 }
 
-module.exports = { normalizeCommandText, stripWakeWord, wakeWordAtStart, wakeTranscriptOk };
+// Whole-utterance Whisper noise (YouTube outros, Amara, etc.) — drop before a turn.
+// Stored already-normalized (punctuation → spaces), so "amara.org" matches as "amara org".
+const STT_HALLUCINATIONS = new Set([
+  'suscribete',
+  'suscribete al canal',
+  'gracias por ver',
+  'gracias por ver el video',
+  'subtitulos realizados por la comunidad de amara org',
+  'amara org',
+  'gracias',
+]);
+
+function isSttHallucination(text) {
+  return STT_HALLUCINATIONS.has(normalizeCommandText(text));
+}
+
+module.exports = {
+  normalizeCommandText, stripWakeWord, wakeWordAtStart, wakeTranscriptOk,
+  isSttHallucination, STT_HALLUCINATIONS,
+};

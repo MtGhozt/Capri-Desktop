@@ -9,6 +9,7 @@ const {
   resolveAppProcess, combineWindowResults,
   parseFileKind, parseFilesValue, sanitizeWords, nameMatchesWords, buildFindCommand,
   validateUserFilePath, setLastFileHits, getLastFileHits,
+  userAskedSnip, filterReplySnip,
   NO_BATTERY, info,
 } = require('../src/main/pc-actions');
 
@@ -62,6 +63,22 @@ test('snip and window reply tags parse', () => {
   assert.deepEqual(stripReplyTags('[window:Chrome|max] Ya.').action, {
     kind: 'window', value: 'Chrome|max', app: 'Chrome', position: 'max',
   });
+});
+
+test('snip reply tag is dropped unless the user said recort/captur/snip', () => {
+  const snip = { kind: 'snip', value: '' };
+  assert.equal(userAskedSnip('recortá la pantalla'), true);
+  assert.equal(userAskedSnip('sacá una captura'), true);
+  assert.equal(userAskedSnip('¿Jugar? Mira mi pantalla'), false);
+  assert.equal(userAskedSnip('mirá mi pantalla'), false);
+  assert.equal(filterReplySnip(snip, 'recortá la pantalla'), snip);
+  assert.equal(filterReplySnip(snip, '¿Jugar? Mira mi pantalla'), null);
+  assert.equal(filterReplySnip(snip, 'mirá mi pantalla'), null);
+  assert.deepEqual(filterReplySnip({ kind: 'volume', value: 'up' }, 'mirá mi pantalla'), {
+    kind: 'volume', value: 'up',
+  });
+  assert.match(ACTION_TAG_HELP, /recortá\/captura/);
+  assert.match(ACTION_TAG_HELP, /nunca por mirá\/ves mi pantalla/i);
 });
 
 test('ms-settings mapping covers the closed page list', () => {

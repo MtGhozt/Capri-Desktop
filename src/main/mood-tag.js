@@ -34,7 +34,7 @@ const ACTION_TAG_HELP = [
   `[settings:${SETTINGS_PAGES.join('|')}],`,
   `[theme:${THEME_VALUES.join('|')}],`,
   `[info:${INFO_KINDS.join('|')}],`,
-  '[snip] / [pc:snip] (recorte de pantalla),',
+  '[snip] / [pc:snip] solo si pidió explícitamente recortá/captura (nunca por mirá/ves mi pantalla),',
   `[window:<app>|${WINDOW_POSITIONS.join('|')}] (ej. [window:Discord|left]),`,
   `[files:<${FILE_KINDS.join('|')}>|<palabras>] (ej. [files:pdf|calculo]; solo abre la carpeta).`,
   'Para un recordatorio o una alarma usá [remind:<fecha y hora ISO 8601 en la zona local que te dije>|<texto corto>],',

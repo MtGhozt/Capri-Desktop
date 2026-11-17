@@ -7,8 +7,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  isGameExe, gameOnScreen, normalizePath, patchGamingApps, isIgnoredExe, GAME_DIRS,
+  isGameExe, gameOnScreen, windowedGameInFront, normalizePath, patchGamingApps, isIgnoredExe, GAME_DIRS,
 } = require('../src/main/game-detect.js');
+const fs = require('node:fs');
+const path = require('node:path');
 
 test('exes under a games folder are games', () => {
   assert.equal(isGameExe('C:\\Program Files (x86)\\Steam\\steamapps\\common\\Cyberpunk 2077\\bin\\x64\\Cyberpunk2077.exe'), true);
@@ -123,6 +125,27 @@ test('game mode takes any fullscreen window that is not a known non-game', () =>
   // her comments stay strict: an unconfigured emu or a stray javaw in front is nothing
   assert.equal(isGameExe('C:\\emu\\Dolphin.exe'), false);
   assert.equal(isGameExe('C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe'), false);
+});
+
+test('windowed known game (steamapps) pins only — not gameOnScreen', () => {
+  const isaac = {
+    fgExe: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\The Binding of Isaac Rebirth\\isaac-ng.exe',
+    fgFull: false,
+  };
+  assert.equal(isGameExe(isaac.fgExe), true);
+  assert.equal(gameOnScreen(isaac), false);
+  assert.equal(windowedGameInFront(isaac), true);
+  assert.equal(windowedGameInFront({ ...isaac, fgFull: true }), false);
+  // Denylist stays out even when windowed.
+  assert.equal(windowedGameInFront({
+    fgExe: 'C:\\Users\\Matias\\AppData\\Local\\Discord\\Discord.exe', fgFull: false,
+  }), false);
+  assert.equal(windowedGameInFront({
+    fgExe: 'C:\\Users\\Matias\\AppData\\Roaming\\Spotify\\Spotify.exe', fgFull: false,
+  }), false);
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  assert.match(main, /windowedGameInFront/);
+  assert.match(main, /gameQuiet\.pin\(overlay\)/);
 });
 
 test('Discord/Spotify maximized or fullscreen are never games; javaw fullscreen is', () => {

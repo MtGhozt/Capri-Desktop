@@ -845,6 +845,18 @@ async function run(action, deps = {}) {
   return fail('Esa acción de PC no está permitida.');
 }
 
+/** User said recort/captur/snip — required before a reply [snip] may run. */
+function userAskedSnip(text) {
+  const { normalizeCommandText } = require('./command-text');
+  return /(?:recort|captur|\bsnip\b)/.test(normalizeCommandText(text));
+}
+
+/** Drop [snip]/[pc:snip] when the user only asked to look at the screen (etc.). */
+function filterReplySnip(action, userLine) {
+  if (!action || action.kind !== 'snip') return action || null;
+  return userAskedSnip(userLine) ? action : null;
+}
+
 module.exports = {
   SETTINGS,
   SETTINGS_PAGES,
@@ -878,6 +890,8 @@ module.exports = {
   contextSnippet,
   detectInfoKinds,
   parsePcCommand,
+  userAskedSnip,
+  filterReplySnip,
   getLastFileHits: () => lastFileHits.slice(),
   setLastFileHits: (hits) => { lastFileHits = Array.isArray(hits) ? hits.slice(0, FIND_TOP) : []; },
   NO_BATTERY,

@@ -28,6 +28,15 @@ test('look phrases are detected', () => {
   assert.equal(isLookCommand('no sé qué ves de malo'), false);
 });
 
+test('look phrase at end after ≤2 filler words still matches', () => {
+  assert.equal(isLookCommand('¿Jugar? Mira mi pantalla'), true);
+  assert.equal(isLookCommand('jugar mira mi pantalla'), true);
+  assert.equal(isLookCommand('oye che mira mi pantalla'), true);
+  assert.equal(isLookCommand('capri mira esto'), true); // wake stripped → mira esto, or filler+look
+  assert.equal(isLookCommand('no sé qué ves de malo'), false);
+  assert.equal(isLookCommand('che oye mira esto ahora'), false); // >2 lead words before look
+});
+
 test('no-vision provider → supportsVision false and NO_VISION line ready', () => {
   assert.equal(supportsVision('local', 'google/gemma-4-e2b'), false);
   assert.equal(supportsVision('agent-claude', 'agent'), false);

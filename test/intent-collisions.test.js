@@ -81,6 +81,7 @@ const ROWS = [
   // snip vs screen-look vs clip
   ['recortá la pantalla', 'snip'],
   ['mirá mi pantalla', 'look'],
+  ['¿Jugar? Mira mi pantalla', 'look'],
   ['guardá un clip', 'clip'],
   // arrange windows
   ['poné Discord a la izquierda', 'window'],
