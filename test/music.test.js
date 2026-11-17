@@ -232,16 +232,25 @@ test('an expired Spotify token refreshes before the API call', async () => {
     token: () => 'old-token',
     expired: () => true,
     refresh: async () => { refreshed += 1; return 'new-token'; },
+    wait: async () => {},
     request: async (endpoint, access) => {
       seen.push(`${endpoint} ${access}`);
-      return endpoint === '/v1/search'
-        ? { tracks: { items: [{ uri: 'spotify:track:1', name: 'Neon', artists: [{ name: 'Juno' }] }] } }
-        : {};
+      if (endpoint === '/v1/search') {
+        return { tracks: { items: [{ uri: 'spotify:track:1', name: 'Neon', artists: [{ name: 'Juno' }] }] } };
+      }
+      if (endpoint === '/v1/me/player') {
+        return { is_playing: true, item: { uri: 'spotify:track:1', name: 'Neon', artists: [{ name: 'Juno' }] } };
+      }
+      return {};
     },
   });
   assert.equal((await spotify.playQuery('neon')).ok, true);
   assert.equal(refreshed, 1);
-  assert.deepEqual(seen, ['/v1/search new-token', '/v1/me/player/play new-token']);
+  assert.deepEqual(seen, [
+    '/v1/search new-token',
+    '/v1/me/player/play new-token',
+    '/v1/me/player new-token',
+  ]);
 });
 
 test('a 401 refreshes the token once and retries the same request', async () => {
@@ -276,16 +285,42 @@ test('play with no active device opens Spotify, waits, and retries once', async 
       if (endpoint === '/v1/search') {
         return { tracks: { items: [{ uri: 'spotify:track:abc', name: 'Neon', artists: [{ name: 'Juno' }] }] } };
       }
+      if (endpoint === '/v1/me/player') {
+        return { is_playing: true, item: { uri: 'spotify:track:abc', name: 'Neon', artists: [{ name: 'Juno' }] } };
+      }
       playAttempts += 1;
       if (playAttempts === 1) throw new Error('Spotify HTTP 404');
       return {};
     },
   });
   const result = await spotify.playQuery('neon', async (uri) => { opened.push(uri); });
-  assert.deepEqual(result, { ok: true, track: 'Neon', artist: 'Juno' });
+  assert.deepEqual(result, { ok: true, track: 'Neon', artist: 'Juno', confirmed: true });
   assert.deepEqual(opened, ['spotify:']);
-  assert.deepEqual(waits, [2000]);
-  assert.deepEqual(calls, ['GET /v1/search', 'PUT /v1/me/player/play', 'PUT /v1/me/player/play']);
+  assert.deepEqual(waits, [2000, 2500]);
+  assert.deepEqual(calls, [
+    'GET /v1/search', 'PUT /v1/me/player/play', 'PUT /v1/me/player/play', 'GET /v1/me/player',
+  ]);
+});
+
+test('play that does not start reports No arrancó instead of success', async () => {
+  const { createSpotify } = require('../src/main/spotify');
+  const waits = [];
+  const spotify = createSpotify({
+    token: () => 'token',
+    wait: async (ms) => { waits.push(ms); },
+    request: async (endpoint) => {
+      if (endpoint === '/v1/search') {
+        return { tracks: { items: [{ uri: 'spotify:track:abc', name: 'Neon', artists: [{ name: 'Juno' }] }] } };
+      }
+      if (endpoint === '/v1/me/player/play') return {};
+      // API accepted play, but nothing is actually playing
+      return { is_playing: false, item: null };
+    },
+  });
+  const result = await spotify.playQuery('neon');
+  assert.equal(result.ok, false);
+  assert.match(result.error, /No arrancó en Spotify/);
+  assert.deepEqual(waits, [2500]);
 });
 
 test('a track opened in the app is marked opened, not played', async () => {

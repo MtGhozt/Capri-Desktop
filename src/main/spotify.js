@@ -125,12 +125,28 @@ function createSpotify({
     }
   }
 
+  // After PUT play: one check (~2.5 s) that the player is actually on this track.
+  async function confirmStarted(access, track) {
+    await wait(2500);
+    let player;
+    try {
+      player = await call('/v1/me/player', access);
+    } catch {
+      return false;
+    }
+    if (!player?.is_playing || !player?.item) return false;
+    const item = player.item;
+    if (track.uri && item.uri === track.uri) return true;
+    return String(item.name || '').toLowerCase() === String(track.name || '').toLowerCase();
+  }
+
   async function playQuery(query, openTrack) {
     const access = await accessToken();
     if (!access) return { ok: false, fallback: true };
     const result = await call('/v1/search', access, { q: query, type: 'track', limit: 1 });
     const track = result?.tracks?.items?.[0];
     if (!track) return { ok: false, error: 'No encontré esa canción.' };
+    const meta = { track: track.name, artist: track.artists?.[0]?.name || '' };
     try {
       await call('/v1/me/player/play', access, { uris: [track.uri] }, 'PUT');
     } catch (err) {
@@ -140,7 +156,10 @@ function createSpotify({
         await wait(2000);
         try {
           await call('/v1/me/player/play', access, { uris: [track.uri] }, 'PUT');
-          return { ok: true, track: track.name, artist: track.artists?.[0]?.name || '' };
+          if (!(await confirmStarted(access, track))) {
+            return { ok: false, error: 'No arrancó en Spotify, ¿lo abro?', ...meta };
+          }
+          return { ok: true, ...meta, confirmed: true };
         } catch {
           // still no device: fall through to opening the track
         }
@@ -148,9 +167,12 @@ function createSpotify({
       // play needs Premium (403) and a live device: hand the track to the desktop app instead
       if (!openTrack) throw new Error('Spotify no pudo reproducir esa canción.');
       await openTrack(track.uri);
-      return { ok: true, track: track.name, artist: track.artists?.[0]?.name || '', opened: true };
+      return { ok: true, ...meta, opened: true };
     }
-    return { ok: true, track: track.name, artist: track.artists?.[0]?.name || '' };
+    if (!(await confirmStarted(access, track))) {
+      return { ok: false, error: 'No arrancó en Spotify, ¿lo abro?', ...meta };
+    }
+    return { ok: true, ...meta, confirmed: true };
   }
 
   // "pon música": resume in Spotify itself. No Premium (403) or no live device: the app is open,
