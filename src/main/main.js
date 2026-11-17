@@ -166,6 +166,7 @@ let weather = null;
 let gameWork = Promise.resolve();
 let gameWasFolded = false;
 let gameHadLlm = false;
+let gameHidHer = false; // quiet (No molestar) folded her; comment mode keeps her visible
 let lastGameCommentAt = 0; // voice-only in-game line (comment mode), capped by GAME_COMMENT_MS
 let lastGreetingAt = 0;
 let bootGreetingDone = false;
@@ -2088,19 +2089,36 @@ function queueGame(step) {
   return gameWork;
 }
 
+// Quiet = hide (today). Comment = stay visible + click-through + pinned above the game.
+function applyGamePlayVisual(play) {
+  setClickThrough(true, 'game');
+  if (play === 'comment') {
+    gameHidHer = false;
+    gameQuiet.pin(overlay);
+    if (overlayFolded) sendCommand('wake', { silent: true });
+    return;
+  }
+  // quiet / No molestar (and manual quiet while a game is on): fold her away
+  gameHidHer = true;
+  sendCommand('sleep');
+}
+
 async function gameEnter(windows) {
   gameWasFolded = overlayFolded;
+  gameHidHer = false;
   gameLog(`game on exe=${windows?.fgExe || '?'} ${vramText()}`);
   setClickThrough(true, 'game'); // clicks pass through over the game from here on
   llm?.cancel();
   goodnight.cancel();
   followUp.cancel();
-  // Brief line, then quiet — unless comment mode (she may talk later; no "me callo").
   const play = normalizeGamingMode(config.load().gaming?.mode);
-  if (play !== 'comment') {
+  if (play === 'comment') {
+    // Visible, fully click-through, never focus; pin above borderless fullscreen.
+    applyGamePlayVisual('comment');
+  } else {
     try { speakLine(pickLine('juegoEntrar')); } catch { /* pool missing in old builds */ }
+    applyGamePlayVisual('quiet'); // DORMANT / hidden; click-through stays on (game-quiet)
   }
-  sendCommand('sleep'); // DORMANT / hidden; click-through stays on (game-quiet)
   if (lms?.status() === 'booting') await lms.whenReady(); // a load in flight would land anyway
   gameHadLlm = lms?.status() === 'ready';
   await lms?.unloadAll?.();
@@ -2108,7 +2126,8 @@ async function gameEnter(windows) {
     gameLog('game enter cancelled after focus lost');
     return;
   }
-  gameLog(`game on after unload wakeMuted=${Boolean(voice?.wakeMuted?.())} mode=${play} ${vramText()}`);
+  if (play === 'comment') gameQuiet.pin(overlay); // re-assert after unload wait
+  gameLog(`game on after unload wakeMuted=${Boolean(voice?.wakeMuted?.())} mode=${play} hid=${gameHidHer} ${vramText()}`);
 }
 
 // Comment mode: voice-only pool line while quiet gates stay on. No bubble, no focus.
@@ -2148,13 +2167,15 @@ function maybeGameComment() {
 async function gameLeave() {
   gameLog(`game off ${vramText()}`);
   sendCommand('game-drone', { on: false });
-  gameQuiet.restore(overlay); // visible again, clicks passing through, chat untouched
-  if (!gameWasFolded) sendCommand('wake', { silent: true });
+  gameQuiet.restore(overlay); // Capri's normal top level, clicks passing through, chat untouched
+  // Only wake if quiet mode hid her (comment stayed visible the whole time).
+  if (gameHidHer && !gameWasFolded) sendCommand('wake', { silent: true });
   if (gameHadLlm) await lms?.reload?.();
   try { speakLine(pickLine('juegoSalir')); } catch { /* pool missing */ }
   gameLog(`game off after reload ${vramText()}`);
   gameWasFolded = false;
   gameHadLlm = false;
+  gameHidHer = false;
 }
 
 // Whether a spoken line is wanted. Loading TTS does not gate it: the sidecar holds the reply
@@ -2544,6 +2565,8 @@ function applyMenuAction(id, value) {
       });
       gameMode?.clearSuppress?.();
       gameMode?.update?.(lastWindows);
+      // Mid-game switch: quiet hides now; comment stays visible (manual No molestar = quiet).
+      if (gameMode?.active()) applyGamePlayVisual(next);
       if (warn) return { ok: true, warning: COMMENT_WARN };
       return { ok: true };
     }
@@ -3925,6 +3948,10 @@ function main() {
         if (barUp || start || (rest && data.taskbar && !lastWindows?.taskbar)) raiseOverlay();
         lastWindows = data;
         gameMode?.update(data);
+        // Comment mode: stay above the fullscreen game (re-assert; exclusive FS can still cover us).
+        if (gameMode?.active() && normalizeGamingMode(config.load().gaming?.mode) === 'comment') {
+          gameQuiet.pin(overlay);
+        }
         maybeGameComment(); // comment mode: voice-only, respects interval + quiet gates
         const cfg = config.load();
         comments?.observe(cfg.llm?.shareScreen === true

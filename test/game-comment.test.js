@@ -128,3 +128,42 @@ test('first comment pick shows the anti-cheat warning once', () => {
   assert.match(menu, /Comentar de vez en cuando/);
   assert.match(menu, /gaming-play/);
 });
+
+test('comment mode + game → visible and click-through, not folded', () => {
+  const enter = main.slice(
+    main.indexOf('async function gameEnter'),
+    main.indexOf('function maybeGameComment'),
+  );
+  const apply = main.slice(
+    main.indexOf('function applyGamePlayVisual'),
+    main.indexOf('async function gameEnter'),
+  );
+  // Comment: pin (visible + ignore mouse + screen-saver), optional silent wake — never sleep.
+  assert.match(apply, /play === 'comment'/);
+  assert.match(apply, /gameQuiet\.pin\(overlay\)/);
+  assert.match(apply, /gameHidHer = false/);
+  assert.doesNotMatch(apply.split("play === 'comment'")[1].split('gameHidHer = true')[0], /sendCommand\('sleep'\)/);
+  assert.match(enter, /applyGamePlayVisual\('comment'\)/);
+  // Re-assert on focus / window ticks while comment + game.
+  assert.match(main, /gameQuiet\.pin\(overlay\)/);
+  assert.match(main, /mode\) === 'comment'\) \{\s*gameQuiet\.pin\(overlay\)/);
+  // Quiet gates still block focus / hover / bubbles.
+  assert.match(main, /createGameQuiet\(\{ isActive: \(\) => Boolean\(gameMode\?\.active\(\)\) \}\)/);
+});
+
+test('quiet mode + game → hidden (sleep), same as today', () => {
+  const apply = main.slice(
+    main.indexOf('function applyGamePlayVisual'),
+    main.indexOf('async function gameEnter'),
+  );
+  const enter = main.slice(
+    main.indexOf('async function gameEnter'),
+    main.indexOf('function maybeGameComment'),
+  );
+  assert.match(apply, /gameHidHer = true/);
+  assert.match(apply, /sendCommand\('sleep'\)/);
+  assert.match(enter, /applyGamePlayVisual\('quiet'\)/);
+  assert.match(enter, /juegoEntrar/);
+  // Mid-game switch to quiet (manual No molestar) also hides.
+  assert.match(main, /case 'gaming-play':[\s\S]*?gameMode\?\.active\(\)\) applyGamePlayVisual\(next\)/);
+});

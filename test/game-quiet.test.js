@@ -8,7 +8,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { createGameQuiet } = require('../src/main/game-quiet.js');
+const { createGameQuiet, TOP_LEVEL } = require('../src/main/game-quiet.js');
 
 const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
 const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
@@ -23,6 +23,7 @@ function fakeWindow({ destroyed = false } = {}) {
       focus: () => calls.push('focus'),
       moveTop: () => calls.push('moveTop'),
       showInactive: () => calls.push('showInactive'),
+      setAlwaysOnTop: (on, level) => calls.push(['alwaysOnTop', on, level]),
       setIgnoreMouseEvents: (on, opts) => calls.push(['ignore', on, opts]),
     },
   };
@@ -32,22 +33,39 @@ test('leaving the game restores the window without show(), focus() or the chat',
   const { calls, win } = fakeWindow();
   createGameQuiet({ isActive: () => false }).restore(win);
   assert.deepEqual(calls, [
+    ['alwaysOnTop', true, TOP_LEVEL],
     'showInactive',
     ['ignore', true, { forward: true }],
   ]);
 
-  // The leave path itself: restore + a silent wake, never a chat toggle.
+  // The leave path itself: restore + a silent wake when quiet hid her, never a chat toggle.
   const from = main.indexOf('async function gameLeave');
   const leave = main.slice(from, main.indexOf('function voiceReplyOn', from));
   assert.ok(from > 0, 'gameLeave exists');
   assert.match(leave, /gameQuiet\.restore\(overlay\)/);
+  assert.match(leave, /gameHidHer && !gameWasFolded/);
   assert.match(leave, /sendCommand\('wake', \{ silent: true \}\)/);
   assert.doesNotMatch(leave, /openChat|chatVisible|sendCommand\('chat'/);
 });
 
+test('pin keeps her visible, click-through and above the game', () => {
+  assert.equal(TOP_LEVEL, 'screen-saver');
+  const { calls, win } = fakeWindow();
+  createGameQuiet({ isActive: () => true }).pin(win);
+  assert.deepEqual(calls, [
+    ['alwaysOnTop', true, 'screen-saver'],
+    'showInactive',
+    ['ignore', true, { forward: true }],
+  ]);
+  assert.ok(!calls.includes('focus'));
+  assert.ok(!calls.includes('show'));
+});
+
 test('a destroyed window is left alone', () => {
   const { calls, win } = fakeWindow({ destroyed: true });
-  createGameQuiet({ isActive: () => false }).restore(win);
+  const gq = createGameQuiet({ isActive: () => false });
+  gq.restore(win);
+  gq.pin(win);
   assert.deepEqual(calls, []);
 });
 
