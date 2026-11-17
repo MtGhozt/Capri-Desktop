@@ -124,3 +124,27 @@ test('game mode takes any fullscreen window that is not a known non-game', () =>
   assert.equal(isGameExe('C:\\emu\\Dolphin.exe'), false);
   assert.equal(isGameExe('C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe'), false);
 });
+
+test('Discord/Spotify maximized or fullscreen are never games; javaw fullscreen is', () => {
+  for (const exe of [
+    'C:\\Users\\Matias\\AppData\\Local\\Discord\\app-1.0\\Discord.exe',
+    'C:\\Users\\Matias\\AppData\\Roaming\\Spotify\\Spotify.exe',
+    'C:\\Program Files (x86)\\Steam\\steam.exe',
+    'C:\\Program Files (x86)\\Epic Games\\Launcher\\Portal\\Binaries\\Win64\\EpicGamesLauncher.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\WhatsApp\\WhatsApp.exe',
+    'C:\\Users\\Matias\\AppData\\Roaming\\Telegram Desktop\\Telegram.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\Programs\\Antigravity\\Antigravity.exe',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files\\Microsoft VS Code\\Code.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\Programs\\cursor\\Cursor.exe',
+  ]) {
+    assert.equal(gameOnScreen({ fgExe: exe, fgFull: true }), false, exe);
+    assert.equal(gameOnScreen({ fgExe: exe, fgFull: false }), false, exe);
+  }
+  assert.equal(gameOnScreen({
+    fgExe: 'C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe', fgFull: true,
+  }), true);
+  assert.equal(gameOnScreen({
+    fgExe: 'C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe', fgFull: false,
+  }), false);
+});
