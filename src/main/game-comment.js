@@ -15,6 +15,14 @@ function normalizeGamingMode(mode) {
   return 'quiet'; // 'quiet', legacy 'auto', or anything else
 }
 
+/** Comentar opt-in: speak if the sidecar is up — replyMode does not gate it. */
+function gameCommentVoiceReady({ muted = false, connected = false, tts = 'off' } = {}) {
+  if (muted) return false;
+  if (!connected) return false;
+  const kind = String(tts || 'off').toLowerCase();
+  return kind !== 'off' && kind !== 'none' && kind !== 'false';
+}
+
 function canGameComment({
   mode,
   gameActive = false,
@@ -40,6 +48,7 @@ module.exports = {
   GAME_COMMENT_MS,
   COMMENT_WARN,
   normalizeGamingMode,
+  gameCommentVoiceReady,
   canGameComment,
   gameCommentKind,
 };

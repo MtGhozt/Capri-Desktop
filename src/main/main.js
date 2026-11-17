@@ -74,7 +74,7 @@ const { createComments } = require('./comments');
 const { createGameMode, FOCUS_LOSS_DEBOUNCE_MS } = require('./game-mode');
 const { createGameQuiet } = require('./game-quiet');
 const {
-  COMMENT_WARN, normalizeGamingMode, canGameComment, gameCommentKind,
+  COMMENT_WARN, normalizeGamingMode, gameCommentVoiceReady, canGameComment, gameCommentKind,
 } = require('./game-comment');
 const { vramText } = require('./vram');
 const {
@@ -2112,17 +2112,24 @@ async function gameEnter(windows) {
 }
 
 // Comment mode: voice-only pool line while quiet gates stay on. No bubble, no focus.
+// Comentar is the opt-in: speak even when replyMode is blips/silent, if the sidecar is up.
 function maybeGameComment() {
   const cfg = config.load();
   const mode = normalizeGamingMode(cfg.gaming?.mode);
   const busy = Boolean(ttsLoading || voiceTalking || llmBusy || goodnight.pending);
+  const voiceReady = gameCommentVoiceReady({
+    muted: Boolean(cfg.muted),
+    connected: Boolean(voice?.connected?.()),
+    tts: cfg.voice?.tts,
+  });
   if (!canGameComment({
     mode,
     gameActive: Boolean(gameMode?.active()),
     lastAt: lastGameCommentAt,
-    voiceOn: voiceReplyOn(),
+    voiceOn: voiceReady,
     busy,
   })) return;
+  if (!speakQueue) return; // no voice path → nothing (never a bubble over the game)
   const context = cfg.llm?.shareScreen === true
     ? windowContext(lastWindows, { apps: cfg.gaming?.apps || [] })
     : null;
@@ -2130,8 +2137,12 @@ function maybeGameComment() {
   let line = '';
   try { line = pickLine(kind); } catch { /* pool missing */ }
   if (!line) return;
+  // Bypass speakLine/voiceReplyOn: replyMode must not silence Comentar.
+  const speakId = speakQueue.start(currentTurn()) || 0;
+  if (!speakId) return;
   lastGameCommentAt = Date.now();
-  speakLine(line); // voice only — no bubble / focus over a game
+  speakQueue.feed(line);
+  speakQueue.flush(speakId);
 }
 
 async function gameLeave() {

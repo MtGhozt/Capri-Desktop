@@ -10,6 +10,7 @@ const {
   GAME_COMMENT_MS,
   COMMENT_WARN,
   normalizeGamingMode,
+  gameCommentVoiceReady,
   canGameComment,
   gameCommentKind,
 } = require('../src/main/game-comment.js');
@@ -68,15 +69,46 @@ test('manual off wins over comment (and quiet)', () => {
 });
 
 test('comment mode reuses quiet gates and never sends a bubble line', () => {
-  // Voice only: speakLine, no sendCommand('line') inside maybeGameComment.
   const from = main.indexOf('function maybeGameComment');
   assert.ok(from > 0, 'maybeGameComment exists');
   const body = main.slice(from, main.indexOf('async function gameLeave', from));
-  assert.match(body, /speakLine\(line\)/);
+  assert.match(body, /speakQueue\.(?:start|feed|flush)/);
   assert.doesNotMatch(body, /sendCommand\(/);
+  assert.doesNotMatch(body, /speakLine\(/); // must not use replyMode-gated speakLine
   // Quiet gates stay tied to gameMode.active for both modes.
   assert.match(main, /createGameQuiet\(\{ isActive: \(\) => Boolean\(gameMode\?\.active\(\)\) \}\)/);
   assert.match(main, /setClickThrough\(true, 'game'\)/);
+});
+
+test('Comentar speaks when voice is connected even if replyMode is off', () => {
+  // Opt-in is gaming.mode=comment, not Respuesta=VOZ.
+  assert.equal(gameCommentVoiceReady({ muted: false, connected: true, tts: 'kokoro' }), true);
+  assert.equal(gameCommentVoiceReady({ muted: false, connected: true, tts: 'omnivoice' }), true);
+  assert.equal(canGameComment({
+    mode: 'comment', gameActive: true, lastAt: 0, now: GAME_COMMENT_MS,
+    voiceOn: gameCommentVoiceReady({ muted: false, connected: true, tts: 'kokoro' }),
+    busy: false,
+  }), true);
+  const from = main.indexOf('function maybeGameComment');
+  const body = main.slice(from, main.indexOf('async function gameLeave', from));
+  assert.match(body, /gameCommentVoiceReady/);
+  assert.doesNotMatch(body, /voiceReplyOn\(/);
+  assert.match(body, /speakQueue\.start/);
+});
+
+test('Comentar shows nothing when voice is not available (no bubble)', () => {
+  assert.equal(gameCommentVoiceReady({ muted: false, connected: false, tts: 'kokoro' }), false);
+  assert.equal(gameCommentVoiceReady({ muted: true, connected: true, tts: 'kokoro' }), false);
+  assert.equal(gameCommentVoiceReady({ muted: false, connected: true, tts: 'off' }), false);
+  assert.equal(canGameComment({
+    mode: 'comment', gameActive: true, lastAt: 0, now: GAME_COMMENT_MS,
+    voiceOn: false, busy: false,
+  }), false);
+  const from = main.indexOf('function maybeGameComment');
+  const body = main.slice(from, main.indexOf('async function gameLeave', from));
+  // No voice → early return; never a bubble over the game.
+  assert.match(body, /if \(!speakQueue\) return/);
+  assert.doesNotMatch(body, /sendCommand\(/);
 });
 
 test('screen-based kind only when shareScreen is on; otherwise generic', () => {
