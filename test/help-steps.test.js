@@ -71,6 +71,7 @@ test('help covers current install, talk, brain cards, apps, screen and #bugs', (
   assert.match(all, /Buscar programa/);
   assert.match(all, /Añadir enlace/);
   assert.match(all, /No molestar/);
+  assert.match(all, /nunca controla el juego/);
   assert.match(all, /Silenciar en esta app/);
   assert.match(all, /Automático \(recomendado\)/);
   assert.match(all, /OpenGL \(experimental\)/);

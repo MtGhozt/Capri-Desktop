@@ -73,6 +73,9 @@ const { windowContext } = require('./context');
 const { createComments } = require('./comments');
 const { createGameMode, FOCUS_LOSS_DEBOUNCE_MS } = require('./game-mode');
 const { createGameQuiet } = require('./game-quiet');
+const {
+  COMMENT_WARN, normalizeGamingMode, canGameComment, gameCommentKind,
+} = require('./game-comment');
 const { vramText } = require('./vram');
 const {
   recommendProfile, detectHardware, hardwareFingerprint, shouldOfferBubble,
@@ -163,6 +166,7 @@ let weather = null;
 let gameWork = Promise.resolve();
 let gameWasFolded = false;
 let gameHadLlm = false;
+let lastGameCommentAt = 0; // voice-only in-game line (comment mode), capped by GAME_COMMENT_MS
 let lastGreetingAt = 0;
 let bootGreetingDone = false;
 let greeting = null;
@@ -2091,9 +2095,12 @@ async function gameEnter(windows) {
   llm?.cancel();
   goodnight.cancel();
   followUp.cancel();
-  // Brief line, then quiet. Wake mute is set by createGameMode; sidecar stays up for PTT.
-  try { speakLine(pickLine('juegoEntrar')); } catch { /* pool missing in old builds */ }
-  sendCommand('sleep'); // DORMANT / hidden
+  // Brief line, then quiet — unless comment mode (she may talk later; no "me callo").
+  const play = normalizeGamingMode(config.load().gaming?.mode);
+  if (play !== 'comment') {
+    try { speakLine(pickLine('juegoEntrar')); } catch { /* pool missing in old builds */ }
+  }
+  sendCommand('sleep'); // DORMANT / hidden; click-through stays on (game-quiet)
   if (lms?.status() === 'booting') await lms.whenReady(); // a load in flight would land anyway
   gameHadLlm = lms?.status() === 'ready';
   await lms?.unloadAll?.();
@@ -2101,7 +2108,30 @@ async function gameEnter(windows) {
     gameLog('game enter cancelled after focus lost');
     return;
   }
-  gameLog(`game on after unload wakeMuted=${Boolean(voice?.wakeMuted?.())} ${vramText()}`);
+  gameLog(`game on after unload wakeMuted=${Boolean(voice?.wakeMuted?.())} mode=${play} ${vramText()}`);
+}
+
+// Comment mode: voice-only pool line while quiet gates stay on. No bubble, no focus.
+function maybeGameComment() {
+  const cfg = config.load();
+  const mode = normalizeGamingMode(cfg.gaming?.mode);
+  const busy = Boolean(ttsLoading || voiceTalking || llmBusy || goodnight.pending);
+  if (!canGameComment({
+    mode,
+    gameActive: Boolean(gameMode?.active()),
+    lastAt: lastGameCommentAt,
+    voiceOn: voiceReplyOn(),
+    busy,
+  })) return;
+  const context = cfg.llm?.shareScreen === true
+    ? windowContext(lastWindows, { apps: cfg.gaming?.apps || [] })
+    : null;
+  const kind = gameCommentKind({ shareScreen: cfg.llm?.shareScreen === true, context });
+  let line = '';
+  try { line = pickLine(kind); } catch { /* pool missing */ }
+  if (!line) return;
+  lastGameCommentAt = Date.now();
+  speakLine(line); // voice only — no bubble / focus over a game
 }
 
 async function gameLeave() {
@@ -2475,11 +2505,36 @@ function applyMenuAction(id, value) {
       // Manual No molestar always wins: apply now (never wait for the next window tick).
       // Off suppresses this process until it changes; on clears that suppress.
       const off = value === 'off';
-      updateConfig({ gaming: { mode: off ? 'off' : 'auto' } });
-      if (off) gameMode?.dismiss?.(lastWindows);
-      else gameMode?.clearSuppress?.();
+      const cur = config.load().gaming || {};
+      if (off) {
+        const keep = normalizeGamingMode(cur.mode) === 'comment' ? 'comment'
+          : (cur.lastMode === 'comment' ? 'comment' : 'quiet');
+        updateConfig({ gaming: { mode: 'off', lastMode: keep } });
+        gameMode?.dismiss?.(lastWindows);
+      } else {
+        const back = cur.lastMode === 'comment' ? 'comment' : 'quiet';
+        updateConfig({ gaming: { mode: back } });
+        gameMode?.clearSuppress?.();
+      }
       gameMode?.update?.(lastWindows);
       break;
+    }
+    case 'gaming-play': {
+      // Ajustes › Comportamiento: En juegos → quiet (No molestar) | comment.
+      const next = value === 'comment' ? 'comment' : 'quiet';
+      const cur = config.load().gaming || {};
+      const warn = next === 'comment' && !cur.commentWarned;
+      updateConfig({
+        gaming: {
+          mode: next,
+          lastMode: next,
+          ...(warn ? { commentWarned: true } : {}),
+        },
+      });
+      gameMode?.clearSuppress?.();
+      gameMode?.update?.(lastWindows);
+      if (warn) return { ok: true, warning: COMMENT_WARN };
+      return { ok: true };
     }
     case 'drone-mode': updateConfig({ gaming: { drone: Boolean(value) } }); break;
     case 'game-list':
@@ -2825,12 +2880,13 @@ function menuState(extra = {}) {
       })),
       theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
       gaming: {
-        mode: cfg.gaming?.mode === 'off' ? 'off' : 'auto',
+        mode: normalizeGamingMode(cfg.gaming?.mode),
         drone: cfg.gaming?.drone !== false,
         apps: Array.isArray(cfg.gaming?.apps) ? cfg.gaming.apps : [],
         gamepadPtt: Array.isArray(cfg.gaming?.gamepadPtt) ? cfg.gaming.gamepadPtt.map(Number).filter(Number.isFinite) : [6, 7],
         fgExe: lastWindows?.fgExe || '',
         fgKey: gameAppKey(lastWindows?.fgExe || ''),
+        commentWarned: Boolean(cfg.gaming?.commentWarned),
       },
       comments: {
         enabled: cfg.comments?.enabled !== false,
@@ -3813,7 +3869,7 @@ function main() {
     voice.prepareGreetings(GREETINGS);
     voice.start();
     gameMode = createGameMode({
-      enabled: () => config.load().gaming?.mode !== 'off',
+      enabled: () => normalizeGamingMode(config.load().gaming?.mode) !== 'off',
       apps: () => config.load().gaming?.apps || [],
       setWakeMuted: (on) => voice?.setWakeMuted?.(on),
       exitDelayMs: FOCUS_LOSS_DEBOUNCE_MS, // focus must be gone 10 s: a flicker never ends game mode
@@ -3858,6 +3914,7 @@ function main() {
         if (barUp || start || (rest && data.taskbar && !lastWindows?.taskbar)) raiseOverlay();
         lastWindows = data;
         gameMode?.update(data);
+        maybeGameComment(); // comment mode: voice-only, respects interval + quiet gates
         const cfg = config.load();
         comments?.observe(cfg.llm?.shareScreen === true
           ? windowContext(data, { apps: cfg.gaming?.apps || [] })

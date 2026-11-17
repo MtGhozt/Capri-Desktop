@@ -245,4 +245,6 @@ test('settings tabs have isolated sections and behavior uses nested config', () 
   assert.ok(behavior, 'behavior section must end before Apariencia');
   assert.doesNotMatch(behavior[1], /Tema|Atajos|Pantalla|Animaciones|Arrastrar/);
   assert.match(behavior[1], /Iniciar con Windows/);
+  assert.match(behavior[1], /En juegos/);
+  assert.match(behavior[1], /Comentar de vez en cuando/);
 });

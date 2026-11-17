@@ -86,7 +86,9 @@ const DEFAULTS = {
     folder: null,          // null → NVIDIA's Videos\NVIDIA if it exists, otherwise Videos
   },
   gaming: {
-    mode: 'auto',            // 'auto' unloads the GPU while a fullscreen game runs; 'off' never
+    mode: 'quiet',           // 'quiet' (No molestar) | 'comment' (voice lines) | 'off' (manual off)
+    lastMode: 'quiet',       // quiet|comment remembered when manual No molestar turns off
+    commentWarned: false,    // first-time anti-cheat notice for comment mode already shown
     drone: true,             // show the lightweight renderer while a game owns the screen
     apps: [],                // allow/ignore list: "Game.exe" or { match, ignore: true } / "!Game.exe"
     gamepadPtt: [6, 7],      // Gamepad API button indexes held together = push-to-talk (LB+RB)
@@ -327,6 +329,15 @@ function load() {
   // Older installs defaulted to English; Capri now speaks Spanish.
   if (cache.lang === 'en') {
     cache.lang = 'es';
+    dirty = true;
+  }
+  // 0.3.0: gaming.mode 'auto' → 'quiet' (No molestar); keep 'off' / 'comment'.
+  if (cache.gaming?.mode === 'auto') {
+    cache.gaming.mode = 'quiet';
+    dirty = true;
+  }
+  if (cache.gaming && (cache.gaming.lastMode === 'auto' || !cache.gaming.lastMode)) {
+    cache.gaming.lastMode = cache.gaming.mode === 'comment' ? 'comment' : 'quiet';
     dirty = true;
   }
   const localModel = migrateLocalModel(cache.llm);

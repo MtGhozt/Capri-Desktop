@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 (en curso)
+
+### En juegos: No molestar / Comentar
+
+- **Ajustes › Comportamiento › En juegos:** «No molestar» (default, igual que antes) o «Comentar de vez en cuando».
+- **Comentar:** Capri sigue sin tomar foco ni el mouse (mismas barreras de quiet); puede decir una línea de voz como máximo cada ~8 min. Sin burbuja. Comentarios según contexto de ventana solo si «Enviar mi pantalla…» ya está activo.
+- **Aviso una vez** al elegir Comentar (anti-cheat / overlays). Capri nunca controla el juego.
+- **No molestar manual** sigue ganando sobre ambos modos.
+
 ## 0.2.12 (etiqueta `v0.2.12`)
 
 ### Detección de juegos y No molestar

@@ -124,6 +124,7 @@ export class AppMenu {
     this.appOpen = null;    // the app being edited
     this.appNote = '';      // what came of the last add / save / delete
     this.gameNote = '';
+    this.gamePlayNote = ''; // first-time anti-cheat warning for En juegos › Comentar
     this.reminderNote = '';
     this.placeNote = '';    // resolved city label or "No encontré esa ciudad"
     this.appDelete = null;  // BORRAR pressed once: the next press deletes
@@ -1412,6 +1413,22 @@ export class AppMenu {
       labels: ['NO', 'SÍ'],
       onChange: (on) => this.act('desktop-shortcut', on),
     });
+    const playMode = cfg.gaming?.mode === 'comment' ? 'comment' : 'quiet';
+    selector('En juegos', {
+      setting: 'behavior',
+      help: 'gaming',
+      options: [
+        { id: 'quiet', label: 'No molestar' },
+        { id: 'comment', label: 'Comentar de vez en cuando' },
+      ],
+      current: playMode,
+      onChange: (id) => this.act('gaming-play', id),
+    });
+    if (this.gamePlayNote) {
+      const warn = build('div', 'appmenu__hint', this.gamePlayNote);
+      warn.dataset.setting = 'behavior';
+      body.append(warn);
+    }
 
     section('RECORDATORIOS', 'reminders');
     const pending = Array.isArray(cfg.reminders) ? cfg.reminders : [];
@@ -2783,6 +2800,11 @@ export class AppMenu {
       case 'startup': this.lastState.login = Boolean(value); return true;
       case 'desktop-shortcut': this.lastState.deskShortcut = Boolean(value); return true;
       case 'drone-mode': cfg.gaming = { ...(cfg.gaming || {}), drone: Boolean(value) }; return true;
+      case 'gaming-play': {
+        const next = value === 'comment' ? 'comment' : 'quiet';
+        cfg.gaming = { ...(cfg.gaming || {}), mode: next, lastMode: next };
+        return true;
+      }
       case 'comments': cfg.comments = { ...(cfg.comments || {}), enabled: Boolean(value) }; return true;
       case 'greetings': cfg.behavior = { ...(cfg.behavior || {}), greetings: Boolean(value) }; return true;
       case 'unlock-greeting': cfg.behavior = { ...(cfg.behavior || {}), unlockGreeting: Boolean(value) }; return true;
@@ -2809,7 +2831,7 @@ export class AppMenu {
     if (id !== 'render') this.confirmSoftware = false;
     const keep = this.settingsMode || id === 'mic' || id === 'mic-device' || id === 'reply-mode' || id === 'music-player'
       || id === 'model-provider' || id === 'spotify-connect' || id === 'spotify-disconnect' || id === 'drag-lock' || id === 'theme'
-      || id === 'startup' || id === 'gaming-mode' || id === 'drone-mode' || id === 'comments' || id === 'comments-range'
+      || id === 'startup' || id === 'gaming-mode' || id === 'gaming-play' || id === 'drone-mode' || id === 'comments' || id === 'comments-range'
       || id === 'desktop-shortcut'
       || id === 'greetings' || id === 'unlock-greeting' || id === 'caresses' || id === 'music-dance'
       || id === 'app-fx' || id === 'scanlines' || id === 'game-list'
@@ -2819,6 +2841,7 @@ export class AppMenu {
     }
     const result = await this.host.menuAction({ id, value });
     if (id === 'game-list' && result?.message) this.gameNote = result.message;
+    if (id === 'gaming-play' && result?.warning) this.gamePlayNote = result.warning;
     if ((id === 'reminder-update' || id === 'reminder-delete') && result?.message) {
       this.reminderNote = result.message;
     }
