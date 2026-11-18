@@ -10,6 +10,7 @@ const {
 } = require('electron');
 
 const config = require('./config');
+const state = require('./state');
 const { reviveMigratedTts } = require('./config');
 const { TRAY, LANGS } = require('./labels');
 const { createBridge } = require('./bridge');
@@ -146,18 +147,13 @@ let lastAutoLookAt = 0;
 let autoLookTimer = null;
 let speakQueue = null;
 let comments = null;
-let ttsLoading = false;
-let lastTts = null; // last tts_state from the sidecar: engine ('off' | 'kokoro' | 'omnivoice') + state
-let voiceTalking = false;
 let voiceListening = false;
 let quietWake = false; // the capture running now began as an auto wake over a game
 let voiceMic = { open: true, needed: true, message: '' };
-let llmBusy = false;
 let voiceQueue = [];
 const chatVisible = createChatVisible({ log: (line) => logEvent(voiceLogPath(), `[capri] ${line}`) });
 let previousForeground = null;
 let menuKeyboard = false; // her menu has a text field open (Corregir lo último): it needs the keyboard
-let lastHeard = '';       // the last thing Whisper wrote, before her fixes (Corregir lo último)
 let gameMode = null;
 // A game on the screen: no show()/focus()/moveTop(), click-through stays on (game-quiet.js).
 const gameQuiet = createGameQuiet({ isActive: () => Boolean(gameMode?.active()) });
@@ -629,7 +625,7 @@ const followUp = createFollowUp({
   canListen: () => Boolean(
     voice?.running?.()
     && micActive(config.load())
-    && !overlayFolded
+    && !state.overlayFolded
     && !goodnight.pending
     && !gameMode?.active?.()
     && !menuKeyboard
@@ -1191,7 +1187,7 @@ function hearTranscript(payload) {
     return { ...payload, missed: true };
   }
   const read = readTranscript(said, hearingFixes());
-  if (!read.order && said.trim()) lastHeard = said.trim();
+  if (!read.order && said.trim()) state.lastHeard = said.trim();
   // what Whisper wrote, so a command that went to the model can be traced (and fixed)
   if (said.trim()) logEvent(voiceLogPath(), `[capri] heard: ${JSON.stringify(said.trim().slice(0, 200))}`);
   if (read.heard) logEvent(voiceLogPath(), `[capri] heard fix: ${JSON.stringify(said)} -> ${JSON.stringify(read.text)}`);
@@ -1789,8 +1785,8 @@ async function runVoiceInstall(value = {}) {
   const check = checkVoiceDir(dir);
   if (!check.ok) return { ok: false, message: check.message || 'La voz no quedó usable.' };
   await voice?.stop();
-  ttsLoading = true;
-  lastTts = { engine: 'omnivoice', state: 'loading' };
+  state.ttsLoading = true;
+  state.lastTts = { engine: 'omnivoice', state: 'loading' };
   updateConfig({
     voice: {
       dir: check.dir,
@@ -1927,7 +1923,7 @@ async function maybeAutoLook() {
   const id = String(cfg.llm?.provider || 'local');
   const model = String(cfg.llm?.model || provider(id).model || '');
   if (!supportsVision(id, model) && !isAgent(id)) return;
-  if (llmBusy || overlayFolded || chatVisible.get() || voiceTalking) return;
+  if (state.llmBusy || state.overlayFolded || chatVisible.get() || state.voiceTalking) return;
   const image = await snapScreenForLook();
   if (!image) return;
   lastAutoLookAt = Date.now();
@@ -1935,7 +1931,7 @@ async function maybeAutoLook() {
   openChat('look');
   const speakId = voiceReplyOn() ? speakQueue?.start() : 0;
   if (!speakId) speakQueue?.stop();
-  llmBusy = true;
+  state.llmBusy = true;
   try {
     await llm?.chat?.({
       user: line,
@@ -1959,7 +1955,7 @@ async function maybeAutoLook() {
       },
     });
   } finally {
-    llmBusy = false;
+    state.llmBusy = false;
   }
 }
 
@@ -2010,8 +2006,8 @@ async function saveVoiceRef(value = {}) {
   });
   if (!saved.ok) return saved;
   await voice?.stop();
-  ttsLoading = true;
-  lastTts = { engine: 'omnivoice', state: 'loading' };
+  state.ttsLoading = true;
+  state.lastTts = { engine: 'omnivoice', state: 'loading' };
   updateConfig({
     voice: {
       ttsRef: saved.ttsRef,
@@ -2102,7 +2098,7 @@ function applyGamePlayVisual(play) {
   if (play === 'comment') {
     gameHidHer = false;
     gameQuiet.pin(overlay);
-    if (overlayFolded) sendCommand('wake', { silent: true });
+    if (state.overlayFolded) sendCommand('wake', { silent: true });
     return;
   }
   // quiet / No molestar (and manual quiet while a game is on): fold her away
@@ -2111,7 +2107,7 @@ function applyGamePlayVisual(play) {
 }
 
 async function gameEnter(windows) {
-  gameWasFolded = overlayFolded;
+  gameWasFolded = state.overlayFolded;
   gameHidHer = false;
   gameLog(`game on exe=${windows?.fgExe || '?'} ${vramText()}`);
   setClickThrough(true, 'game'); // clicks pass through over the game from here on
@@ -2142,7 +2138,7 @@ async function gameEnter(windows) {
 function maybeGameComment() {
   const cfg = config.load();
   const mode = normalizeGamingMode(cfg.gaming?.mode);
-  const busy = Boolean(ttsLoading || voiceTalking || llmBusy || goodnight.pending);
+  const busy = Boolean(state.ttsLoading || state.voiceTalking || state.llmBusy || goodnight.pending);
   const voiceReady = gameCommentVoiceReady({
     muted: Boolean(cfg.muted),
     connected: Boolean(voice?.connected?.()),
@@ -2199,8 +2195,8 @@ function voiceReplyOn() {
 function voiceStatus(cfg) {
   return ttsStatus(cfg, {
     running: voice?.running?.(),
-    tts: lastTts,
-    sleeping: overlayFolded,
+    tts: state.lastTts,
+    sleeping: state.overlayFolded,
   });
 }
 
@@ -2388,7 +2384,7 @@ function applyMenuAction(id, value) {
     case 'muted': updateConfig({ muted: Boolean(value) }); break;
     case 'reply-mode':
       // Picking VOZ starts OmniVoice loading now, not a stale "off" from the blips it was using.
-      if (value === 'voice') lastTts = { engine: 'omnivoice', state: 'loading' };
+      if (value === 'voice') state.lastTts = { engine: 'omnivoice', state: 'loading' };
       updateConfig({ voice: {
         replyMode: String(value || 'blips'),
         ...(value === 'voice' ? reviveMigratedTts(config.load().voice) : {}),
@@ -2706,7 +2702,6 @@ function applyMenuAction(id, value) {
   }
 }
 
-let overlayFolded = false;
 let registeredShortcuts = [];
 let menuCloseCombo = ''; // the shortcut that closes her menu, as registered
 const shortcutActive = { toggle: false, chat: false, talk: false };
@@ -2798,7 +2793,7 @@ function talkNow() {
   speakQueue?.stop();
   goodnight.cancel();
   followUp.cancel();
-  if (overlayFolded) sendCommand('wake');
+  if (state.overlayFolded) sendCommand('wake');
   voice?.pttStart();
 }
 
@@ -2887,7 +2882,7 @@ function menuState(extra = {}) {
     langs: [['auto', t.auto], ...LANGS.map((code) => [code, TRAY[code].name])],
     lang,
     langSetting: cfg.lang,
-    folded: Boolean(extra.folded ?? overlayFolded),
+    folded: Boolean(extra.folded ?? state.overlayFolded),
     cfg: {
       visible: cfg.visible,
       scale: cfg.scale,
@@ -2903,7 +2898,7 @@ function menuState(extra = {}) {
         installed: Boolean(checkVoiceDir(cfg.voice?.dir || '').ok),
         ttsRef: cfg.voice?.ttsRef || null,
         status: voiceStatus(cfg),
-        tts: lastTts,
+        tts: state.lastTts,
         source: activeVoiceLabel(cfg.voice),
       },
       locked: Boolean(cfg.position?.locked),
@@ -2949,7 +2944,7 @@ function menuState(extra = {}) {
     softwareConfirm: SOFTWARE_CONFIRM,
     hearing: {
       fixes: cleanFixes(cfg.hearing?.fixes),
-      lastHeard,
+      lastHeard: state.lastHeard,
       sensitivity: pctFromThreshold(cfg.voice?.wakeThreshold),
       sensMin: SENS_MIN,
       sensMax: SENS_MAX,
@@ -3232,7 +3227,7 @@ async function directCommand(line) {
   if (isUnmuteCommand(line)) return goMicReply(true);
   if (isForgetCommand(line)) return goForgetReply();
   // typing to her while she's DORMANT (or asking her to wake) brings her back, no model needed
-  if (overlayFolded || isWakeCommand(line)) return goWakeReply();
+  if (state.overlayFolded || isWakeCommand(line)) return goWakeReply();
   const appOrder = await apps().command(line); // "abre Discord", "cierra Spotify"
   if (appOrder) return appReply(appOrder);
   return null;
@@ -3260,7 +3255,7 @@ function registerIpc() {
   ipcMain.on('overlay:interactive', (_e, on) => {
     if (gameQuiet.active()) return; // hover never takes click-through away during a game
     // Asleep under a fullscreen window: her chip sits over it, clicks keep passing through.
-    if (on && overlayFolded && lastWindows?.fgFull) return;
+    if (on && state.overlayFolded && lastWindows?.fgFull) return;
     if (on === lastInteractive) return; // unchanged: the window already agrees
     lastInteractive = on;
     setClickThrough(!on, on ? 'hover-on' : 'hover-off');
@@ -3275,8 +3270,8 @@ function registerIpc() {
   ipcMain.on('overlay:menu', (_e, open) => menuGuard.menuChanged(Boolean(open)));
   ipcMain.on('overlay:beat', (_e, state) => menuGuard.beat(state && typeof state === 'object' ? state : {}));
   ipcMain.on('overlay:folded', (_e, on) => {
-    overlayFolded = Boolean(on);
-    voice?.setSleeping?.(overlayFolded);
+    state.overlayFolded = Boolean(on);
+    voice?.setSleeping?.(state.overlayFolded);
     rebuildTray();
   });
   ipcMain.handle('overlay:cursor', () => {
@@ -3417,7 +3412,7 @@ function registerIpc() {
     // several orders in one breath: only when every part is already direct, and sleep last.
     // A mixed line ("saluda y duerme") goes to the model whole: no partial execution.
     // While she's DORMANT any message wakes her first, as it always did.
-    const segments = quitFlow.pending || overlayFolded
+    const segments = quitFlow.pending || state.overlayFolded
       ? null
       : planMultiCommand(line, (part) => isDirectCommand(part, allApps()));
     if (segments) return endDirect(await runDirectSegments(segments));
@@ -3455,7 +3450,7 @@ function registerIpc() {
       }
       const speakId = startSpeakTurn();
       if (!speakId) speakQueue?.stop();
-      llmBusy = true;
+      state.llmBusy = true;
       let said = '';
       let outcome = null;
       const reminderAsked = readsAsReminderRequest(line);
@@ -3521,7 +3516,7 @@ function registerIpc() {
         });
       } finally {
         const hadImage = Boolean(lookImage);
-        llmBusy = false;
+        state.llmBusy = false;
         lookImage = null; // drop the JPEG; never written to disk
         // who answered and how it went, with no key and no text of the answer (Paso 4K)
         if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome} image=${hadImage}: ${outcome.ms}ms`);
@@ -3817,27 +3812,27 @@ function main() {
           comments?.missed();
         }
         if (payload?.type === 'tts_state') {
-          ttsLoading = payload.state === 'loading';
-          lastTts = {
+          state.ttsLoading = payload.state === 'loading';
+          state.lastTts = {
             engine: String(payload.engine || ''),
             state: String(payload.state || ''),
             // engine=off reason=sleeping is intentional DORMANT, not a failed start.
-            reason: String(payload.reason || (payload.engine === 'off' && overlayFolded ? 'sleeping' : '')),
+            reason: String(payload.reason || (payload.engine === 'off' && state.overlayFolded ? 'sleeping' : '')),
           };
           // replyMode=voice with nothing to speak with: the technical reason is already in the log
           // (sidecar side); say which state was reached and why she stays quiet.
           const quiet = voiceStatus(config.load());
-          if (quiet) logEvent(voiceLogPath(), `[capri] replyMode=voice, tts engine=${lastTts.engine || '?'} state=${lastTts.state || '?'}: ${quiet}`);
+          if (quiet) logEvent(voiceLogPath(), `[capri] replyMode=voice, tts engine=${state.lastTts.engine || '?'} state=${state.lastTts.state || '?'}: ${quiet}`);
         }
         if (payload?.type === 'talking') {
-          voiceTalking = true;
+          state.voiceTalking = true;
           if (payload.turn) turns.noteAudio(payload.turn, fromSidecar(payload));
         }
         if (payload?.type === 'talking_done' || payload?.type === 'stopped') {
           if (payload?.type === 'talking_done' && payload.turn && !payload.interrupted) {
             turns.noteAudio(payload.turn, fromSidecar(payload), { done: true });
           }
-          voiceTalking = false;
+          state.voiceTalking = false;
           speechOver(); // her goodbye before a power-off is over (Paso 4G)
         }
         if (payload?.type === 'listening') {
@@ -3879,12 +3874,12 @@ function main() {
       enabled: () => config.load().comments?.enabled !== false,
       canSpeak: () => Boolean(
         overlay
-        && !overlayFolded
+        && !state.overlayFolded
         && !chatVisible.get()
-        && !ttsLoading
+        && !state.ttsLoading
         && voiceReplyOn()
-        && !voiceTalking
-        && !llmBusy
+        && !state.voiceTalking
+        && !state.llmBusy
         && !gameMode?.active()
         && !goodnight.pending
       ),
