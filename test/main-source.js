@@ -9,8 +9,8 @@ const path = require('node:path');
 const DIR = path.join(__dirname, '..', 'src', 'main');
 // main.js last: slices anchored on its functions still end at the file they expect.
 const MODULES = [
-  'game-window.js', 'ipc-overlay.js', 'ipc-settings.js', 'ipc-voice.js', 'menu-state.js',
-  'replies.js', 'turn.js', 'state.js', 'main.js',
+  'game-window.js', 'ipc-overlay.js', 'ipc-settings.js', 'ipc-voice.js', 'ipc-misc.js',
+  'menu-state.js', 'replies.js', 'turn.js', 'state.js', 'main.js',
 ];
 
 module.exports = MODULES

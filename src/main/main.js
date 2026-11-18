@@ -70,6 +70,7 @@ const { createTurn } = require('./turn');
 const { registerOverlayIpc } = require('./ipc-overlay');
 const { registerSettingsIpc } = require('./ipc-settings');
 const { registerVoiceIpc } = require('./ipc-voice');
+const { registerMiscIpc } = require('./ipc-misc');
 const {
   COMMENT_WARN, normalizeGamingMode, gameCommentVoiceReady, canGameComment, gameCommentKind,
 } = require('./game-comment');
@@ -2621,20 +2622,12 @@ function registerIpc() {
     getLastInteractive: () => lastInteractive,
     setLastInteractive: (value) => { lastInteractive = value; },
   });
-  ipcMain.handle('chat:send', async (_e, text, meta) => turn.send(text, meta));
-  ipcMain.on('chat:cancel', () => turn.cancel());
-  ipcMain.handle('llm:status', () => (
-    isCloud(config.load().llm?.provider) ? 'ready' : lms?.status() || 'ready'
-  ));
-  ipcMain.on('systemfx:done', (_e, id) => systemFxWaiters.get(Number(id))?.());
-  ipcMain.handle('sounds:list', () => {
-    try {
-      return fs.readdirSync(userSoundsDir())
-        .filter((f) => SOUND_EXT.test(f))
-        .map((f) => ({ name: f.replace(SOUND_EXT, '').toLowerCase(), url: `capri://usersounds/${encodeURIComponent(f)}` }));
-    } catch {
-      return [];
-    }
+  registerMiscIpc(ipcMain, {
+    turn,
+    systemFxWaiters,
+    userSoundsDir,
+    SOUND_EXT,
+    getLms: () => lms,
   });
 }
 
