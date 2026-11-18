@@ -8,7 +8,7 @@ const path = require('node:path');
 
 const DIR = path.join(__dirname, '..', 'src', 'main');
 // main.js last: slices anchored on its functions still end at the file they expect.
-const MODULES = ['game-window.js', 'menu-state.js', 'state.js', 'main.js'];
+const MODULES = ['game-window.js', 'menu-state.js', 'replies.js', 'state.js', 'main.js'];
 
 module.exports = MODULES
   .map((name) => fs.readFileSync(path.join(DIR, name), 'utf8'))
