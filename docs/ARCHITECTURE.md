@@ -11,7 +11,7 @@ El estado mutable compartido está en `state.js`.
 
 | Módulo | Qué hace |
 | --- | --- |
-| `main.js` | Ventana overlay, bandeja, arranque (`main()`), `registerIpc()`, atajos y el detector de juegos. Todo lo demás se cablea aquí. |
+| `main.js` | Ventana overlay, bandeja, arranque (`main()`), cableado de IPC, atajos, `applyMenuAction` (apps/música/PC vía `menu:action`) y el detector de juegos. |
 | `state.js` | Banderas mutables compartidas: `overlayFolded`, `ttsLoading`, `voiceTalking`, `llmBusy`, `lastTts`, `lastHeard`. |
 | `config.js` | `config.json` en `%APPDATA%\Capri`, migraciones y valores por defecto. |
 | `log.js` | Una línea por evento en local, `voice.log` con rotación a 5 MB. |
