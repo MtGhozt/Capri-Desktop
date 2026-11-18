@@ -1,4 +1,4 @@
-# Current Namida song: SMTC first (title + artist), then its window title.
+# Current track: SMTC first (Namida, or the browser's YouTube Music session), then Namida's window title.
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -16,7 +16,7 @@ try {
   [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties, Windows.Media.Control, ContentType = WindowsRuntime] | Out-Null
   $manager = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
   foreach ($session in $manager.GetSessions()) {
-    if ($session.SourceAppUserModelId -notmatch 'namida') { continue }
+    if ($session.SourceAppUserModelId -notmatch 'namida|chrome|msedge|firefox|brave') { continue }
     $props = Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
     if ($props.Title) {
       Write-Output ("SMTC`t{0}`t{1}`t{2}" -f $session.SourceAppUserModelId, $props.Title, $props.Artist)

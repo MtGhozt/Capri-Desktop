@@ -13,6 +13,15 @@ const KEY_SCRIPT = unpackedPath(path.join(__dirname, 'media-keys.ps1'));
 const VOLUME_SCRIPT = unpackedPath(path.join(__dirname, 'session-volume.ps1'));
 const NOW_PLAYING_SCRIPT = unpackedPath(path.join(__dirname, 'now-playing.ps1'));
 
+const YT_SEARCH = 'https://www.youtube.com/results?search_query=';
+const YT_HOME = 'https://music.youtube.com/';
+const YT_VIDEO_ID = /"videoId":"([A-Za-z0-9_-]{11})"/;
+const BROWSER = /chrome|msedge|firefox|brave/i;
+
+function extractVideoId(html) {
+  return YT_VIDEO_ID.exec(String(html || ''))?.[1] || null;
+}
+
 // PowerShell writes one TSV line: SMTC<TAB>app<TAB>title<TAB>artist, or WINDOW<TAB>title.
 function parseWindowTitle(raw) {
   const title = String(raw || '').trim().replace(/\s*[•·]\s*Namida\s*$/i, '').trim();
@@ -22,13 +31,17 @@ function parseWindowTitle(raw) {
   return { artist: '', track: title };
 }
 
-function parseNowPlaying(out) {
+// The browser's media session is YouTube Music only when that player is chosen; Namida otherwise.
+function parseNowPlaying(out, player = 'namida') {
   const lines = String(out || '').split(/\r?\n/);
+  const source = player === 'youtube' ? BROWSER : /namida/i;
+  const who = player === 'youtube' ? 'youtube' : 'namida';
   for (const line of lines) {
     const [kind, app, title, artist] = line.split('\t');
-    if (kind !== 'SMTC' || !/namida/i.test(app || '') || !String(title || '').trim()) continue;
-    return { ok: true, player: 'namida', track: title.trim(), artist: String(artist || '').trim() };
+    if (kind !== 'SMTC' || !source.test(app || '') || !String(title || '').trim()) continue;
+    return { ok: true, player: who, track: title.trim(), artist: String(artist || '').trim() };
   }
+  if (player === 'youtube') return { ok: false };
   for (const line of lines) {
     const [kind, raw] = line.split('\t');
     if (kind !== 'WINDOW') continue;
@@ -79,6 +92,7 @@ function createMusic({
   wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   openExternal = null, findTrack = findNamidaTrack, listFiles = listNamidaFiles,
   writePlaylist = writeNamidaM3u, readNowPlaying: readTrack = null, log = () => {},
+  fetcher = fetch,
 } = {}) {
   const key = (action) => sendKey(action, KEY_SCRIPT);
   const volumeSession = (action, processNames) => {
@@ -89,6 +103,7 @@ function createMusic({
 
   function volumeProcesses(preferred) {
     if (preferred === 'spotify') return ['Spotify', 'SpotifyEXE'];
+    if (preferred === 'youtube') return ['chrome', 'msedge', 'firefox', 'brave'];
     return ['namida', 'Namida'];
   }
 
@@ -121,11 +136,41 @@ function createMusic({
     }
   }
 
+  // YouTube Music has no API: the user's browser is the player. We only open URLs.
+  async function openYouTubeMusic() {
+    if (typeof openExternal !== 'function') return { ok: false, error: 'No pude abrir YouTube Music.' };
+    await openExternal(YT_HOME);
+    return { ok: true, player: 'youtube' };
+  }
+
+  // Search page → first videoId → watch URL; a failed fetch still ends on the search page.
+  async function playYouTubeQuery(query) {
+    if (typeof openExternal !== 'function') return { ok: false, error: 'No pude abrir YouTube Music.' };
+    let id = null;
+    // 4 s: a slow Google page becomes the search fallback, not a hung command
+    try {
+      const response = await fetcher(`${YT_SEARCH}${encodeURIComponent(query)}`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      id = extractVideoId(await response.text());
+    } catch { /* offline or timeout: search page */ }
+    if (id) {
+      await openExternal(`https://music.youtube.com/watch?v=${id}`);
+      return { ok: true, action: 'query', player: 'youtube', track: query, artist: '' };
+    }
+    await openExternal(`https://music.youtube.com/search?q=${encodeURIComponent(query)}`);
+    return {
+      ok: true, action: 'query', player: 'youtube', searchOnly: true,
+      query, track: query, artist: '',
+    };
+  }
+
   // "abre el reproductor de música": whichever one is chosen in Ajustes › MÚSICA
   async function openPlayer() {
     const preferred = config.load().music?.player || 'namida';
     if (preferred === 'none') return { ok: false, error: NO_PLAYER };
     if (preferred === 'spotify') return openSpotify();
+    if (preferred === 'youtube') return openYouTubeMusic();
     const app = playerApp();
     if (!app?.target) return { ok: false, error: 'No encuentro Namida en tus apps. Agrégala en el menú APPS.' };
     spawnProcess(app.target, [], { detached: true, stdio: 'ignore' }).unref();
@@ -136,6 +181,10 @@ function createMusic({
   async function startPlayer() {
     const preferred = config.load().music?.player || 'namida';
     if (preferred === 'none') return { ok: false, error: NO_PLAYER };
+    if (preferred === 'youtube') {
+      const opened = await openYouTubeMusic();
+      return opened.ok ? { ...opened, action: 'start' } : opened;
+    }
     if (preferred !== 'spotify') return startNamida();
     const api = spotify?.resume ? await spotify.resume(openSpotify).catch(() => null) : null;
     // API play worked (Premium + active device)
@@ -228,6 +277,7 @@ function createMusic({
     const cfg = config.load();
     const preferred = cfg.music?.player || 'namida';
     if (preferred === 'none') return { ok: false, error: NO_PLAYER };
+    if (preferred === 'youtube') return playYouTubeQuery(query);
     const order = preferred === 'spotify' ? ['spotify', 'namida'] : ['namida', 'spotify'];
     let lastMiss = null;
     for (const who of order) {
@@ -257,7 +307,7 @@ function createMusic({
     if (parsed.action === 'open') return openPlayer();
     if (parsed.action === 'start') return startPlayer();
     if (parsed.action === 'nowPlaying') {
-      const local = readTrack ? parseNowPlaying(await readTrack().catch(() => '')) : { ok: false };
+      const local = readTrack ? parseNowPlaying(await readTrack().catch(() => ''), cfg.music?.player) : { ok: false };
       if (local.ok) return local;
       if (cfg.music?.spotify?.clientId && spotify?.nowPlaying) {
         const result = await spotify.nowPlaying();
@@ -266,6 +316,7 @@ function createMusic({
       return { ok: false, error: 'No sé qué está sonando en Namida.' };
     }
     if (parsed.action === 'query') {
+      if (parsed.player === 'youtube') return playYouTubeQuery(parsed.query);
       if (parsed.player === 'spotify') return playSpotifyQuery(parsed.query);
       return playQuery(parsed.query);
     }
@@ -277,5 +328,5 @@ function createMusic({
 
 module.exports = {
   createMusic, KEY_SCRIPT, VOLUME_SCRIPT, NOW_PLAYING_SCRIPT, unpackedPath, NO_MUSIC_APP,
-  parseNowPlaying, readNowPlaying,
+  parseNowPlaying, readNowPlaying, extractVideoId,
 };

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const { EventEmitter } = require('node:events');
 const { parseMusicCommand, DEFAULT_HER_SONG } = require('../src/main/music-command');
-const { parseNowPlaying, readNowPlaying } = require('../src/main/music');
+const { parseNowPlaying, readNowPlaying, createMusic } = require('../src/main/music');
 const { createPkce } = require('../src/main/spotify');
 
 test('parses media commands without matching ordinary phrases', () => {
@@ -121,6 +121,82 @@ test('now playing reads the Namida SMTC line, then its window title', () => {
   // Another player's SMTC session is not Namida.
   assert.deepEqual(parseNowPlaying('SMTC\tSpotify.exe\tSong\tArtist'), { ok: false });
   assert.deepEqual(parseNowPlaying(''), { ok: false });
+});
+
+test('now playing reads the browser session as YouTube Music, never as Namida', () => {
+  assert.deepEqual(parseNowPlaying('SMTC\tchrome.exe\tNeon\tJuno', 'youtube'), {
+    ok: true, player: 'youtube', track: 'Neon', artist: 'Juno',
+  });
+  assert.deepEqual(parseNowPlaying('SMTC\tmsedge.exe\tNeon\tJuno', 'youtube').player, 'youtube');
+  assert.deepEqual(parseNowPlaying('SMTC\tfirefox.exe\tNeon\tJuno', 'youtube').player, 'youtube');
+  assert.deepEqual(parseNowPlaying('SMTC\tbrave.exe\tNeon\tJuno', 'youtube').player, 'youtube');
+  // A browser tab is not music when Namida is the chosen player
+  assert.deepEqual(parseNowPlaying('SMTC\tchrome.exe\tNeon\tJuno'), { ok: false });
+  // Namida keeps working when it is the chosen player
+  assert.deepEqual(parseNowPlaying('SMTC\tnamida.exe\tWorth It\tCorbin', 'namida'), {
+    ok: true, player: 'namida', track: 'Worth It', artist: 'Corbin',
+  });
+});
+
+test('pon <song> en YouTube Music routes to YouTube, whatever player is chosen', () => {
+  assert.deepEqual(parseMusicCommand('Poné Neon Genesis en YouTube Music'), {
+    action: 'query', query: 'neon genesis', player: 'youtube',
+  });
+  assert.deepEqual(parseMusicCommand('reproducí emo girl en youtube'), {
+    action: 'query', query: 'emo girl', player: 'youtube',
+  });
+});
+
+test('YouTube Music play opens the first search videoId', async () => {
+  const opened = [];
+  const fetched = [];
+  const music = createMusic({
+    config: { load: () => ({ music: { player: 'youtube' } }) },
+    apps: () => [],
+    sendKey: async () => {},
+    openExternal: async (url) => { opened.push(url); },
+    fetcher: async (url) => {
+      fetched.push(url);
+      return { text: async () => '<script>"videoId":"dQw4w9WgXcQ","videoId":"zzzzzzzzzzz"</script>' };
+    },
+  });
+  const r = await music.command({ action: 'query', query: 'never gonna give you up' });
+  assert.deepEqual(r, {
+    ok: true, action: 'query', player: 'youtube', track: 'never gonna give you up', artist: '',
+  });
+  assert.deepEqual(fetched, ['https://www.youtube.com/results?search_query=never%20gonna%20give%20you%20up']);
+  assert.deepEqual(opened, ['https://music.youtube.com/watch?v=dQw4w9WgXcQ']);
+});
+
+test('YouTube Music falls back to the search page when the fetch fails', async () => {
+  const opened = [];
+  const music = createMusic({
+    config: { load: () => ({ music: { player: 'namida' } }) },
+    apps: () => [],
+    sendKey: async () => {},
+    openExternal: async (url) => { opened.push(url); },
+    fetcher: async () => { throw new Error('offline'); },
+  });
+  const r = await music.command({ action: 'query', query: 'neon genesis', player: 'youtube' });
+  assert.equal(r.ok, true);
+  assert.equal(r.searchOnly, true);
+  assert.equal(r.query, 'neon genesis');
+  assert.deepEqual(opened, ['https://music.youtube.com/search?q=neon%20genesis']);
+});
+
+test('pon música with YouTube Music chosen opens its home page', async () => {
+  const opened = [];
+  const music = createMusic({
+    config: { load: () => ({ music: { player: 'youtube' } }) },
+    apps: () => [],
+    sendKey: async () => {},
+    openExternal: async (url) => { opened.push(url); },
+  });
+  assert.deepEqual(await music.command({ action: 'start' }), {
+    ok: true, player: 'youtube', action: 'start',
+  });
+  assert.deepEqual(await music.command({ action: 'open' }), { ok: true, player: 'youtube' });
+  assert.deepEqual(opened, ['https://music.youtube.com/', 'https://music.youtube.com/']);
 });
 
 test('readNowPlaying returns the ps1 output or gives up after its timeout', async () => {

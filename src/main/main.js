@@ -865,12 +865,14 @@ async function musicReply(parsed, { chat = true } = {}) {
     }
     let line;
     if (parsed.action === 'open') {
-      line = `Abro ${result.player === 'spotify' ? 'Spotify' : 'Namida'}.`;
+      line = `Abro ${result.player === 'spotify' ? 'Spotify' : result.player === 'youtube' ? 'YouTube Music' : 'Namida'}.`;
     } else if (parsed.herSong) {
       line = pickLine('musicaSuCancion');
     } else if (result.searchOnly) {
-      line = `Abrí la búsqueda de «${result.query}» en Spotify — dale play al primero, choom.`
-        + (result.notConnected ? ' Conectá Spotify en MÚSICA para que le dé play.' : '');
+      line = result.player === 'youtube'
+        ? `Abrí la búsqueda de «${result.query}» en YouTube Music — dale play al primero, choom.`
+        : `Abrí la búsqueda de «${result.query}» en Spotify — dale play al primero, choom.`
+          + (result.notConnected ? ' Conectá Spotify en MÚSICA para que le dé play.' : '');
     } else if (result.opened) {
       line = result.artist
         ? `Abrí «${result.track}» de ${result.artist} en Spotify — dale play.`
@@ -2406,7 +2408,7 @@ function applyMenuAction(id, value) {
       shell.openExternal(VC_URL);
       return { ok: true };
     case 'music-player':
-      updateConfig({ music: { player: ['namida', 'spotify', 'none'].includes(value) ? value : 'namida' } });
+      updateConfig({ music: { player: ['namida', 'spotify', 'youtube', 'none'].includes(value) ? value : 'namida' } });
       break;
     case 'model-provider': return setChatProvider(value);
     case 'model-reorder': return reorderBrains(value);
@@ -2940,7 +2942,7 @@ function menuState(extra = {}) {
       },
       appFx: cfg.fx?.apps !== false,
       scanlines: cfg.fx?.scanlines !== false,
-      musicPlayer: ['namida', 'spotify', 'none'].includes(cfg.music?.player) ? cfg.music.player : 'namida',
+      musicPlayer: ['namida', 'spotify', 'youtube', 'none'].includes(cfg.music?.player) ? cfg.music.player : 'namida',
       render: parseRenderMode(cfg.render),
     },
     renderHints: RENDER_HINTS,

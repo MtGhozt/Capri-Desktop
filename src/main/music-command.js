@@ -79,6 +79,8 @@ function parseMusicCommand(text, { herSong = DEFAULT_HER_SONG, apps = [] } = {})
     const q = buscaSong[1].trim();
     if (q) return { action: 'query', query: q };
   }
+  const youtube = new RegExp(`^(?:${PLAY_VERB}|play) (?:reproducir )?(.+?) en youtube(?: music)?$`).exec(value);
+  if (youtube) return { action: 'query', query: youtube[1], player: 'youtube' };
   const spotify = new RegExp(`^(?:${PLAY_VERB}|play) (?:reproducir )?(.+?) en spotify$`).exec(value);
   if (spotify) return { action: 'query', query: spotify[1], player: 'spotify' };
   const playEn = /^play (?!music(?:a)?$)(.+)$/.exec(value);

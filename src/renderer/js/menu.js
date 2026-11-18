@@ -1180,6 +1180,7 @@ export class AppMenu {
       options: [
         { id: 'namida', label: 'NAMIDA' },
         { id: 'spotify', label: 'SPOTIFY' },
+        { id: 'youtube', label: 'YOUTUBE MUSIC' },
         { id: 'none', label: 'NINGUNO' },
       ],
       current: cfg.musicPlayer || 'namida',

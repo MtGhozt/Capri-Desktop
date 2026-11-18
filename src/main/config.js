@@ -113,7 +113,7 @@ const DEFAULTS = {
     talkHotkey: null,        // push to talk from her menu; null → shortcuts.talk (Ctrl+Alt+V)
   },
   music: {
-    player: 'namida', // 'namida' | 'spotify' | 'none'
+    player: 'namida', // 'namida' | 'spotify' | 'youtube' | 'none'
     herSong: "I'm in love with myself", // "pon tu canción" / "play your song"
     spotify: { clientId: '' },
   },
