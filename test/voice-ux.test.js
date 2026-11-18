@@ -50,11 +50,10 @@ test('setup details are readable, selectable and copyable', () => {
 });
 
 test('the reply text is sent before TTS flush, and shown once', () => {
-  const main = require('./main-source');
-  const chat = main.slice(main.indexOf("ipcMain.handle('chat:send'"), main.indexOf("ipcMain.on('chat:cancel'"));
+  const chat = read('src', 'main', 'turn.js'); // the turn body lives in turn.js now
   const onDone = chat.slice(chat.indexOf('onDone: (payload) => {'));
   const shown = onDone.indexOf("webContents.send('chat:done', payload)");
-  const flush = onDone.indexOf('speakQueue?.flush(speakId)');
+  const flush = onDone.indexOf('getSpeakQueue()?.flush(speakId)');
   assert.ok(shown > 0, 'chat:done is sent');
   assert.ok(flush > shown, 'audio flush comes after the text');
 

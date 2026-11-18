@@ -164,13 +164,10 @@ test('weather fallback still works when the LLM path would throw', async () => {
   assert.match(main, /outcome\?\.outcome === 'failed'/);
   assert.match(main, /temporalExtras/);
   // Direct short-circuit removed from chat:send; fallback helper only.
-  const chatSend = main.slice(
-    main.indexOf('chat:send'),
-    main.indexOf('chat:cancel'),
-  );
+  const chatSend = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'turn.js'), 'utf8');
   assert.match(chatSend, /weatherFallbackLine/);
   assert.match(chatSend, /mayWeatherFallback/);
-  assert.match(chatSend, /if \(!mayWeatherFallback\) overlay\?\.webContents\.send\('chat:error'/);
+  assert.match(chatSend, /if \(!mayWeatherFallback\) getOverlay\(\)\?\.webContents\.send\('chat:error'/);
   assert.doesNotMatch(chatSend, /weather\.answerDirect\(/);
 });
 

@@ -17,11 +17,11 @@ const { createBridge } = require('./bridge');
 const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
 const {
-  PROVIDERS, providerOptions, isCloud, usesLms, isAgent, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS,
+  PROVIDERS, providerOptions, isCloud, isAgent, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS,
   providerAfterKeyRemoved, supportsVision, provider, activeBrainIds,
 } = require('./chat-providers');
 const {
-  isLookCommand, consentNotice, captureScreenJpeg, createCaptureShield, keepCaptureFile, shouldAutoLook, AUTO_LOOK_MS,
+  consentNotice, captureScreenJpeg, createCaptureShield, keepCaptureFile, shouldAutoLook, AUTO_LOOK_MS,
 } = require('./screen-look');
 const { patchGamingApps, gameAppKey, windowedGameInFront } = require('./game-detect');
 const { probeProvider } = require('./llm-probe');
@@ -36,29 +36,18 @@ const { createVoiceInstall, PYTHON_URL, voiceInstallDir, hasNvidiaGpu } = requir
 const { VC_URL, VC_MESSAGE, missingVcRuntime } = require('./vc-runtime');
 const { activeVoiceLabel, saveCustomRef, transcriptFor } = require('./voice-ref');
 const { createSpeakQueue } = require('./speak');
-const { isSleepCommand } = require('./sleep-command');
-const { planMultiCommand, coalesceWindowRuns } = require('./multi-command');
-const { isDirectCommand } = require('./direct-match');
 const {
-  createReminders, parseReminderCommand, formatWhen, deliverReminder,
-  readsAsReminderRequest, promisesReminder, resolveFireAt, durationText, parseMoveTarget,
+  createReminders, formatWhen, deliverReminder,
+  resolveFireAt, durationText, parseMoveTarget,
   normalizeTimeFormat,
 } = require('./reminders');
 const { createWeather, isWeatherOrHolidayQuestion } = require('./weather');
 const pcActions = require('./pc-actions');
-const { parsePcCommand, filterReplySnip } = pcActions;
-const { isQuitCommand } = require('./quit-command');
 const { createQuitFlow } = require('./quit-flow');
 const { createGoodnight } = require('./goodnight');
-const { isClipCommand } = require('./clip-command');
-const { isMuteCommand, isUnmuteCommand } = require('./mic-command');
-const { isForgetCommand } = require('./forget-command');
-const { isStopTtsCommand } = require('./stop-tts-command');
-const { parseNameCommand, cleanName } = require('./name-command');
-const { notesFor, bootNotes, isWhatsNewCommand } = require('./whats-new');
+const { cleanName } = require('./name-command');
+const { bootNotes } = require('./whats-new');
 const { checkLine, formatReport, redact, copyErrorPayload } = require('./diagnose');
-const { isWakeCommand } = require('./wake-command');
-const { parseMusicCommand } = require('./music-command');
 const { createSystemFlow, runSystem } = require('./system-command');
 const { wakePhraseLabel } = require('./wake-phrase');
 const { createMusic, readNowPlaying, NOW_PLAYING_SCRIPT } = require('./music');
@@ -67,7 +56,7 @@ const {
 } = require('./spotify');
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
-const { parseFixCommand, readTranscript } = require('./fix-command');
+const { readTranscript } = require('./fix-command');
 const { stripWakeWord, wakeTranscriptOk, isSttHallucination } = require('./command-text');
 const { GREETINGS, pickGreeting } = require('./greetings');
 const { windowContext } = require('./context');
@@ -77,6 +66,7 @@ const { createGameQuiet } = require('./game-quiet');
 const { createGameWindow } = require('./game-window');
 const { createMenuState } = require('./menu-state');
 const { createReplies } = require('./replies');
+const { createTurn } = require('./turn');
 const {
   COMMENT_WARN, normalizeGamingMode, gameCommentVoiceReady, canGameComment, gameCommentKind,
 } = require('./game-comment');
@@ -86,7 +76,7 @@ const {
   applyPatch, bubbleLine, matchesConfig,
 } = require('./recommend-profile');
 const { logEvent, voiceLogPath } = require('./log');
-const { createTurnTiming, currentTurn, enterTurn, fromSidecar } = require('./timing');
+const { createTurnTiming, currentTurn, fromSidecar } = require('./timing');
 const turns = createTurnTiming({ log: (line) => logEvent(voiceLogPath(), line) });
 const { createChatVisible } = require('./chat-visible');
 const { saveClip, openClipsFolder, clipFolderLabel } = require('./clips');
@@ -2547,70 +2537,44 @@ function createTray() {
   rebuildTray(true);
 }
 
-// The direct-command ladder, from a chat/voice line to her reply: null when it's for the model.
-// Shared by chat:send and the splitter, so every part of "minimiza todo y ve a dormir" runs the
-// same detectors as when it is said alone.
-async function directCommand(line) {
-  const fixOrder = parseFixCommand(line);
-  if (fixOrder) {
-    const done = goFixReply(fixOrder);
-    if (done.line) return done; // a fix that can't be saved (too long) goes to the model
-  }
-  const newName = parseNameCommand(line);
-  if (newName) return goNameReply(newName);
-  if (isWhatsNewCommand(line)) return goWhatsNewReply();
-  const powerOrder = await systemFlow.command(line);
-  if (powerOrder) return { ok: true };
-  const reminderOrder = parseReminderCommand(line, { timeZone: config.load().timeZone });
-  if (reminderOrder) return goReminderReply(reminderOrder) || { ok: true };
-  // stop speaking before system mute ("callate" ≠ silencio)
-  if (isStopTtsCommand(line)) {
-    speakQueue?.stop();
-    followUp.cancel();
-    return { ok: true, line: announce('Callada.', { chat: true, badge: 'CAPRI' }) };
-  }
-  // Weather/holiday questions go to the LLM with facts in temporalExtras; answerDirect is fallback only.
-  // PC mute/theme/volume/snip/window before music so "silencio" / "poné modo oscuro" are not music.
-  const pcOrder = parsePcCommand(line, { apps: allApps() });
-  if (pcOrder) return pcReply(pcOrder);
-  const musicOrder = parseMusicCommand(line, {
-    herSong: config.load().music?.herSong,
-    apps: allApps(),
-  });
-  if (musicOrder) return musicReply(musicOrder);
-  if (isSleepCommand(line)) return goSleepReply();
-  if (quitFlow.pending) return answerQuit(line);
-  if (isQuitCommand(line)) return askQuit({ chat: true });
-  if (isClipCommand(line)) return goClipReply();
-  if (isMuteCommand(line)) return goMicReply(false);
-  if (isUnmuteCommand(line)) return goMicReply(true);
-  if (isForgetCommand(line)) return goForgetReply();
-  // typing to her while she's DORMANT (or asking her to wake) brings her back, no model needed
-  if (state.overlayFolded || isWakeCommand(line)) return goWakeReply();
-  const appOrder = await apps().command(line); // "abre Discord", "cierra Spotify"
-  if (appOrder) return appReply(appOrder);
-  return null;
-}
-
-// Every part already checked as direct: run them in order, unless one asks first ("¿seguro?") —
-// then the rest waits for the answer instead of firing blind.
-// Consecutive window snaps merge into one snapWindows so TTS hears a single combined line.
-async function runDirectSegments(segments) {
-  let last = { ok: true };
-  const appsList = allApps();
-  const runs = coalesceWindowRuns(segments, (part) => parsePcCommand(part, { apps: appsList }));
-  for (const run of runs) {
-    const result = run.kind === 'window'
-      ? await pcReply({ kind: 'window', value: run.value, snaps: run.snaps })
-      : await directCommand(run.text);
-    if (!result) break;
-    last = result;
-    if (systemFlow.pending || systemFlow.running || quitFlow.pending || apps().confirm.pending) break;
-  }
-  return last;
-}
+const turn = createTurn({
+  turns,
+  quitFlow,
+  announce,
+  showLine,
+  followUp,
+  appReply,
+  apps,
+  allApps,
+  answerQuit,
+  askQuit,
+  goFixReply,
+  goNameReply,
+  goWhatsNewReply,
+  goReminderReply,
+  goSleepReply,
+  goWakeReply,
+  goClipReply,
+  goMicReply,
+  goForgetReply,
+  pcReply,
+  musicReply,
+  runReplyAction,
+  sayWithoutLlm,
+  snapScreenForLook,
+  weatherFallbackLine,
+  startSpeakTurn,
+  resetOverlayInput,
+  getSystemFlow: () => systemFlow,
+  getSpeakQueue: () => speakQueue,
+  getLlm: () => llm,
+  getLms: () => lms,
+  getOverlay: () => overlay,
+});
 
 function registerIpc() {
+  ipcMain.handle('chat:send', async (_e, text, meta) => turn.send(text, meta));
+  ipcMain.on('chat:cancel', () => turn.cancel());
   ipcMain.on('overlay:interactive', (_e, on) => {
     if (gameQuiet.active()) return; // hover never takes click-through away during a game
     // Asleep under a fullscreen window: her chip sits over it, clicks keep passing through.
@@ -2752,164 +2716,6 @@ function registerIpc() {
     isCloud(config.load().llm?.provider) ? 'ready' : lms?.status() || 'ready'
   ));
   ipcMain.on('systemfx:done', (_e, id) => systemFxWaiters.get(Number(id))?.());
-  ipcMain.handle('chat:send', async (_e, text, meta) => {
-    const line = String(text || '').trim();
-    if (!line || !overlay) return { ok: false };
-    const info = meta && typeof meta === 'object' ? meta : null;
-    const turn = turns.begin(info?.src === 'voice' ? 'voice' : 'text', info?.turn, info?.stt);
-    enterTurn(turn);
-    const endDirect = (value) => {
-      turns.noteNoLlm(turn);
-      return value;
-    };
-    // her "¿seguro que apago la compu?" waiting for this answer (Paso 4G)
-    const powerAnswer = await systemFlow.answer(line);
-    if (powerAnswer) return endDirect({ ok: true });
-    // her "¿quisiste decir…?" / "¿seguro?" waiting for this answer (Paso 4C)
-    const answered = await apps().answer(line);
-    if (answered) return endDirect(appReply(answered));
-    // several orders in one breath: only when every part is already direct, and sleep last.
-    // A mixed line ("saluda y duerme") goes to the model whole: no partial execution.
-    // While she's DORMANT any message wakes her first, as it always did.
-    const segments = quitFlow.pending || state.overlayFolded
-      ? null
-      : planMultiCommand(line, (part) => isDirectCommand(part, allApps()));
-    if (segments) return endDirect(await runDirectSegments(segments));
-    const direct = await directCommand(line);
-    if (direct) return endDirect(direct);
-    // Phase 6C: "mirá mi pantalla" → JPEG in memory when shareScreen is on and the brain can see.
-    let lookImage = null;
-    let didLook = false;
-    try {
-      if (isLookCommand(line)) {
-        didLook = true;
-        const cfgLook = config.load();
-        if (!cfgLook.llm?.shareScreen) {
-          sayWithoutLlm('Activá «Enviar mi pantalla cuando le pida mirar» en Cerebro y pedímelo de nuevo.');
-          return endDirect({ ok: true });
-        }
-        lookImage = await snapScreenForLook();
-        if (!lookImage) {
-          sayWithoutLlm('No puedo ver juegos en pantalla completa, ponelo en modo ventana sin bordes.');
-          return endDirect({ ok: true });
-        }
-      }
-      // the local stack is only waited for when LM Studio is the one who answers: an agent CLI or
-      // Ollama run on their own, and LM Studio may not even be installed
-      if (usesLms(config.load().llm?.provider)) {
-        const boot = await lms.whenReady();
-        if (boot === 'failed') {
-          const weatherLine = await weatherFallbackLine(line);
-          if (weatherLine) {
-            return endDirect({ ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) });
-          }
-          overlay.webContents.send('chat:error', { kind: 'offline', text: 'No pude despertar LM Studio. Revisa que esté instalado y vuelve a intentarlo.' });
-          return endDirect({ ok: false });
-        }
-      }
-      const speakId = startSpeakTurn();
-      if (!speakId) speakQueue?.stop();
-      state.llmBusy = true;
-      let said = '';
-      let outcome = null;
-      const reminderAsked = readsAsReminderRequest(line);
-      const mayWeatherFallback = isWeatherOrHolidayQuestion(line);
-      try {
-        outcome = await llm.chat({
-          user: line,
-          image: lookImage,
-          onTiming: (ev) => {
-            if (ev?.phase === 'request') turns.noteSend(turn);
-          },
-          onMood: (name) => speakQueue?.setMood?.(name),
-          onToken: (piece) => {
-            said += typeof piece === 'string' ? piece : piece?.text || '';
-            overlay?.webContents.send('chat:token', piece);
-            if (speakId) speakQueue?.feed(piece);
-          },
-          onDone: (payload) => {
-            // the text first: on a weak GPU the voice can take many seconds, and the bubble is not
-            // allowed to look ignored while the audio is generated.
-            overlay?.webContents.send('chat:done', payload);
-            followUp.reply(payload?.text || said, { spoken: Boolean(speakId && !payload?.toolLeak) });
-            if (payload?.toolLeakUnknown && payload.toolLeak) {
-              // logEvent already runs redactSecrets
-              logEvent(voiceLogPath(), `[capri] tool-call leak: ${payload.toolLeak}`);
-            }
-            if (payload?.action) {
-              const action = filterReplySnip(payload.action, line);
-              if (action) void runReplyAction(action);
-              else if (payload.action.kind === 'snip') {
-                logEvent(voiceLogPath(), '[capri] snip dropped: user did not ask to snip');
-              }
-            } else if (reminderAsked && promisesReminder(payload?.text || said)) {
-              // no [remind:...] tag means nothing was saved: say it instead of letting her promise stand
-              showLine('No quedó agendado ningún recordatorio: repetímelo con la hora.', {
-                chat: true, badge: 'RECORDATORIO',
-              });
-            }
-            if (speakId) {
-              if (payload?.toolLeak) {
-                // drop any leaked JSON already fed; speak only the friendly unknown line
-                speakQueue?.stop(speakId);
-                if (payload.text) {
-                  const id = startSpeakTurn();
-                  if (id) {
-                    speakQueue.feed(payload.text);
-                    speakQueue.flush(id);
-                  }
-                }
-              } else {
-                if (payload?.mood) speakQueue?.setMood?.(payload.mood);
-                speakQueue?.flush(speakId);
-              }
-            }
-          },
-          onError: (payload) => {
-            if (speakId) speakQueue?.stop(speakId);
-            turns.settleAudio(turn);
-            followUp.reply('', {});
-            // Weather/holiday: suppress chat:error; fallback line is shown below instead.
-            if (!mayWeatherFallback) overlay?.webContents.send('chat:error', payload);
-          },
-        });
-      } finally {
-        const hadImage = Boolean(lookImage);
-        state.llmBusy = false;
-        lookImage = null; // drop the JPEG; never written to disk
-        // who answered and how it went, with no key and no text of the answer (Paso 4K)
-        if (outcome) logEvent(voiceLogPath(), `[capri] llm ${outcome.provider}/${outcome.model} ${outcome.outcome} image=${hadImage}: ${outcome.ms}ms`);
-      }
-      const finishLlm = (value) => {
-        if (outcome) turns.noteLlm(turn, outcome);
-        else turns.cancel(turn);
-        return value;
-      };
-      if (outcome?.outcome === 'failed') {
-        const weatherLine = await weatherFallbackLine(line);
-        if (weatherLine) {
-          return finishLlm({ ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) });
-        }
-        if (mayWeatherFallback) {
-          overlay?.webContents.send('chat:error', { kind: 'offline', text: 'No pude consultar el clima ahora.' });
-        }
-      }
-      return finishLlm({ ok: true });
-    } catch (err) {
-      logEvent(voiceLogPath(), `[capri] chat failed: ${err?.message || err}`);
-      const weatherLine = await weatherFallbackLine(line);
-      if (weatherLine) {
-        const value = { ok: true, line: announce(weatherLine, { chat: true, badge: 'CLIMA' }) };
-        turns.noteNoLlm(turn);
-        return value;
-      }
-      turns.cancel(turn);
-      resetOverlayInput('chat-error');
-      return { ok: false };
-    } finally {
-      if (didLook) resetOverlayInput('look-done');
-    }
-  });
   ipcMain.on('chat:cancel', () => {
     llm?.cancel();
     speakQueue?.stop();
