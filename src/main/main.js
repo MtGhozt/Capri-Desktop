@@ -67,6 +67,9 @@ const { createGameWindow } = require('./game-window');
 const { createMenuState } = require('./menu-state');
 const { createReplies } = require('./replies');
 const { createTurn } = require('./turn');
+const { registerOverlayIpc } = require('./ipc-overlay');
+const { registerSettingsIpc } = require('./ipc-settings');
+const { registerVoiceIpc } = require('./ipc-voice');
 const {
   COMMENT_WARN, normalizeGamingMode, gameCommentVoiceReady, canGameComment, gameCommentKind,
 } = require('./game-comment');
@@ -153,12 +156,9 @@ let gameWindow = null;
 const gameQuiet = createGameQuiet({ isActive: () => Boolean(gameMode?.active()) });
 let reminders = null;
 let weather = null;
-let lastGreetingAt = 0;
-let bootGreetingDone = false;
 let greeting = null;
 let whatsNewLines = null; // this boot's "what's new" lines, once only
 let userFiles = null;
-const GREETING_COOLDOWN_MS = 10 * 60_000;
 
 const userSoundsDir = () => path.join(app.getPath('userData'), 'sounds');
 
@@ -2573,172 +2573,60 @@ const turn = createTurn({
 });
 
 function registerIpc() {
+  greeting = registerVoiceIpc(ipcMain, {
+    pickGreeting,
+    speakLine,
+    voiceReplyOn,
+    sendCommand,
+    followUp,
+    turns,
+    getReminders: () => reminders,
+    getLlm: () => llm,
+    getVoice: () => voice,
+    getSpeakQueue: () => speakQueue,
+  }).greeting;
+  registerSettingsIpc(ipcMain, {
+    rendererConfig,
+    updateConfig,
+    demoWindow,
+    runHooks,
+    hooks,
+    rebuildTray,
+    menuState,
+    applyMenuAction,
+    openSettingsTab,
+    targetDisplay,
+    userSoundsDir,
+    SOUND_EXT,
+    CLAUDE_CODE_HELP,
+    getOverlay: () => overlay,
+    getVoice: () => voice,
+    getTray: () => tray,
+    getTrayMenu: () => trayMenu,
+    getSettingsWindow: () => settingsWindow,
+  });
+  registerOverlayIpc(ipcMain, {
+    state,
+    gameQuiet,
+    setClickThrough,
+    rearmOverlay,
+    appFx,
+    menuGuard,
+    rebuildTray,
+    closeChat,
+    chatVisible,
+    getVoice: () => voice,
+    getLastWindows: () => lastWindows,
+    getOverlay: () => overlay,
+    getLastInteractive: () => lastInteractive,
+    setLastInteractive: (value) => { lastInteractive = value; },
+  });
   ipcMain.handle('chat:send', async (_e, text, meta) => turn.send(text, meta));
   ipcMain.on('chat:cancel', () => turn.cancel());
-  ipcMain.on('overlay:interactive', (_e, on) => {
-    if (gameQuiet.active()) return; // hover never takes click-through away during a game
-    // Asleep under a fullscreen window: her chip sits over it, clicks keep passing through.
-    if (on && state.overlayFolded && lastWindows?.fgFull) return;
-    if (on === lastInteractive) return; // unchanged: the window already agrees
-    lastInteractive = on;
-    setClickThrough(!on, on ? 'hover-on' : 'hover-off');
-  });
-  ipcMain.on('renderer:log', (_e, payload = {}) => {
-    const kind = String(payload.kind || 'error').slice(0, 30);
-    const message = String(payload.message || '').slice(0, 2000);
-    if (message) logEvent(voiceLogPath(), `[renderer:${kind}] ${message}`);
-  });
-  ipcMain.on('overlay:rearm', () => rearmOverlay()); // the pointer moved over her and she never heard of it
-  ipcMain.on('appfx:hit', (_e, id) => appFx.hit(id));
-  ipcMain.on('overlay:menu', (_e, open) => menuGuard.menuChanged(Boolean(open)));
-  ipcMain.on('overlay:beat', (_e, state) => menuGuard.beat(state && typeof state === 'object' ? state : {}));
-  ipcMain.on('overlay:folded', (_e, on) => {
-    state.overlayFolded = Boolean(on);
-    voice?.setSleeping?.(state.overlayFolded);
-    rebuildTray();
-  });
-  ipcMain.handle('overlay:cursor', () => {
-    const p = screen.getCursorScreenPoint();
-    const b = overlay.getBounds();
-    return { x: p.x - b.x, y: p.y - b.y, inside: p.x >= b.x && p.y >= b.y && p.x < b.x + b.width && p.y < b.y + b.height };
-  });
-  ipcMain.handle('config:get', () => rendererConfig());
-  ipcMain.handle('hooks:status', () => hooks.status());
-  ipcMain.handle('config:set', (_e, patch) => updateConfig(patch));
-  ipcMain.handle('demo:window', (_e, open) => demoWindow(open));
-  // right-clicking her: the same menu as the tray icon (which Windows often hides behind the ^ by the clock)
-  ipcMain.on('menu:open', () => {
-    if (!trayMenu) rebuildTray(true);
-    try {
-      trayMenu?.popup({ window: overlay });
-    } catch (err) {
-      console.error('[capri] tray menu:', err.message);
-    }
-  });
-  // her welcome panel's buttons
-  ipcMain.handle('hooks:install', () => runHooks('install', { quiet: true }));
-  ipcMain.handle('claude:found', () => fs.existsSync(path.dirname(hooks.status().file))); // Claude Code keeps its settings there
-  ipcMain.on('claude:help', () => shell.openExternal(CLAUDE_CODE_HELP));
-  ipcMain.handle('windows:get', () => lastWindows);
-  // her guide: where her tray icon is (it lives in the taskbar, off the overlay, hence overlay
-  // coordinates past its edge), and the corner by the clock in case Windows hid it behind the ^
-  ipcMain.handle('guide:tray', () => {
-    const o = overlay.getBounds();
-    const d = targetDisplay().bounds;
-    const b = tray?.getBounds();
-    const icon = b && b.width > 0 ? { x: b.x - o.x, y: b.y - o.y, w: b.width, h: b.height } : null;
-    const corner = { x: d.x + d.width - 150 - o.x, y: d.y + d.height - 44 - o.y, w: 140, h: 40 };
-    return { icon, corner };
-  });
-  // her guide: Claude Code's folder (~/.claude) in Explorer, its settings file selected
-  ipcMain.handle('guide:claudeFolder', () => {
-    const file = hooks.status().file;
-    const dir = path.dirname(file);
-    if (!fs.existsSync(dir)) return { found: false, dir };
-    if (fs.existsSync(file)) shell.showItemInFolder(file);
-    else shell.openPath(dir);
-    return { found: true, dir, file: fs.existsSync(file) };
-  });
-  ipcMain.handle('menu:get', (_e, extra = {}) => {
-    // Mic enumeration is async via the sidecar; never hold menu:get on it (Oído used to freeze).
-    if (!extra.light) {
-      setImmediate(() => { try { voice?.listDevices(); } catch { /* sidecar down */ } });
-    }
-    const state = menuState(extra);
-    structuredClone(state);
-    return state;
-  });
-  ipcMain.handle('menu:action', async (_e, payload = {}) => {
-    const result = await applyMenuAction(payload.id, payload.value);
-    return result && typeof result === 'object' ? result : { ok: true };
-  });
-  ipcMain.on('settings:close', () => {
-    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
-  });
-  ipcMain.handle('settings:open', (_e, tab = null) => openSettingsTab(tab || null));
-  // artist handoff stills → %USERPROFILE%\Desktop\capri-art-kit\shots\
-  ipcMain.handle('art:capture', async (_e, payload = {}) => {
-    if (!overlay || overlay.isDestroyed()) return { ok: false, error: 'no overlay' };
-    const dir = path.join(process.env.USERPROFILE || app.getPath('home'), 'Desktop', 'capri-art-kit', 'shots');
-    fs.mkdirSync(dir, { recursive: true });
-    const name = String(payload.name || 'frame').replace(/[^\w.-]+/g, '_');
-    const image = await overlay.webContents.capturePage();
-    const file = path.join(dir, `${name}.png`);
-    fs.writeFileSync(file, image.toPNG());
-    return { ok: true, file };
-  });
-  // her hello at boot: the overlay shows it, and it plays from the cached wav if there is one
-  greeting = async function greeting({ unlock = false } = {}) {
-    // A missed reminder is this launch's greeting: never replace it with a hello.
-    if (!unlock && (reminders?.missedCount?.() || 0) > 0) {
-      logEvent(voiceLogPath(), `[capri] greeting skipped: ${reminders.missedCount()} missed reminder(s)`);
-      return { skipped: 'missed-reminders' };
-    }
-    const cfg = config.load();
-    if (cfg.behavior?.greetings === false || (unlock && cfg.behavior?.unlockGreeting === false)) return null;
-    const now = Date.now();
-    if (now - lastGreetingAt < GREETING_COOLDOWN_MS) {
-      logEvent(voiceLogPath(), `[capri] greeting skipped cooldown reason=${unlock ? 'unlock' : 'boot'}`);
-      return null;
-    }
-    const picked = pickGreeting({ last: config.load().greeting?.last || null });
-    config.save({ greeting: { last: picked.id } });
-    lastGreetingAt = now;
-    logEvent(voiceLogPath(), `[capri] greeting ${unlock ? 'unlock' : 'start'} id=${picked.id}`);
-    let text = picked.text;
-    if (llm) {
-      let generated = null;
-      await new Promise((resolve) => {
-        llm.chat({
-          user: unlock ? 'Salúdame brevemente porque acabo de desbloquear la computadora.' : 'Salúdame brevemente al iniciar.',
-          onToken: () => {},
-          onDone: ({ text: value }) => { generated = String(value || '').trim(); resolve(); },
-          onError: () => resolve(),
-        });
-      });
-      if (generated && generated.length <= 180) text = generated;
-      else logEvent(voiceLogPath(), '[capri] greeting fallback local');
-    }
-    if (voiceReplyOn()) speakLine(text);
-    if (unlock) sendCommand('line', { badge: 'ONLINE', text });
-    return { ...picked, text };
-  };
-  ipcMain.handle('capri:speak', (_e, text) => {
-    speakLine(String(text || ''));
-    return { ok: true };
-  });
-  ipcMain.handle('greet', async () => {
-    if (bootGreetingDone) return null;
-    bootGreetingDone = true;
-    return greeting();
-  });
   ipcMain.handle('llm:status', () => (
     isCloud(config.load().llm?.provider) ? 'ready' : lms?.status() || 'ready'
   ));
   ipcMain.on('systemfx:done', (_e, id) => systemFxWaiters.get(Number(id))?.());
-  ipcMain.on('chat:cancel', () => {
-    llm?.cancel();
-    speakQueue?.stop();
-    followUp.cancel();
-    turns.cancelAll();
-    resetOverlayInput('chat-cancel');
-  });
-  ipcMain.on('voice:interrupt', () => {
-    llm?.cancel();
-    speakQueue?.stop();
-    followUp.cancel();
-    turns.cancelAll();
-    voice?.pttStart();
-  });
-  ipcMain.on('voice:ptt-start', () => { voice?.pttStart(); });
-  ipcMain.on('voice:ptt-stop', () => { voice?.pttStop(); });
-  ipcMain.on('chat:close', () => closeChat());
-  // The bubble is the source of truth: every auto-open (wake, agent, greeting) and every hide
-  // (idle fold, Esc, click away) lands here, so Ctrl+Alt+T always flips what is on screen.
-  ipcMain.on('chat:visible', (_e, payload) => {
-    if (!payload || typeof payload !== 'object') return;
-    chatVisible.set(payload.open, String(payload.source || 'overlay'));
-  });
   ipcMain.handle('sounds:list', () => {
     try {
       return fs.readdirSync(userSoundsDir())

@@ -282,7 +282,7 @@ test('missedCount sees reminders before start, so the greeting can step aside', 
     assert.equal(after.missedCount(), 0);
     // the guard lives in main.js: the boot greeting must check it before saying hello
     const source = require('./main-source');
-    assert.match(source, /reminders\?\.missedCount\?\.\(\)\s*\|\|\s*0\)\s*>\s*0/);
+    assert.match(source, /getReminders\(\)\?\.missedCount\?\.\(\)\s*\|\|\s*0\)\s*>\s*0/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -10,9 +10,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createGameQuiet, TOP_LEVEL } = require('../src/main/game-quiet.js');
 
-// The game parts moved out of main.js: read both (game-window first, so its functions are found).
-const readMain = (name) => fs.readFileSync(path.join(__dirname, '..', 'src', 'main', name), 'utf8');
-const main = [readMain('game-window.js'), readMain('main.js')].join('\n');
+// The game parts moved out of main.js: the bundle has game-window.js first, so its functions are found.
+const main = require('./main-source');
 const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
 
 function fakeWindow({ destroyed = false } = {}) {
@@ -100,9 +99,9 @@ test('the game wake brings her back with no bubble and no chime', () => {
 
 test('hover while she is asleep under a fullscreen window keeps click-through', () => {
   // Her chip sits over the fullscreen window: a hover there must not make her take clicks.
-  assert.match(main, /if \(on && state\.overlayFolded && lastWindows\?\.fgFull\) return;/);
+  assert.match(main, /if \(on && state\.overlayFolded && getLastWindows\(\)\?\.fgFull\) return;/);
   // An unchanged hover ask is not written to the window again.
-  assert.match(main, /if \(on === lastInteractive\) return;[\s\S]{0,120}?lastInteractive = on;\s*setClickThrough\(!on/);
+  assert.match(main, /if \(on === getLastInteractive\(\)\) return;[\s\S]{0,120}?setLastInteractive\(on\);\s*setClickThrough\(!on/);
   assert.match(main, /let lastInteractive = null/);
   // ...and any non-hover change invalidates that dedupe, so the next ask is applied.
   assert.match(main, /if \(reason !== 'hover-on' && reason !== 'hover-off'\) lastInteractive = null/);
