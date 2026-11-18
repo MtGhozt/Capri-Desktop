@@ -123,7 +123,7 @@ test('disk/RAM info kinds stay picky', () => {
 test('main temporalExtras gates weather on isWeatherOrHolidayQuestion', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /if \(isWeatherOrHolidayQuestion\(user\)\)/);
 });
 

@@ -37,7 +37,7 @@ test('version chrome labels use the same about.version as Acerca de', () => {
   assert.equal(aboutInfo({ version: '0.2.9' }).version, '0.2.9');
 
   const root = path.join(__dirname, '..');
-  const main = fs.readFileSync(path.join(root, 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /aboutInfo\(\{\s*version:\s*app\.getVersion\(\)/);
 
   const aboutPanel = fs.readFileSync(path.join(root, 'src', 'renderer', 'js', 'menu.js'), 'utf8');

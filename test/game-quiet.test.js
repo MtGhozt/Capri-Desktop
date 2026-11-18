@@ -10,7 +10,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createGameQuiet, TOP_LEVEL } = require('../src/main/game-quiet.js');
 
-const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+// The game parts moved out of main.js: read both (game-window first, so its functions are found).
+const readMain = (name) => fs.readFileSync(path.join(__dirname, '..', 'src', 'main', name), 'utf8');
+const main = [readMain('game-window.js'), readMain('main.js')].join('\n');
 const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
 
 function fakeWindow({ destroyed = false } = {}) {
@@ -40,9 +42,9 @@ test('leaving the game restores the window without show(), focus() or the chat',
 
   // The leave path itself: restore + a silent wake when quiet hid her, never a chat toggle.
   const from = main.indexOf('async function gameLeave');
-  const leave = main.slice(from, main.indexOf('function voiceReplyOn', from));
+  const leave = main.slice(from, main.indexOf('module.exports', from));
   assert.ok(from > 0, 'gameLeave exists');
-  assert.match(leave, /gameQuiet\.restore\(overlay\)/);
+  assert.match(leave, /gameQuiet\.restore\(getOverlay\(\)\)/);
   assert.match(leave, /gameHidHer && !gameWasFolded/);
   assert.match(leave, /sendCommand\('wake', \{ silent: true \}\)/);
   assert.doesNotMatch(leave, /openChat|chatVisible|sendCommand\('chat'/);
@@ -98,7 +100,7 @@ test('the game wake brings her back with no bubble and no chime', () => {
 
 test('hover while she is asleep under a fullscreen window keeps click-through', () => {
   // Her chip sits over the fullscreen window: a hover there must not make her take clicks.
-  assert.match(main, /if \(on && overlayFolded && lastWindows\?\.fgFull\) return;/);
+  assert.match(main, /if \(on && state\.overlayFolded && lastWindows\?\.fgFull\) return;/);
   // An unchanged hover ask is not written to the window again.
   assert.match(main, /if \(on === lastInteractive\) return;[\s\S]{0,120}?lastInteractive = on;\s*setClickThrough\(!on/);
   assert.match(main, /let lastInteractive = null/);

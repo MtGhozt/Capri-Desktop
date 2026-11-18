@@ -74,6 +74,7 @@ const { windowContext } = require('./context');
 const { createComments } = require('./comments');
 const { createGameMode, FOCUS_LOSS_DEBOUNCE_MS } = require('./game-mode');
 const { createGameQuiet } = require('./game-quiet');
+const { createGameWindow } = require('./game-window');
 const {
   COMMENT_WARN, normalizeGamingMode, gameCommentVoiceReady, canGameComment, gameCommentKind,
 } = require('./game-comment');
@@ -155,15 +156,11 @@ const chatVisible = createChatVisible({ log: (line) => logEvent(voiceLogPath(), 
 let previousForeground = null;
 let menuKeyboard = false; // her menu has a text field open (Corregir lo último): it needs the keyboard
 let gameMode = null;
+let gameWindow = null;
 // A game on the screen: no show()/focus()/moveTop(), click-through stays on (game-quiet.js).
 const gameQuiet = createGameQuiet({ isActive: () => Boolean(gameMode?.active()) });
 let reminders = null;
 let weather = null;
-let gameWork = Promise.resolve();
-let gameWasFolded = false;
-let gameHadLlm = false;
-let gameHidHer = false; // quiet (No molestar) folded her; comment mode keeps her visible
-let lastGameCommentAt = 0; // voice-only in-game line (comment mode), capped by GAME_COMMENT_MS
 let lastGreetingAt = 0;
 let bootGreetingDone = false;
 let greeting = null;
@@ -2080,107 +2077,6 @@ function appsMenuState() {
   }));
 }
 
-// -- game mode ---------------------------------------------------------------------------
-// A fullscreen game gets the whole GPU: the voice sidecar (OmniVoice) and Gemma go, she folds
-// into DORMANT and stays quiet, and both come back 30 s after the game is really gone.
-
-const gameLog = (text) => logEvent(voiceLogPath(), `[capri] ${text}`);
-
-// One step at a time: unloading takes seconds, and a game can come and go meanwhile.
-function queueGame(step) {
-  gameWork = gameWork.then(step).catch((err) => gameLog(`game mode: ${err.message}`));
-  return gameWork;
-}
-
-// Quiet = hide (today). Comment = stay visible + click-through + pinned above the game.
-function applyGamePlayVisual(play) {
-  setClickThrough(true, 'game');
-  if (play === 'comment') {
-    gameHidHer = false;
-    gameQuiet.pin(overlay);
-    if (state.overlayFolded) sendCommand('wake', { silent: true });
-    return;
-  }
-  // quiet / No molestar (and manual quiet while a game is on): fold her away
-  gameHidHer = true;
-  sendCommand('sleep');
-}
-
-async function gameEnter(windows) {
-  gameWasFolded = state.overlayFolded;
-  gameHidHer = false;
-  gameLog(`game on exe=${windows?.fgExe || '?'} ${vramText()}`);
-  setClickThrough(true, 'game'); // clicks pass through over the game from here on
-  llm?.cancel();
-  goodnight.cancel();
-  followUp.cancel();
-  const play = normalizeGamingMode(config.load().gaming?.mode);
-  if (play === 'comment') {
-    // Visible, fully click-through, never focus; pin above borderless fullscreen.
-    applyGamePlayVisual('comment');
-  } else {
-    try { speakLine(pickLine('juegoEntrar')); } catch { /* pool missing in old builds */ }
-    applyGamePlayVisual('quiet'); // DORMANT / hidden; click-through stays on (game-quiet)
-  }
-  if (lms?.status() === 'booting') await lms.whenReady(); // a load in flight would land anyway
-  gameHadLlm = lms?.status() === 'ready';
-  await lms?.unloadAll?.();
-  if (!gameMode?.active()) {
-    gameLog('game enter cancelled after focus lost');
-    return;
-  }
-  if (play === 'comment') gameQuiet.pin(overlay); // re-assert after unload wait
-  gameLog(`game on after unload wakeMuted=${Boolean(voice?.wakeMuted?.())} mode=${play} hid=${gameHidHer} ${vramText()}`);
-}
-
-// Comment mode: voice-only pool line while quiet gates stay on. No bubble, no focus.
-// Comentar is the opt-in: speak even when replyMode is blips/silent, if the sidecar is up.
-function maybeGameComment() {
-  const cfg = config.load();
-  const mode = normalizeGamingMode(cfg.gaming?.mode);
-  const busy = Boolean(state.ttsLoading || state.voiceTalking || state.llmBusy || goodnight.pending);
-  const voiceReady = gameCommentVoiceReady({
-    muted: Boolean(cfg.muted),
-    connected: Boolean(voice?.connected?.()),
-    tts: cfg.voice?.tts,
-  });
-  if (!canGameComment({
-    mode,
-    gameActive: Boolean(gameMode?.active()),
-    lastAt: lastGameCommentAt,
-    voiceOn: voiceReady,
-    busy,
-  })) return;
-  if (!speakQueue) return; // no voice path → nothing (never a bubble over the game)
-  const context = cfg.llm?.shareScreen === true
-    ? windowContext(lastWindows, { apps: cfg.gaming?.apps || [] })
-    : null;
-  const kind = gameCommentKind({ shareScreen: cfg.llm?.shareScreen === true, context });
-  let line = '';
-  try { line = pickLine(kind); } catch { /* pool missing */ }
-  if (!line) return;
-  // Bypass speakLine/voiceReplyOn: replyMode must not silence Comentar.
-  const speakId = speakQueue.start(currentTurn()) || 0;
-  if (!speakId) return;
-  lastGameCommentAt = Date.now();
-  speakQueue.feed(line);
-  speakQueue.flush(speakId);
-}
-
-async function gameLeave() {
-  gameLog(`game off ${vramText()}`);
-  sendCommand('game-drone', { on: false });
-  gameQuiet.restore(overlay); // Capri's normal top level, clicks passing through, chat untouched
-  // Only wake if quiet mode hid her (comment stayed visible the whole time).
-  if (gameHidHer && !gameWasFolded) sendCommand('wake', { silent: true });
-  if (gameHadLlm) await lms?.reload?.();
-  try { speakLine(pickLine('juegoSalir')); } catch { /* pool missing */ }
-  gameLog(`game off after reload ${vramText()}`);
-  gameWasFolded = false;
-  gameHadLlm = false;
-  gameHidHer = false;
-}
-
 // Whether a spoken line is wanted. Loading TTS does not gate it: the sidecar holds the reply
 // until the clone is up, so a reply is never dropped into silence nor spoken by Kokoro.
 function voiceReplyOn() {
@@ -2569,7 +2465,7 @@ function applyMenuAction(id, value) {
       gameMode?.clearSuppress?.();
       gameMode?.update?.(lastWindows);
       // Mid-game switch: quiet hides now; comment stays visible (manual No molestar = quiet).
-      if (gameMode?.active()) applyGamePlayVisual(next);
+      if (gameMode?.active()) gameWindow?.visual(next);
       if (warn) return { ok: true, warning: COMMENT_WARN };
       return { ok: true };
     }
@@ -3908,14 +3804,41 @@ function main() {
     });
     voice.prepareGreetings(GREETINGS);
     voice.start();
+    gameWindow = createGameWindow({
+      config,
+      logEvent,
+      voiceLogPath,
+      vramText,
+      setClickThrough,
+      gameQuiet,
+      getOverlay: () => overlay,
+      getGameMode: () => gameMode,
+      sendCommand,
+      llm,
+      goodnight,
+      followUp,
+      normalizeGamingMode,
+      speakLine,
+      pickLine,
+      lms,
+      gameCommentVoiceReady,
+      canGameComment,
+      gameCommentKind,
+      windowContext,
+      getLastWindows: () => lastWindows,
+      speakQueue,
+      currentTurn,
+      voice,
+      state,
+    });
     gameMode = createGameMode({
       enabled: () => normalizeGamingMode(config.load().gaming?.mode) !== 'off',
       apps: () => config.load().gaming?.apps || [],
       setWakeMuted: (on) => voice?.setWakeMuted?.(on),
       exitDelayMs: FOCUS_LOSS_DEBOUNCE_MS, // focus must be gone 10 s: a flicker never ends game mode
-      onDecision: (decision) => gameLog(`game decision=${decision.reason} rule=${decision.rule} exe=${decision.exe || '?'} full=${decision.full}`),
-      onEnter: (windows) => queueGame(() => gameEnter(windows)),
-      onExit: () => queueGame(gameLeave),
+      onDecision: (decision) => gameWindow.log(`game decision=${decision.reason} rule=${decision.rule} exe=${decision.exe || '?'} full=${decision.full}`),
+      onEnter: (windows) => gameWindow.enter(windows),
+      onExit: () => gameWindow.leave(),
     });
     createTray();
     comments.start();
@@ -3962,7 +3885,7 @@ function main() {
         } else if (!gameMode?.active() && windowedGameInFront(data, gameApps)) {
           gameQuiet.pin(overlay);
         }
-        maybeGameComment(); // comment mode: voice-only, respects interval + quiet gates
+        gameWindow?.comment(); // comment mode: voice-only, respects interval + quiet gates
         comments?.observe(cfg.llm?.shareScreen === true
           ? windowContext(data, { apps: gameApps })
           : null);

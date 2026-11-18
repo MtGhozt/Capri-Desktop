@@ -345,10 +345,7 @@ test('unlock/resume recover clears busy/drag via input-reset (regression)', () =
 });
 
 test('unlock, resume, and display changes use the same overlay resync', () => {
-  const main = require('node:fs').readFileSync(
-    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
-    'utf8',
-  );
+  const main = require('./main-source');
   assert.match(main, /function resyncOverlay\(reason = 'resync'\)[\s\S]*?recoverAfterUnlock\(reason\)/);
   assert.match(main, /display-metrics-changed', \(\) => \{\s*resyncOverlay\('display-metrics-changed'\)/);
   assert.match(main, /const scheduleUnlockResync = \(reason, after = null\)/);
@@ -361,20 +358,14 @@ test('unlock, resume, and display changes use the same overlay resync', () => {
 });
 
 test('click-through is logged only when it changes, not on every hover', () => {
-  const main = require('node:fs').readFileSync(
-    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
-    'utf8',
-  );
+  const main = require('./main-source');
   assert.match(main, /let lastThrough = null;/);
   assert.match(main, /if \(through === lastThrough\) return;/);
   assert.match(main, /reason !== 'hover-on' && reason !== 'hover-off'/);
 });
 
 test('look captures the display with the foreground window, not the mouse', () => {
-  const main = require('node:fs').readFileSync(
-    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
-    'utf8',
-  );
+  const main = require('./main-source');
   assert.match(main, /function lookDisplay\(\)[\s\S]*?lastWindows\?\.fgRect[\s\S]*?screen\.getDisplayMatching/);
   assert.match(main, /const display = lookDisplay\(\);/);
   assert.match(main, /displayIndex,/);
@@ -384,10 +375,7 @@ test('look captures the display with the foreground window, not the mouse', () =
 });
 
 test('the look and the boot keep the shot only with voice.debugSave on', () => {
-  const main = require('node:fs').readFileSync(
-    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
-    'utf8',
-  );
+  const main = require('./main-source');
   assert.match(main, /if \(!image\) return null;\s*keepCaptureFile\(\{\s*image,\s*file: captureFilePath\(\),\s*debugSave: config\.load\(\)\.voice\?\.debugSave === true,?\s*\}\)/);
   // a leftover from an older build is removed on boot, not on the first look
   assert.match(main, /an older build wrote the shot here[\s\S]*?keepCaptureFile\(\{ file: captureFilePath\(\)/);
@@ -395,10 +383,7 @@ test('the look and the boot keep the shot only with voice.debugSave on', () => {
 });
 
 test('menu opens with explicit mouse capture and restores click-through on close', () => {
-  const main = require('node:fs').readFileSync(
-    require('node:path').join(__dirname, '..', 'src', 'main', 'main.js'),
-    'utf8',
-  );
+  const main = require('./main-source');
   assert.match(main, /onMenu: \(open\) => \{[\s\S]*?setClickThrough\(false, 'menu-open'\)[\s\S]*?overlay\?\.focus\(\)/);
   assert.match(main, /setClickThrough\(true, 'menu-close'\)/);
 });

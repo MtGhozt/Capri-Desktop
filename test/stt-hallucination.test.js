@@ -30,7 +30,7 @@ test('real speech is not treated as a hallucination', () => {
 });
 
 test('hearTranscript drops hallucinations before a turn', () => {
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /isSttHallucination/);
   assert.match(main, /stt hallucination dropped:/);
   const from = main.indexOf('function hearTranscript');

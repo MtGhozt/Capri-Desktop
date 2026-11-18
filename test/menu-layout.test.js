@@ -68,7 +68,7 @@ test('game submenu refreshes without closing the menu', () => {
 });
 
 test('voice picker supports wav and transcript multi-selection', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const source = require('./main-source');
   assert.match(source, /properties:\s*\['openFile',\s*'multiSelections'\]/);
 });
 
@@ -81,19 +81,19 @@ test('startup keeps the intro animation enabled by default', () => {
 });
 
 test('overlay is shown when the renderer finishes loading, not only ready-to-show', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const source = require('./main-source');
   assert.match(source, /did-finish-load[\s\S]{0,300}overlay\.showInactive\(\)/);
   assert.match(source, /overlay\.loadURL\('capri:\/\/app\/src\/renderer\/index\.html'\);\s*overlay\.showInactive\(\)/);
 });
 
 test('render changes do not relaunch the development process', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const source = require('./main-source');
   assert.match(source, /if \(DEV\)[\s\S]{0,160}doQuit\(\)/);
   assert.match(source, /app\.relaunch\(\)/);
 });
 
 test('game removal returns visible feedback', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const source = require('./main-source');
   assert.match(source, /message: .*quitado de la lista/);
 });
 
@@ -172,7 +172,7 @@ test('agent rows show a name, state, and actionable hint', () => {
 });
 
 test('startup logs window, renderer, intro, and opacity state', () => {
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
   const capri = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'capri.js'), 'utf8');
   assert.match(main, /startup window show/);
@@ -183,7 +183,7 @@ test('startup logs window, renderer, intro, and opacity state', () => {
 });
 
 test('dev startup does not force the broken OpenGL angle backend', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const source = require('./main-source');
   assert.match(source, /if \(software\) app\.disableHardwareAcceleration/);
   const render = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'render-mode.js'), 'utf8');
   assert.doesNotMatch(render, /use-angle/);
@@ -199,7 +199,7 @@ test('brain settings render keeps old-format configs visible', () => {
 test('renderer forwards console and window errors to the main log', () => {
   const preload = fs.readFileSync(path.join(__dirname, '..', 'src', 'preload.js'), 'utf8');
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(preload, /rendererLog/);
   assert.match(source, /rendererError\('console\.error'/);
   assert.match(source, /rendererError\('window\.error'/);
@@ -219,7 +219,7 @@ test('voice loading stays visible until a ready state', () => {
 });
 
 test('screen context includes visible windows for desktop screenshots', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const source = require('./main-source');
   assert.match(source, /Apps\/ventanas abiertas/);
 });
 

@@ -15,7 +15,7 @@ const {
   gameCommentKind,
 } = require('../src/main/game-comment.js');
 
-const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+const main = require('./main-source');
 const menu = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
 const configSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'config.js'), 'utf8');
 
@@ -140,12 +140,12 @@ test('comment mode + game → visible and click-through, not folded', () => {
   );
   // Comment: pin (visible + ignore mouse + screen-saver), optional silent wake — never sleep.
   assert.match(apply, /play === 'comment'/);
-  assert.match(apply, /gameQuiet\.pin\(overlay\)/);
+  assert.match(apply, /gameQuiet\.pin\(getOverlay\(\)\)/);
   assert.match(apply, /gameHidHer = false/);
   assert.doesNotMatch(apply.split("play === 'comment'")[1].split('gameHidHer = true')[0], /sendCommand\('sleep'\)/);
   assert.match(enter, /applyGamePlayVisual\('comment'\)/);
   // Re-assert on focus / window ticks while comment + game.
-  assert.match(main, /gameQuiet\.pin\(overlay\)/);
+  assert.match(main, /gameQuiet\.pin\(getOverlay\(\)\)/);
   assert.match(main, /mode\) === 'comment'\) \{\s*gameQuiet\.pin\(overlay\)/);
   // Quiet gates still block focus / hover / bubbles.
   assert.match(main, /createGameQuiet\(\{ isActive: \(\) => Boolean\(gameMode\?\.active\(\)\) \}\)/);
@@ -165,5 +165,5 @@ test('quiet mode + game → hidden (sleep), same as today', () => {
   assert.match(enter, /applyGamePlayVisual\('quiet'\)/);
   assert.match(enter, /juegoEntrar/);
   // Mid-game switch to quiet (manual No molestar) also hides.
-  assert.match(main, /case 'gaming-play':[\s\S]*?gameMode\?\.active\(\)\) applyGamePlayVisual\(next\)/);
+  assert.match(main, /case 'gaming-play':[\s\S]*?gameMode\?\.active\(\)\) gameWindow\?\.visual\(next\)/);
 });

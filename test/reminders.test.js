@@ -185,7 +185,7 @@ test('settings menu lists pending reminders with edit and delete actions', () =>
   assert.match(menu, /reminder-update/);
   assert.match(menu, /reminder-delete/);
   assert.match(menu, /datetime-local/);
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /case 'reminder-update'/);
   assert.match(main, /case 'reminder-delete'/);
   assert.match(main, /reminders:\s*\(reminders/);
@@ -281,7 +281,7 @@ test('missedCount sees reminders before start, so the greeting can step aside', 
     const after = createReminders({ file, now: () => 20000, intervalMs: 0 });
     assert.equal(after.missedCount(), 0);
     // the guard lives in main.js: the boot greeting must check it before saying hello
-    const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+    const source = require('./main-source');
     assert.match(source, /reminders\?\.missedCount\?\.\(\)\s*\|\|\s*0\)\s*>\s*0/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -422,7 +422,7 @@ test('overdue reminders at boot are one bubble and one voice line', () => {
 });
 
 test('a skipped greeting leaves the missed reminder bubble alone', () => {
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /return \{ skipped: 'missed-reminders' \}/);
 
   const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
@@ -444,7 +444,7 @@ test('a reminder phrasing the direct parser misses is noticed, not silently prom
   assert.equal(promisesReminder('Listo, te aviso en 3 minutos.'), true);
   assert.equal(promisesReminder('Los recordatorios se guardan en un archivo.'), false);
 
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /reminderAsked && promisesReminder/);
   assert.match(main, /No quedó agendado ningún recordatorio/);
 });

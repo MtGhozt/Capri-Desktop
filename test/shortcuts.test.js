@@ -26,7 +26,7 @@ test('a shortcut change is refused when another one already holds the combo', ()
 });
 
 test('main.js routes both IPCs through setShortcut and checks every taken combo', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const source = require('./main-source');
   assert.match(source, /function setShortcut\(id, value\)/);
   assert.match(source, /shortcutConflict\(accel, combos, id\)/);
   assert.match(source, /\[['"]menu['"], menuCloseCombo, /);

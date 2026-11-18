@@ -29,6 +29,6 @@ test('settings shows Cargando… then light getMenu, then full (Oído does not s
   assert.match(src, /getMenu\(\{ folded: false, light: true \}\)/);
   assert.match(src, /getMenu\(\{ folded: false, light: false \}\)/);
   assert.match(src, /menu\.render\(state\)/);
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /setImmediate\(\(\) => \{ try \{ voice\?\.listDevices\(\)/);
 });

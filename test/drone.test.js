@@ -38,7 +38,7 @@ test('game drone mode hides dormant and restores it when still dormant', () => {
 });
 
 test('entering a game no longer starts the drone', () => {
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   const from = main.indexOf('async function gameEnter');
   const enter = main.slice(from, main.indexOf('async function gameLeave', from));
   assert.ok(from > 0, 'gameEnter exists');

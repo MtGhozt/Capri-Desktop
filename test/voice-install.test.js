@@ -207,7 +207,7 @@ test('setup output reaches onLine (and voice.log) line by line', async (t) => {
   assert.ok(lines.includes('Using C:\\Python311\\python.exe'));
   assert.ok(lines.includes('omnivoice imported'));
 
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /onLine: \(line\) => logEvent\(voiceLogPath\(\), `\[capri\] voice install: \$\{line\}`\)/);
 });
 

@@ -159,7 +159,7 @@ test('weather fallback still works when the LLM path would throw', async () => {
 
   const fs = require('node:fs');
   const path = require('node:path');
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /weatherFallbackLine/);
   assert.match(main, /outcome\?\.outcome === 'failed'/);
   assert.match(main, /temporalExtras/);
@@ -216,7 +216,7 @@ test('menu exposes the city field next to the time zone', () => {
   assert.match(menu, /Ej\.: Madrid, España/); // example only, never a real city as a value
   assert.match(menu, /Vacío = sin clima ni feriados/);
   assert.doesNotMatch(menu, /San José|San Jose/);
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /case 'weather-place'/);
   assert.match(main, /resolvePlace/);
   assert.match(main, /temporalExtras/);

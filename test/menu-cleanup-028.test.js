@@ -11,7 +11,6 @@ const { createWeather } = require('../src/main/weather');
 const { hasNvidiaGpu } = require('../src/main/voice-install');
 
 const menuPath = path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js');
-const mainPath = path.join(__dirname, '..', 'src', 'main', 'main.js');
 const cssPath = path.join(__dirname, '..', 'src', 'renderer', 'styles', 'capri.css');
 const helpPath = path.join(__dirname, '..', 'src', 'renderer', 'js', 'help-steps.js');
 
@@ -20,7 +19,7 @@ test('Iniciar con Windows is back in Comportamiento and reads state.login', () =
   assert.match(menu, /toggle\('Iniciar con Windows'/);
   assert.match(menu, /on:\s*Boolean\(state\.login\)/);
   assert.match(menu, /this\.act\('startup'/);
-  const main = fs.readFileSync(mainPath, 'utf8');
+  const main = require('./main-source');
   assert.match(main, /case 'startup':/);
   assert.match(main, /getLoginItemSettings\(loginItemOptions\(\)\)\.openAtLogin/);
 });
@@ -33,7 +32,7 @@ test('Acceso directo en Escritorio toggles the shortcut from Comportamiento', ()
   // the row flips at once and the menu stays open, like Iniciar con Windows
   assert.match(menu, /case 'desktop-shortcut': this\.lastState\.deskShortcut = Boolean\(value\)/);
   assert.match(menu, /\|\| id === 'desktop-shortcut'/);
-  const main = fs.readFileSync(mainPath, 'utf8');
+  const main = require('./main-source');
   // state reads the .lnk; off removes it, on (and the first-run guide, no value) creates it
   assert.match(main, /deskShortcut: fs\.existsSync\(path\.join\(app\.getPath\('desktop'\), 'Capri\.lnk'\)\)/);
   assert.match(main, /case 'desktop-shortcut': \{[\s\S]{0,200}?value === false[\s\S]{0,200}?unlinkSync\(link\)/);
@@ -76,7 +75,7 @@ test('overlay Proveedor lists active brains with reorder and Más proveedores', 
     menu.slice(menu.indexOf("row('Proveedor'"), menu.indexOf("row('Corregir")),
     /model\.providers\s*\|\|\s*\[\]/,
   );
-  const main = fs.readFileSync(mainPath, 'utf8');
+  const main = require('./main-source');
   assert.match(main, /case 'model-reorder': return reorderBrains/);
 });
 
@@ -86,7 +85,7 @@ test('Guardar clip uses Game Bar when hasNvidiaGpu is false', () => {
   assert.match(menu, /Xbox Game Bar/);
   assert.match(menu, /Win\+Alt\+G/);
   assert.match(menu, /clips\?\.nvidia/);
-  const main = fs.readFileSync(mainPath, 'utf8');
+  const main = require('./main-source');
   assert.match(main, /GAME_BAR_CLIP_HOTKEY/);
   assert.match(main, /Win\+Alt\+G/);
   assert.match(main, /hasNvidiaGpu\(\)[\s\S]*?saveClip/);
@@ -100,7 +99,7 @@ test('Ajustes exposes timeFormat 12h/24h for reminder clocks', () => {
   const menu = fs.readFileSync(menuPath, 'utf8');
   assert.match(menu, /Formato de hora/);
   assert.match(menu, /time-format/);
-  const main = fs.readFileSync(mainPath, 'utf8');
+  const main = require('./main-source');
   assert.match(main, /case 'time-format'/);
   assert.match(main, /normalizeTimeFormat/);
   assert.match(main, /timeFormat:\s*normalizeTimeFormat/);
@@ -118,7 +117,7 @@ test('hasNvidiaGpu caches the default probe once per session', () => {
 });
 
 test('rebuildTray is debounced on config bursts', () => {
-  const main = fs.readFileSync(mainPath, 'utf8');
+  const main = require('./main-source');
   assert.match(main, /trayRebuildTimer/);
   assert.match(main, /setTimeout\(\(\) => \{[\s\S]*?rebuildTray\(true\);[\s\S]*?\}, 300\)/);
   assert.match(main, /rebuildTray\(true\)/);

@@ -242,7 +242,7 @@ test('OmniVoice load races: one thread, gen guard, lock, recover notice', { time
 });
 
 test('main warns on single-instance quit and voice.js checks OmniVoice lock', () => {
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /requestSingleInstanceLock/);
   assert.match(main, /another Capri is already running/);
   // turns 2 and 4: a reply that lands while the clone loads is sent, not skipped as silence

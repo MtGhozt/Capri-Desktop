@@ -143,7 +143,7 @@ test('windowed known game (steamapps) pins only — not gameOnScreen', () => {
   assert.equal(windowedGameInFront({
     fgExe: 'C:\\Users\\Matias\\AppData\\Roaming\\Spotify\\Spotify.exe', fgFull: false,
   }), false);
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.match(main, /windowedGameInFront/);
   assert.match(main, /gameQuiet\.pin\(overlay\)/);
 });

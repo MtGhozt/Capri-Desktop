@@ -50,7 +50,7 @@ test('setup details are readable, selectable and copyable', () => {
 });
 
 test('the reply text is sent before TTS flush, and shown once', () => {
-  const main = read('src', 'main', 'main.js');
+  const main = require('./main-source');
   const chat = main.slice(main.indexOf("ipcMain.handle('chat:send'"), main.indexOf("ipcMain.on('chat:cancel'"));
   const onDone = chat.slice(chat.indexOf('onDone: (payload) => {'));
   const shown = onDone.indexOf("webContents.send('chat:done', payload)");

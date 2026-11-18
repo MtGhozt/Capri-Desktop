@@ -70,7 +70,7 @@ test('a short focus loss keeps game mode (a flicker never brings her up)', () =>
 test('the app waits for the focus-loss debounce, never exits at once', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+  const main = require('./main-source');
   assert.equal(FOCUS_LOSS_DEBOUNCE_MS, 10_000);
   assert.doesNotMatch(main, /exitDelayMs:\s*0\b/);
   assert.match(main, /exitDelayMs: FOCUS_LOSS_DEBOUNCE_MS/);
