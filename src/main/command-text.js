@@ -63,7 +63,6 @@ const STT_HALLUCINATIONS = new Set([
   'gracias por ver el video',
   'subtitulos realizados por la comunidad de amara org',
   'amara org',
-  'gracias',
 ]);
 
 function isSttHallucination(text) {

@@ -16,12 +16,14 @@ test('known Whisper hallucinations match the whole normalized utterance', () => 
   assert.equal(isSttHallucination('Subtítulos realizados por la comunidad de Amara.org'), true);
   assert.equal(isSttHallucination('amara.org'), true);
   assert.equal(normalizeCommandText('amara.org'), 'amara org');
-  assert.equal(isSttHallucination('Gracias'), true);
   assert.equal(normalizeCommandText('¡Suscríbete!'), 'suscribete');
 });
 
 test('real speech is not treated as a hallucination', () => {
   assert.equal(isSttHallucination('hola Capri'), false);
+  assert.equal(isSttHallucination('gracias'), false); // real thank-you must pass through
+  assert.equal(isSttHallucination('Capri, gracias'), false);
+  assert.equal(isSttHallucination('gracias por ver'), true); // YouTube outro stays dropped
   assert.equal(isSttHallucination('gracias por avisar'), false);
   assert.equal(isSttHallucination('suscribete al canal de Capri por favor'), false);
   assert.equal(isSttHallucination('mirá mi pantalla'), false);
