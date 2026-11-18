@@ -188,7 +188,7 @@ test('settings menu lists pending reminders with edit and delete actions', () =>
   const main = require('./main-source');
   assert.match(main, /case 'reminder-update'/);
   assert.match(main, /case 'reminder-delete'/);
-  assert.match(main, /reminders:\s*\(reminders/);
+  assert.match(main, /reminders:\s*\(getReminders\(\)/);
 });
 
 test('confirmation names the resolved local time', () => {
