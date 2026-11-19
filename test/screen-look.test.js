@@ -366,7 +366,7 @@ test('click-through is logged only when it changes, not on every hover', () => {
 
 test('look captures the display with the foreground window, not the mouse', () => {
   const main = require('./main-source');
-  assert.match(main, /function lookDisplay\(\)[\s\S]*?lastWindows\?\.fgRect[\s\S]*?screen\.getDisplayMatching/);
+  assert.match(main, /function lookDisplay\(\)[\s\S]*?getLastWindows\(\)\?\.fgRect[\s\S]*?screen\.getDisplayMatching/);
   assert.match(main, /const display = lookDisplay\(\);/);
   assert.match(main, /displayIndex,/);
   assert.match(main, /attempts: 3,/);

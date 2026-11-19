@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const { execFile } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog, safeStorage, clipboard, desktopCapturer,
+  app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog, safeStorage, clipboard,
 } = require('electron');
 
 const config = require('./config');
@@ -18,10 +18,10 @@ const { startWindowWatch, restoreForeground } = require('./windows');
 const { createLlm } = require('./llm');
 const {
   PROVIDERS, providerOptions, isAgent, defaultBaseUrl, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS,
-  providerAfterKeyRemoved, supportsVision, provider, activeBrainIds,
+  providerAfterKeyRemoved, provider, activeBrainIds,
 } = require('./chat-providers');
 const {
-  captureScreenJpeg, createCaptureShield, keepCaptureFile, shouldAutoLook, AUTO_LOOK_MS,
+  keepCaptureFile,
 } = require('./screen-look');
 const { gameAppKey, windowedGameInFront } = require('./game-detect');
 const { probeProvider } = require('./llm-probe');
@@ -50,6 +50,7 @@ const { wakePhraseLabel } = require('./wake-phrase');
 const { createTokenStore } = require('./spotify');
 const { createMusicWiring } = require('./music-wiring');
 const { createAppsWiring } = require('./apps-wiring');
+const { createScreenCapture } = require('./screen-capture');
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
 const { readTranscript } = require('./fix-command');
@@ -130,8 +131,6 @@ let llm = null;
 let lms = null;
 let voice = null;
 let voiceInstall = null;
-let lastAutoLookAt = 0;
-let autoLookTimer = null;
 let speakQueue = null;
 let comments = null;
 let voiceListening = false;
@@ -1150,72 +1149,22 @@ function resetOverlayInput(reason = 'reset') {
   sendCommand('input-reset', { reason: String(reason || 'reset') });
 }
 
-// Phase 6C: JPEG in memory. Win32 uses setContentProtection so Capri stays visible and out of the shot.
-// The screen she captures is the one with the window in front, not wherever the mouse is resting:
-// a second monitor showing only the wallpaper (and the "Activar Windows" watermark) was the bug.
-function lookDisplay() {
-  const rect = lastWindows?.fgRect;
-  const dip = rect && typeof screen.screenToDipRect === 'function'
-    ? screen.screenToDipRect(null, { x: rect.x, y: rect.y, width: rect.w, height: rect.h })
-    : null;
-  return (dip && screen.getDisplayMatching(dip))
-    || screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-    || targetDisplay();
-}
+// Looking at the screen (screen-capture.js): the shot in memory and the auto look.
+const screenCapture = createScreenCapture({
+  getOverlay: () => overlay,
+  getLlm: () => llm,
+  getSpeakQueue: () => speakQueue,
+  getGameMode: () => gameMode,
+  getLastWindows: () => lastWindows,
+  chatVisible,
+  voiceReplyOn,
+  openChat,
+  resetOverlayInput,
+  reapplyClickThrough: () => setClickThrough(clickThrough),
+  targetDisplay,
+});
+const { captureFilePath, snapScreenForLook, armAutoLook } = screenCapture;
 
-// Where an older build left the shot even though the consent text says it stays in memory.
-function captureFilePath() {
-  return path.join(path.dirname(voiceLogPath()), 'last-capture.jpg');
-}
-
-async function snapScreenForLook() {
-  const display = lookDisplay();
-  const displayIndex = screen.getAllDisplays().findIndex((d) => d.id === display?.id);
-  const shield = createCaptureShield({
-    platform: process.platform,
-    setContentProtection: (on) => {
-      if (!overlay || overlay.isDestroyed()) throw new Error('no overlay');
-      overlay.setContentProtection(Boolean(on));
-    },
-    hide: () => {
-      if (!overlay || overlay.isDestroyed()) return;
-      overlay.hide();
-    },
-    show: () => {
-      if (!overlay || overlay.isDestroyed()) return;
-      overlay.showInactive();
-    },
-    reapplyClickThrough: () => {
-      if (!overlay || overlay.isDestroyed()) return;
-      setClickThrough(clickThrough);
-    },
-  });
-  try {
-    let captured = null;
-    const image = await captureScreenJpeg({
-      getSources: (opts) => desktopCapturer.getSources(opts),
-      displayId: display?.id,
-      displayIndex,
-      attempts: 3,
-      retryDelayMs: 150,
-      beforeCapture: () => shield.before(),
-      afterCapture: () => shield.after(),
-      onCapture: (info) => { captured = info; },
-    });
-    logEvent(voiceLogPath(), `[capri] screen capture time=${Date.now()} display=${captured?.displayId || display?.id || '?'} size=${captured?.size?.width || 0}x${captured?.size?.height || 0} brain=pending image=${image ? 'attached' : 'none'}`);
-    if (!image) return null;
-    keepCaptureFile({
-      image,
-      file: captureFilePath(),
-      debugSave: config.load().voice?.debugSave === true,
-    });
-    return image;
-  } catch (err) {
-    try { shield.after(); } catch { /* already cleaned */ }
-    resetOverlayInput('look-capture-error');
-    throw err;
-  }
-}
 
 function sayWithoutLlm(text) {
   const line = String(text || '').trim();
@@ -1228,70 +1177,6 @@ function sayWithoutLlm(text) {
   if (speakId) {
     speakQueue?.feed(line);
     speakQueue?.flush(speakId);
-  }
-}
-
-function armAutoLook() {
-  if (autoLookTimer) {
-    clearInterval(autoLookTimer);
-    autoLookTimer = null;
-  }
-  const cfg = config.load();
-  if (!cfg.llm?.autoLook || !cfg.llm?.shareScreen) return;
-  autoLookTimer = setInterval(() => {
-    void maybeAutoLook();
-  }, 60_000);
-}
-
-async function maybeAutoLook() {
-  const cfg = config.load();
-  let idleSeconds = 0;
-  try { idleSeconds = powerMonitor.getSystemIdleTime(); } catch { idleSeconds = 0; }
-  if (!shouldAutoLook({
-    enabled: cfg.llm?.autoLook === true,
-    shareScreen: cfg.llm?.shareScreen === true,
-    lastAt: lastAutoLookAt,
-    intervalMs: AUTO_LOOK_MS,
-    gameActive: Boolean(gameMode?.active?.()),
-    fullscreen: Boolean(lastWindows?.fgFull),
-    idleSeconds,
-  })) return;
-  const id = String(cfg.llm?.provider || 'local');
-  const model = String(cfg.llm?.model || provider(id).model || '');
-  if (!supportsVision(id, model) && !isAgent(id)) return;
-  if (state.llmBusy || state.overlayFolded || chatVisible.get() || state.voiceTalking) return;
-  const image = await snapScreenForLook();
-  if (!image) return;
-  lastAutoLookAt = Date.now();
-  const line = 'Mirá mi pantalla un segundo y comentá algo breve de lo que ves.';
-  openChat('look');
-  const speakId = voiceReplyOn() ? speakQueue?.start() : 0;
-  if (!speakId) speakQueue?.stop();
-  state.llmBusy = true;
-  try {
-    await llm?.chat?.({
-      user: line,
-      image,
-      onMood: (name) => speakQueue?.setMood?.(name),
-      onToken: (piece) => {
-        overlay?.webContents.send('chat:token', piece);
-        if (speakId) speakQueue?.feed(piece);
-      },
-      onDone: (payload) => {
-        // text before audio: the bubble answers at once even if TTS takes seconds
-        overlay?.webContents.send('chat:done', payload);
-        if (speakId) {
-          if (payload?.mood) speakQueue?.setMood?.(payload.mood);
-          speakQueue?.flush(speakId);
-        }
-      },
-      onError: (payload) => {
-        if (speakId) speakQueue?.stop(speakId);
-        overlay?.webContents.send('chat:error', payload);
-      },
-    });
-  } finally {
-    state.llmBusy = false;
   }
 }
 

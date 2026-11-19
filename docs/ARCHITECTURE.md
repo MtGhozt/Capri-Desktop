@@ -107,6 +107,7 @@ El estado mutable compartido está en `state.js`.
 | `music-wiring.js` | El cableado de música que vivía en `main.js`: tokens cifrados de Spotify, OAuth, media keys de Windows y la instancia de `music.js`. |
 | `context.js` | Qué hay en primer plano (música, juego, vídeo, código) para decir algo que encaje. |
 | `screen-look.js` | Mirar la pantalla a pedido; el JPEG vive sólo en memoria. |
+| `screen-capture.js` | El cableado de `screen-look.js` que vivía en `main.js`: qué pantalla, el escudo, el JPEG en memoria y el auto look cada minuto. |
 | `voice-install.js`, `voice-ref.js`, `voice-config.js`, `vc-runtime.js` | Instalar la voz, tu propia referencia, lo que recibe el sidecar, el runtime VC++. |
 | `recommend-profile.js`, `assistants.js`, `agent-brain.js` | Perfiles sugeridos, agentes que vigila y usarlos como cerebro. |
 | `hearing.js` | Sensibilidad de la wake word y hotkey del push-to-talk. |
