@@ -99,6 +99,7 @@ El estado mutable compartido está en `state.js`.
 | Módulo | Qué hace |
 | --- | --- |
 | `apps-config.js` | La tabla de apps: qué alcanza "abre X" y "cierra X". |
+| `apps-wiring.js` | El cableado de apps que vivía en `main.js`: tabla, escaneo (`scan.json`), altas/bajas desde el menú y los diálogos. |
 | `app-command.js`, `app-flow.js`, `app-actions.js`, `app-confirm.js` | Leer la orden, preguntar si hace falta, abrir/cerrar y decirlo. |
 | `app-host.js` | El PC real detrás: programas, enlaces, `close-app.ps1`, taskkill. |
 | `app-scan.js`, `app-fx.js` | Qué hay instalado y los efectos de abrir/cerrar. |

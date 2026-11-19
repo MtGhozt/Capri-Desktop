@@ -10,7 +10,8 @@ const DIR = path.join(__dirname, '..', 'src', 'main');
 // main.js last: slices anchored on its functions still end at the file they expect.
 const MODULES = [
   'game-window.js', 'ipc-overlay.js', 'ipc-settings.js', 'ipc-voice.js', 'ipc-misc.js',
-  'menu-state.js', 'replies.js', 'turn.js', 'music-wiring.js', 'menu-actions.js', 'state.js', 'main.js',
+  'menu-state.js', 'replies.js', 'turn.js', 'music-wiring.js', 'menu-actions.js', 'apps-wiring.js',
+  'state.js', 'main.js',
 ];
 
 module.exports = MODULES
