@@ -11,7 +11,7 @@ El estado mutable compartido está en `state.js`.
 
 | Módulo | Qué hace |
 | --- | --- |
-| `main.js` | Ventana overlay, bandeja, arranque (`main()`), cableado de IPC, atajos y el detector de juegos. |
+| `main.js` | Ventana overlay, arranque (`main()`), cableado de IPC y el detector de juegos. |
 | `state.js` | Banderas mutables compartidas: `overlayFolded`, `ttsLoading`, `voiceTalking`, `llmBusy`, `lastTts`, `lastHeard`. |
 | `config.js` | `config.json` en `%APPDATA%\Capri`, migraciones y valores por defecto. |
 | `log.js` | Una línea por evento en local, `voice.log` con rotación a 5 MB. |
@@ -35,6 +35,8 @@ El estado mutable compartido está en `state.js`.
 | `menu-state.js` | El payload de `menu:get`: una proyección de config + estado vivo para bandeja, menú y Ajustes. |
 | `menu-actions.js` | Las acciones que llegan por `menu:action`, por dominio: apps, voz, música, cerebro, juegos, sistema y escritorio. |
 | `menu-guard.js` | El menú nunca se queda con la pantalla: heartbeat y cierre forzado. |
+| `shortcuts.js` | Atajos globales: mostrar/ocultar, chat, push-to-talk, cerrar el menú y salir de emergencia. |
+| `tray.js` | El icono de la bandeja y su menú, reconstruido (con debounce) cuando cambia la config. |
 | `labels.js` | El menú de bandeja en cada idioma. |
 | `settings-window.js` | La ventana de Ajustes (una sola instancia). |
 
