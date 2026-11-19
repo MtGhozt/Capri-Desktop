@@ -102,6 +102,7 @@ El estado mutable compartido está en `state.js`.
 | `app-host.js` | El PC real detrás: programas, enlaces, `close-app.ps1`, taskkill. |
 | `app-scan.js`, `app-fx.js` | Qué hay instalado y los efectos de abrir/cerrar. |
 | `music.js`, `music-command.js`, `namida-search.js`, `spotify.js` | Namida y Spotify: qué suena, play/pausa/siguiente, "pon X". |
+| `music-wiring.js` | El cableado de música que vivía en `main.js`: tokens cifrados de Spotify, OAuth, media keys de Windows y la instancia de `music.js`. |
 | `context.js` | Qué hay en primer plano (música, juego, vídeo, código) para decir algo que encaje. |
 | `screen-look.js` | Mirar la pantalla a pedido; el JPEG vive sólo en memoria. |
 | `voice-install.js`, `voice-ref.js`, `voice-config.js`, `vc-runtime.js` | Instalar la voz, tu propia referencia, lo que recibe el sidecar, el runtime VC++. |

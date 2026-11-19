@@ -3,7 +3,7 @@
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs');
-const { spawn, execFile } = require('node:child_process');
+const { execFile } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const {
   app, BrowserWindow, Tray, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, nativeImage, powerMonitor, dialog, safeStorage, clipboard, desktopCapturer,
@@ -50,10 +50,8 @@ const { bootNotes } = require('./whats-new');
 const { checkLine, formatReport, redact, copyErrorPayload } = require('./diagnose');
 const { createSystemFlow, runSystem } = require('./system-command');
 const { wakePhraseLabel } = require('./wake-phrase');
-const { createMusic, readNowPlaying, NOW_PLAYING_SCRIPT } = require('./music');
-const {
-  createSpotify, createTokenStore, authorizeSpotify, spotifyFailureLine, refreshSpotifyToken,
-} = require('./spotify');
+const { createTokenStore } = require('./spotify');
+const { createMusicWiring } = require('./music-wiring');
 const { pickLine, fillLine } = require('./lines-es');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
 const { readTranscript } = require('./fix-command');
@@ -994,70 +992,13 @@ const appList = () => cleanApps(config.load().apps?.list);
 // your table first, then what her scan found on this PC (Paso 4D)
 const allApps = () => appScan.mergeApps(appList(), scanned().items);
 
-let spotifyAccessToken = null;
-const spotifyTokens = () => createTokenStore({
-  file: path.join(app.getPath('userData'), 'spotify-token'),
-  safeStorage,
+// Spotify's tokens and the music player wiring (music-wiring.js).
+const musicWiring = createMusicWiring({
+  allApps: () => allApps(),
+  rebuildTray,
+  showLine,
 });
-function restoreSpotifyToken() {
-  const saved = spotifyTokens().read();
-  if (saved?.access_token) spotifyAccessToken = saved.access_token;
-}
-// Reuse the saved refresh token; one in-flight refresh shared by every caller.
-let spotifyRefreshing = null;
-function refreshSpotifyAccess() {
-  if (spotifyRefreshing) return spotifyRefreshing;
-  spotifyRefreshing = (async () => {
-    const saved = spotifyTokens().read();
-    const clientId = String(config.load().music?.spotify?.clientId || '').trim();
-    if (!saved?.refresh_token || !clientId) return null;
-    try {
-      const tokens = await refreshSpotifyToken({ clientId, refreshToken: saved.refresh_token });
-      spotifyAccessToken = tokens.access_token;
-      spotifyTokens().write({
-        ...saved,
-        ...tokens,
-        refresh_token: tokens.refresh_token || saved.refresh_token,
-        expiresAt: Date.now() + Number(tokens.expires_in || 3600) * 1000,
-      });
-      return spotifyAccessToken;
-    } catch (err) {
-      console.error('[capri] Spotify token refresh failed:', err.message);
-      return null;
-    } finally {
-      spotifyRefreshing = null;
-    }
-  })();
-  return spotifyRefreshing;
-}
-async function connectSpotify(clientId) {
-  const id = String(clientId || '').trim();
-  if (!id) return { ok: false, message: 'Falta el Client ID.' };
-  try {
-    const tokens = await authorizeSpotify({
-      clientId: id,
-      openExternal: (url) => shell.openExternal(url),
-      tokenStore: spotifyTokens(),
-    });
-    spotifyAccessToken = tokens.access_token;
-    rebuildTray();
-    return { ok: true };
-  } catch (err) {
-    console.error('[capri] Spotify connection failed:', err.message);
-    const message = spotifyFailureLine(err);
-    showLine(message, { badge: 'SPOTIFY' }); // the menu used to drop this on the floor
-    return { ok: false, message };
-  }
-}
-const spotify = createSpotify({
-  token: () => spotifyAccessToken,
-  refresh: () => refreshSpotifyAccess(),
-  expired: () => {
-    const saved = spotifyTokens().read();
-    const at = Number(saved?.expiresAt || 0);
-    return at > 0 && at <= Date.now();
-  },
-});
+const { music, connectSpotify, disconnectSpotify, restoreSpotifyToken, hasToken: hasSpotifyToken } = musicWiring;
 
 // Cloud chat keys, kept encrypted with your Windows account in their own file: never in config.json,
 // never in a log (Paso 4K). Same store as Spotify's tokens.
@@ -1125,49 +1066,6 @@ function openSettingsTab(tab = null, hint = '') {
   }
   return { ok: true };
 }
-// is that program up? (tasklist, so no extra script)
-function processRunning(name) {
-  return new Promise((resolve) => {
-    if (process.platform !== 'win32') return resolve(false);
-    const child = spawn('tasklist', ['/FI', `IMAGENAME eq ${name}.exe`, '/NH'], { windowsHide: true });
-    let out = '';
-    child.stdout.on('data', (d) => { out += d; });
-    child.once('error', () => resolve(false));
-    child.once('close', () => resolve(out.toLowerCase().includes(`${name}.exe`)));
-  });
-}
-
-const music = createMusic({
-  config,
-  apps: allApps,
-  spotify,
-  openExternal: (url) => shell.openExternal(url),
-  log: (text) => appLog(text),
-  isRunning: (name) => processRunning(name),
-  readNowPlaying: () => readNowPlaying(spawn, NOW_PLAYING_SCRIPT),
-  sendKey: (action, script) => new Promise((resolve, reject) => {
-    if (process.platform !== 'win32') return reject(new Error('media keys require Windows'));
-    const child = spawn('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Action', action,
-    ], { windowsHide: true });
-    child.once('error', reject);
-    child.once('close', (code) => code === 0 ? resolve() : reject(new Error(`media key exited ${code}`)));
-  }),
-  sendVolume: (action, processNames, script) => new Promise((resolve, reject) => {
-    if (process.platform !== 'win32') return reject(new Error('session volume requires Windows'));
-    const child = spawn('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
-      '-Action', action, '-ProcessNames', (processNames || []).join(','),
-    ], { windowsHide: true });
-    let out = '';
-    child.stdout?.on('data', (chunk) => { out += String(chunk); });
-    child.once('error', reject);
-    child.once('close', (code) => {
-      if (code === 0) return resolve({ ok: true, out });
-      reject(new Error(/NONE/i.test(out) ? 'no music session' : `session volume exited ${code}`));
-    });
-  }),
-});
 const appLog = (text) => logEvent(voiceLogPath(), `[capri] ${text}`);
 let appFlow = null;
 
@@ -2016,8 +1914,7 @@ function applyMenuAction(id, value) {
       updateConfig({ music: { spotify: { clientId: String(value || '').trim().slice(0, 100) } } });
       return connectSpotify(value);
     case 'spotify-disconnect':
-      spotifyAccessToken = null;
-      spotifyTokens().clear();
+      disconnectSpotify();
       break;
     case 'sounds-dir':
       fs.mkdirSync(userSoundsDir(), { recursive: true });
@@ -2395,7 +2292,7 @@ const menuState = createMenuState({
   getLastWindows: () => lastWindows,
   getTalkCombo: () => talkCombo,
   getScanRunning: () => scanRunning,
-  hasSpotifyToken: () => Boolean(spotifyAccessToken),
+  hasSpotifyToken,
 });
 
 let trayRebuildTimer = null;
