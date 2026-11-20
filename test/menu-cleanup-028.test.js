@@ -11,14 +11,14 @@ const { createWeather } = require('../src/main/weather');
 const { hasNvidiaGpu } = require('../src/main/voice-install');
 
 const menuPath = path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js');
+const menuBundle = require('./menu-source');
 const cssPath = path.join(__dirname, '..', 'src', 'renderer', 'styles', 'capri.css');
 const helpPath = path.join(__dirname, '..', 'src', 'renderer', 'js', 'help-steps.js');
 
 test('Iniciar con Windows is back in Comportamiento and reads state.login', () => {
-  const menu = fs.readFileSync(menuPath, 'utf8');
-  assert.match(menu, /toggle\('Iniciar con Windows'/);
-  assert.match(menu, /on:\s*Boolean\(state\.login\)/);
-  assert.match(menu, /this\.act\('startup'/);
+  assert.match(menuBundle, /toggle\('Iniciar con Windows'/);
+  assert.match(menuBundle, /on:\s*Boolean\(state\.login\)/);
+  assert.match(menuBundle, /menu\.act\('startup'/);
   const main = require('./main-source');
   assert.match(main, /case 'startup':/);
   assert.match(main, /getLoginItemSettings\(loginItemOptions\(\)\)\.openAtLogin/);
@@ -26,9 +26,9 @@ test('Iniciar con Windows is back in Comportamiento and reads state.login', () =
 
 test('Acceso directo en Escritorio toggles the shortcut from Comportamiento', () => {
   const menu = fs.readFileSync(menuPath, 'utf8');
-  assert.match(menu, /toggle\('Acceso directo en Escritorio'/);
-  assert.match(menu, /on:\s*Boolean\(state\.deskShortcut\)/);
-  assert.match(menu, /this\.act\('desktop-shortcut', on\)/);
+  assert.match(menuBundle, /toggle\('Acceso directo en Escritorio'/);
+  assert.match(menuBundle, /on:\s*Boolean\(state\.deskShortcut\)/);
+  assert.match(menuBundle, /menu\.act\('desktop-shortcut', on\)/);
   // the row flips at once and the menu stays open, like Iniciar con Windows
   assert.match(menu, /case 'desktop-shortcut': this\.lastState\.deskShortcut = Boolean\(value\)/);
   assert.match(menu, /\|\| id === 'desktop-shortcut'/);
@@ -49,14 +49,14 @@ test('settings tabs rename Memoria/Oído and add Recordatorios', () => {
   assert.equal(SETTINGS_TABS.find((t) => t.id === 'reminders').label, 'Recordatorios');
   const menu = fs.readFileSync(menuPath, 'utf8');
   assert.match(menu, /reminders:\s*\['reminders'\]/);
-  assert.match(menu, /section\('RECORDATORIOS', 'reminders'\)/);
+  assert.match(menuBundle, /section\('RECORDATORIOS', 'reminders'\)/);
   const help = fs.readFileSync(helpPath, 'utf8');
   assert.match(help, /Oído y voz/);
   assert.match(help, /Memoria y personalidad/);
 });
 
 test('Atajos rows use a consistent label/chip/action grid', () => {
-  const menu = fs.readFileSync(menuPath, 'utf8');
+  const menu = menuBundle;
   assert.match(menu, /appmenu__shortcut-row/);
   assert.match(menu, /appmenu__shortcut-action/);
   assert.match(menu, /appmenu__kbd--empty/);
@@ -65,7 +65,7 @@ test('Atajos rows use a consistent label/chip/action grid', () => {
 });
 
 test('overlay Proveedor lists active brains with reorder and Más proveedores', () => {
-  const menu = fs.readFileSync(menuPath, 'utf8');
+  const menu = menuBundle;
   assert.match(menu, /Más proveedores/);
   assert.match(menu, /model-reorder/);
   assert.match(menu, /brainChain/);
@@ -81,7 +81,7 @@ test('overlay Proveedor lists active brains with reorder and Más proveedores', 
 
 test('Guardar clip uses Game Bar when hasNvidiaGpu is false', () => {
   assert.equal(typeof hasNvidiaGpu, 'function');
-  const menu = fs.readFileSync(menuPath, 'utf8');
+  const menu = menuBundle;
   assert.match(menu, /Xbox Game Bar/);
   assert.match(menu, /Win\+Alt\+G/);
   assert.match(menu, /clips\?\.nvidia/);
@@ -96,7 +96,7 @@ test('Guardar clip uses Game Bar when hasNvidiaGpu is false', () => {
 });
 
 test('Ajustes exposes timeFormat 12h/24h for reminder clocks', () => {
-  const menu = fs.readFileSync(menuPath, 'utf8');
+  const menu = menuBundle;
   assert.match(menu, /Formato de hora/);
   assert.match(menu, /time-format/);
   const main = require('./main-source');
@@ -163,7 +163,7 @@ test('reminder datetime-local uses cfg.timeZone, not the PC clock', () => {
   const back = parseDateTimeLocal('2026-11-08T16:00', 'Europe/Madrid');
   assert.equal(formatDateTimeLocal(back, 'Europe/Madrid'), '2026-11-08T16:00');
   assert.equal(formatDateTimeLocal(back, 'America/Costa_Rica'), '2026-11-08T09:00');
-  const menu = fs.readFileSync(menuPath, 'utf8');
+  const menu = menuBundle;
   assert.match(menu, /reminderInputValue\(editAt,\s*cfg\.timeZone\)/);
   assert.match(menu, /item\.eventAt\s*\|\|\s*item\.at/);
   assert.match(menu, /reminderInputToIso\(whenInput\.value,\s*cfg\.timeZone\)/);

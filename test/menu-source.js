@@ -10,6 +10,16 @@ const DIR = path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu');
 // menu.js last: source-span tests anchored on menu.js still resolve.
 const MODULES = [
   'widgets.js',
+  'voz.js',
+  'musica.js',
+  'cerebro.js',
+  'agentes.js',
+  'memoria.js',
+  'apps.js',
+  'comportamiento.js',
+  'recordatorios.js',
+  'apariencia.js',
+  'atajos.js',
   'about.js',
   'menu.js',
 ];

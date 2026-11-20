@@ -191,7 +191,7 @@ test('dev startup does not force the broken OpenGL angle backend', () => {
 
 test('brain settings render keeps old-format configs visible', () => {
   const source = require('./menu-source');
-  assert.match(source, /body\.append\(this\.brainPanel\(model, \{ build \}\)\)/);
+  assert.match(source, /body\.append\(brainPanel\(menu, model, \{ build \}\)\)/);
   assert.match(source, /const model = state\.model \|\| \{/);
   assert.match(source, /No se pudo dibujar esta sección/);
 });
