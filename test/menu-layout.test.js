@@ -73,7 +73,7 @@ test('voice picker supports wav and transcript multi-selection', () => {
 });
 
 test('startup keeps the intro animation enabled by default', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  const source = require('./app-source');
   assert.match(source, /await capri\.intro\(entrance\(\)\)/);
   assert.doesNotMatch(source, /if \(config\.visible === false\) capri\.stowNow\(\)/);
   const capri = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'capri.js'), 'utf8');
@@ -173,7 +173,7 @@ test('agent rows show a name, state, and actionable hint', () => {
 
 test('startup logs window, renderer, intro, and opacity state', () => {
   const main = require('./main-source');
-  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  const app = require('./app-source');
   const capri = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'capri.js'), 'utf8');
   assert.match(main, /startup window show/);
   assert.match(app, /startup renderer first render/);
@@ -198,7 +198,7 @@ test('brain settings render keeps old-format configs visible', () => {
 
 test('renderer forwards console and window errors to the main log', () => {
   const preload = fs.readFileSync(path.join(__dirname, '..', 'src', 'preload.js'), 'utf8');
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  const source = require('./app-source');
   const main = require('./main-source');
   assert.match(preload, /rendererLog/);
   assert.match(source, /rendererError\('console\.error'/);
@@ -214,7 +214,7 @@ test('render mode is presented as visible radio options without duplicate active
 });
 
 test('voice loading stays visible until a ready state', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  const source = require('./app-source');
   assert.match(source, /evt\.state === 'loading'/);
 });
 

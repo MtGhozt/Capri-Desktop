@@ -2,8 +2,6 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const load = () => import('../src/renderer/js/drone.js');
 
 test('drone draws only when its animation frame changes', async () => {
@@ -31,10 +29,10 @@ test('drone can be shown and hidden without owning game mode', async () => {
 });
 
 test('game drone mode hides dormant and restores it when still dormant', () => {
-  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+  const app = require('./app-source');
   assert.match(app, /case 'game-drone':[\s\S]*?dormant\.hide\(\);[\s\S]*?mask\.hide\(\);[\s\S]*?drone\.show\(\)/);
   assert.match(app, /case 'game-drone':[\s\S]*?drone\.hide\(\);[\s\S]*?machine\.get\(\) === 'DORMANT'[\s\S]*?dormant\.show\(\)/);
-  assert.match(app, /if \(!droneActive\) \{[\s\S]*?dormant\.show\(\)/);
+  assert.match(app, /if \(!ptr\.droneActive\) \{[\s\S]*?dormant\.show\(\)/);
 });
 
 test('entering a game no longer starts the drone', () => {

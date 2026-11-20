@@ -17,7 +17,7 @@ const ALLOW = {
   'src/renderer/js/menu.js': 578,
   'src/renderer/js/capri.js': 2099,
   'src/renderer/js/fx.js': 416,
-  'src/renderer/js/app.js': 1318,
+  'src/renderer/js/app.js': 396,
   'src/main/pc-actions.js': 899,
   'src/renderer/js/bubble.js': 664,
   'src/main/voice-install.js': 604,

@@ -25,7 +25,7 @@ test('only a model missing from the HF cache announces a download', () => {
 });
 
 test('the download message reaches the voice bar, cached loads keep saying Cargando voz', () => {
-  const app = read('src', 'renderer', 'js', 'app.js');
+  const app = require('./app-source');
   assert.match(app, /evt\.state === 'downloading'/);
   assert.match(app, /Descargando voz \(solo la primera vez, puede tardar varios minutos\)/);
 

@@ -150,6 +150,23 @@ sección en el mismo orden DOM que antes.
 Los tests que antes leían sólo `menu.js` usan `test/menu-source.js` (concatenación en orden
 de sección). SALIR queda inline en `menu.js`.
 
+## Renderer: arranque del overlay (`app.js` + `app/`)
+
+`src/renderer/js/app.js` sigue siendo el shell de `boot()`: carga assets, construye las
+instancias (fx, chip, mask, voice, panel, bubble, menú, dormant, capri, brain, systemFx,
+guide) y el cableado básico (resize, config, Claude, ventanas). El resto se cablea con
+`wireX({ deps })` bajo `app/`. Sin renombrar eventos IPC, ids del DOM ni `window.*` hooks.
+
+| Módulo | Qué cablea |
+| --- | --- |
+| `app/pointer.js` | Click-through, biochip/máscara, rearm del hook, caricias, menu-guard (`beat`/`forceFree`), fold/unfold a DORMANT. |
+| `app/voice-events.js` | `host.onVoice`, tokens/done/error del chat, estado LLM, gamepad push-to-talk. |
+| `app/commands.js` | `host.onCommand` y efectos de apps (Paso 4E: zap/spark). |
+| `app/demo.js` | Secuencia showcase del demo y el hook Playwright `__capriE2E`. |
+
+Los tests que antes leían sólo `app.js` usan `test/app-source.js` (concatenación en orden
+de módulo).
+
 ## Renderer: capa FX (`fx.js` + `fx/`)
 
 `src/renderer/js/fx.js` sigue siendo el shell: `FxLayer`, canvas/resize/frame, la API pública

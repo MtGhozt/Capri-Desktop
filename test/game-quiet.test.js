@@ -6,13 +6,11 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const { createGameQuiet, TOP_LEVEL } = require('../src/main/game-quiet.js');
 
 // The game parts moved out of main.js: the bundle has game-window.js first, so its functions are found.
 const main = require('./main-source');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
+const app = require('./app-source');
 
 function fakeWindow({ destroyed = false } = {}) {
   const calls = [];
