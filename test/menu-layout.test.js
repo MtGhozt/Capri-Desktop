@@ -59,7 +59,7 @@ test('Capri sits above the message box without blocking its input', () => {
 test('Hacer algo is a direct quick-menu action, not a submenu', () => {
   const source = require('./menu-source');
   assert.match(source, /includes\(id\)\s*\?\s*''\s*:\s*'›'/);
-  assert.match(source, /row\('Hacer algo', '', 'do-something', \(\) => this\.act\('do-something'\)\)/);
+  assert.match(source, /row\('Hacer algo', '', 'do-something', \(\) => app\.act\('do-something'\)\)/);
 });
 
 test('game submenu refreshes without closing the menu', () => {

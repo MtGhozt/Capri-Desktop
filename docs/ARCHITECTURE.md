@@ -122,3 +122,30 @@ El estado mutable compartido está en `state.js`.
 | `vram.js` | VRAM en uso para el log de game mode. |
 | `about.js` | Enlaces y textos de Acerca de. |
 | `llm-probe.js` | Una petición mínima para comprobar que un proveedor funciona. |
+
+## Renderer: menú de Ajustes (`menu.js` + `menu/`)
+
+`src/renderer/js/menu.js` sigue siendo el shell: `AppMenu`, navegación, `renderQuick` /
+`renderFull` (dispatch) y wrappers hacia `menu/*`. El plate de Ajustes llama a cada
+sección en el mismo orden DOM que antes.
+
+| Módulo | Secciones / responsabilidad |
+| --- | --- |
+| `menu/widgets.js` | `build`, `kbd`, `createRowHelpers`, `textInput`, opciones compartidas (`REPLY_OPTIONS`, zonas horarias, temas). |
+| `menu/quick.js` | Menú rápido del overlay (plate compacto + submenu flotante). |
+| `menu/help.js` | `placeHelpPanel`, botón `?`, panel de ayuda y colocación del submenu. |
+| `menu/actions.js` | `act` / `optimisticAct` (IPC del menú). |
+| `menu/voz.js` | AUDIO, OÍDO Y VOZ, `fixPanel`, sensibilidad y tecla para hablar. |
+| `menu/musica.js` | MÚSICA y Spotify. |
+| `menu/cerebro.js` | CEREBRO, `brainPanel`, `saveShare`. |
+| `menu/agentes.js` | AGENTES. |
+| `menu/memoria.js` | MEMORIA Y PERSONALIDAD. |
+| `menu/apps.js` | entrada APPS, vista de tabla, escaneo, editor y enlaces. |
+| `menu/comportamiento.js` | CLIPS, COMPORTAMIENTO (`render`) y toggles posteriores (`renderTail`, después de recordatorios en `menu.js`). |
+| `menu/recordatorios.js` | RECORDATORIOS y helpers de hora local. |
+| `menu/apariencia.js` | APARIENCIA y `pickRender`. |
+| `menu/atajos.js` | ATAJOS, `shortcutRow`, `saveShortcut`. |
+| `menu/about.js` | ACERCA DE y `aboutPanel`. |
+
+Los tests que antes leían sólo `menu.js` usan `test/menu-source.js` (concatenación en orden
+de sección). SALIR queda inline en `menu.js`.

@@ -21,6 +21,9 @@ const MODULES = [
   'apariencia.js',
   'atajos.js',
   'about.js',
+  'quick.js',
+  'help.js',
+  'actions.js',
   'menu.js',
 ];
 

@@ -30,8 +30,8 @@ test('Acceso directo en Escritorio toggles the shortcut from Comportamiento', ()
   assert.match(menuBundle, /on:\s*Boolean\(state\.deskShortcut\)/);
   assert.match(menuBundle, /menu\.act\('desktop-shortcut', on\)/);
   // the row flips at once and the menu stays open, like Iniciar con Windows
-  assert.match(menu, /case 'desktop-shortcut': this\.lastState\.deskShortcut = Boolean\(value\)/);
-  assert.match(menu, /\|\| id === 'desktop-shortcut'/);
+  assert.match(menuBundle, /case 'desktop-shortcut': app\.lastState\.deskShortcut = Boolean\(value\)/);
+  assert.match(menuBundle, /\|\| id === 'desktop-shortcut'/);
   const main = require('./main-source');
   // state reads the .lnk; off removes it, on (and the first-run guide, no value) creates it
   assert.match(main, /deskShortcut: fs\.existsSync\(path\.join\(app\.getPath\('desktop'\), 'Capri\.lnk'\)\)/);
