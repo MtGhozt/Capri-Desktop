@@ -57,13 +57,13 @@ test('Capri sits above the message box without blocking its input', () => {
 });
 
 test('Hacer algo is a direct quick-menu action, not a submenu', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /includes\(id\)\s*\?\s*''\s*:\s*'›'/);
   assert.match(source, /row\('Hacer algo', '', 'do-something', \(\) => this\.act\('do-something'\)\)/);
 });
 
 test('game submenu refreshes without closing the menu', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /id === 'game-list'/);
 });
 
@@ -98,13 +98,13 @@ test('game removal returns visible feedback', () => {
 });
 
 test('agent rows include install guidance for every supported CLI', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /for \(const id of agentIds\.filter/);
   assert.match(source, /PowerShell/);
 });
 
 test('render selector explains and marks the active mode', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /Automático \(recomendado\)/);
   assert.match(source, /OpenGL/);
   assert.match(source, /Sin GPU \(lento\)/);
@@ -112,14 +112,14 @@ test('render selector explains and marks the active mode', () => {
 });
 
 test('brain UI uses provider cards, priority controls, and per-card probe status', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /Orden en que Capri prueba los cerebros/);
   assert.match(source, /model-reorder/);
   assert.match(source, /Listo, \$\{labelOf\(id\)\} contesta/);
 });
 
 test('brain cards expose pricing groups and stable action states', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /Gratis con límite/);
   assert.match(source, /\['Gratis con límite', \['gemini', 'groq'\]\]/);
   assert.match(source, /\['De pago', \['openai', 'anthropic', 'deepseek', 'mistral', 'nvidia', 'xai'\]\]/);
@@ -136,7 +136,7 @@ test('brain priority uses fixed right-aligned square controls', () => {
 });
 
 test('provider and agent controls keep state in their headers and hide installed commands', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   const agents = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'agent-brain.js'), 'utf8');
   assert.match(source, /appmenu__brain-card-header/);
   assert.match(source, /toggle\.disabled = needsKey && !hasKey/);
@@ -145,7 +145,7 @@ test('provider and agent controls keep state in their headers and hide installed
 });
 
 test('agent install rows keep the command inside the panel and expose Copiar', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'styles', 'capri.css'), 'utf8');
   assert.match(source, /appmenu__agent-cmd/);
   assert.match(source, /build\('button', 'appmenu__toggle-btn', 'Copiar'\)/);
@@ -156,7 +156,7 @@ test('agent install rows keep the command inside the panel and expose Copiar', (
 });
 
 test('copy buttons say Copiado only for a moment, then Copiar again', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /copy\.textContent = 'Copiado';[\s\S]*?copy\.textContent = 'Copiar'/);
   assert.match(source, /copy\.textContent = 'COPIADO';[\s\S]*?copy\.textContent = 'COPIAR'/);
   assert.match(source, /copy\.resetTimer = setTimeout\(\(\) => \{ copy\.textContent = 'Copiar'; \}, 1600\)/);
@@ -164,7 +164,7 @@ test('copy buttons say Copiado only for a moment, then Copiar again', () => {
 });
 
 test('agent rows show a name, state, and actionable hint', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /build\('span', 'appmenu__agent-name', item\.label\)/);
   assert.match(source, /Instalado · clic para activar\/apagar/);
   assert.match(source, /No instalado · copiá el comando/);
@@ -190,7 +190,7 @@ test('dev startup does not force the broken OpenGL angle backend', () => {
 });
 
 test('brain settings render keeps old-format configs visible', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /body\.append\(this\.brainPanel\(model, \{ build \}\)\)/);
   assert.match(source, /const model = state\.model \|\| \{/);
   assert.match(source, /No se pudo dibujar esta sección/);
@@ -208,7 +208,7 @@ test('renderer forwards console and window errors to the main log', () => {
 });
 
 test('render mode is presented as visible radio options without duplicate active hint', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /appmenu__radio/);
   assert.doesNotMatch(source, /Pantalla activa:/);
 });
@@ -224,14 +224,14 @@ test('screen context includes visible windows for desktop screenshots', () => {
 });
 
 test('Acerca de lives only in Ajustes, not the overlay quick menu', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.doesNotMatch(source, /row\('Acerca de/);
   assert.match(source, /\{ id: 'about', label: 'Acerca de' \}/);
   assert.match(source, /light:\s*true/);
 });
 
 test('settings tabs have isolated sections and behavior uses nested config', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /bubble:\s*\['bubble'\]/);
   assert.match(source, /\{ id: 'bubble', label: 'Apariencia' \}/);
   assert.match(source, /shortcuts:\s*\['shortcuts'\]/);

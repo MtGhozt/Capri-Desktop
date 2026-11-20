@@ -206,7 +206,7 @@ test('no city by default, and an empty city gives no location', async () => {
 test('menu exposes the city field next to the time zone', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const menu = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const menu = require('./menu-source');
   assert.match(menu, /Ciudad \/ país \(clima\)/);
   assert.match(menu, /weather-place/);
   assert.match(menu, /No encontré esa ciudad/);

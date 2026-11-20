@@ -180,7 +180,7 @@ test('moving a reminder with noticeMin keeps the offset', () => {
 });
 
 test('settings menu lists pending reminders with edit and delete actions', () => {
-  const menu = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const menu = require('./menu-source');
   assert.match(menu, /RECORDATORIOS/);
   assert.match(menu, /reminder-update/);
   assert.match(menu, /reminder-delete/);

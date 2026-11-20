@@ -123,7 +123,7 @@ test('Guardar voz explains what is missing', async () => {
 });
 
 test('the voice panel shows the two steps and the transcript field', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /1\) Elegí tu audio \.wav/);
   assert.match(source, /Qué dice el audio \(palabra por palabra\)/);
   assert.match(source, /Cargar \.txt/);

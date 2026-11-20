@@ -16,7 +16,7 @@ const {
 } = require('../src/main/game-comment.js');
 
 const main = require('./main-source');
-const menu = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+const menu = require('./menu-source');
 const configSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'config.js'), 'utf8');
 
 test('quiet is the default play mode (legacy auto maps to quiet)', () => {

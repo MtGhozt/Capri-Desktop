@@ -35,7 +35,7 @@ test('the download message reaches the voice bar, cached loads keep saying Carga
 });
 
 test('setup details are readable, selectable and copyable', () => {
-  const menu = read('src', 'renderer', 'js', 'menu.js');
+  const menu = require('./menu-source');
   assert.match(menu, /'Copiar detalles'/);
   assert.match(menu, /navigator\.clipboard\.writeText\(install\.lines\.join\('\\n'\)\)/);
   assert.match(menu, /copy\.textContent = 'Copiado'/);

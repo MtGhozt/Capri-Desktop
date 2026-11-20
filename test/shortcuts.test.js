@@ -40,7 +40,7 @@ test('main.js routes both IPCs through setShortcut and checks every taken combo'
 });
 
 test('Ajustes › Atajos uses the same capture flow as Tecla para hablar', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'menu.js'), 'utf8');
+  const source = require('./menu-source');
   assert.match(source, /this\.capturingId = null/);
   assert.match(source, /shortcutRow\(s, build, kbd\)/);
   assert.match(source, /section\('ATAJOS', 'shortcuts'\)/);
