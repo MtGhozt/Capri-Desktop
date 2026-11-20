@@ -171,3 +171,26 @@ test('Discord/Spotify maximized or fullscreen are never games; javaw fullscreen 
     fgExe: 'C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe', fgFull: false,
   }), false);
 });
+
+test('Zoom and other common fullscreen apps never enter game mode', () => {
+  for (const exe of [
+    'C:\\Users\\Matias\\AppData\\Roaming\\Zoom\\bin\\Zoom.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\Microsoft\\Teams\\current\\Teams.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\Microsoft\\WindowsApps\\ms-teams.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\slack\\app-4\\slack.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\Programs\\Notion\\Notion.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\Figma\\Figma.exe',
+    'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe',
+    'C:\\Program Files\\mpv\\mpv.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\Programs\\Grok\\Grok Bot.exe',
+    'C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE',
+    'C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE',
+    'C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE',
+    'C:\\Program Files\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe',
+    'C:\\Users\\Matias\\AppData\\Local\\Programs\\LindianLabs\\Stremio\\stremio.exe',
+    'C:\\Program Files\\Plex\\Plex\\Plex.exe',
+  ]) {
+    assert.equal(gameOnScreen({ fgExe: exe, fgFull: true }), false, exe);
+    assert.equal(isGameExe(exe), false, exe);
+  }
+});

@@ -21,6 +21,8 @@ function createGameMode({
   apps = () => [],
   onEnter = () => {},
   onExit = () => {},
+  onUnlock = () => {}, // focus lost: clicks/chat back while VRAM grace still runs
+  onRelock = () => {}, // focus back on the game before grace ends
   setWakeMuted = () => {},
   onDecision = () => {},
   exitDelayMs = EXIT_DELAY_MS,
@@ -37,6 +39,9 @@ function createGameMode({
       pendingExit = null;
     }
   };
+
+  // Click-through / chat lock only while the game actually owns the foreground.
+  const locking = () => active && pendingExit === null;
 
   const leave = () => {
     cancelExit();
@@ -74,12 +79,15 @@ function createGameMode({
         return;
       }
       onDecision({ reason: 'enter', rule: 'fullscreen-game', exe: windows?.fgExe, full: Boolean(windows?.fgFull) });
+      const wasPending = pendingExit !== null;
       cancelExit();
       if (!active) {
         active = true;
         // Wake muted while the game is fullscreen; PTT still works (sidecar keeps the mic).
         try { setWakeMuted(true); } catch { /* voice gone */ }
         onEnter(windows);
+      } else if (wasPending) {
+        try { onRelock(windows); } catch { /* overlay gone */ }
       }
       return;
     }
@@ -89,6 +97,7 @@ function createGameMode({
       pendingExit = null;
       leave();
     }, exitDelayMs);
+    try { onUnlock(); } catch { /* overlay gone */ }
   }
 
   return {
@@ -103,6 +112,7 @@ function createGameMode({
       active = false;
     },
     active: () => active,
+    locking,
   };
 }
 

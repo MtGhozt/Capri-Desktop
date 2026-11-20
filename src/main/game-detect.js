@@ -43,6 +43,10 @@ const NEVER_GAME_EXES = new Set([
   'steam.exe', 'steamwebhelper.exe',
   'epicgameslauncher.exe', 'epicwebhelper.exe',
   'whatsapp.exe', 'telegram.exe',
+  // calls / media / office / design: fullscreen is not a game
+  'zoom.exe', 'teams.exe', 'ms-teams.exe', 'slack.exe', 'notion.exe', 'figma.exe',
+  'vlc.exe', 'mpv.exe', 'grok bot.exe', 'powerpnt.exe', 'winword.exe', 'excel.exe',
+  'acrobat.exe', 'stremio.exe', 'plex.exe',
 ]);
 
 function normalizePath(value) {

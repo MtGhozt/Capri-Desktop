@@ -67,6 +67,34 @@ test('a short focus loss keeps game mode (a flicker never brings her up)', () =>
   assert.equal(mode.active(), false);
 });
 
+test('focus-lost releases the click/chat lock immediately without ending VRAM grace', () => {
+  const events = [];
+  const timers = fakeTimers();
+  const mode = createGameMode({
+    onEnter: () => events.push('enter'),
+    onExit: () => events.push('exit'),
+    onUnlock: () => events.push('unlock'),
+    onRelock: () => events.push('relock'),
+    setWakeMuted: (on) => events.push(['wakeMuted', on]),
+    timers,
+    exitDelayMs: FOCUS_LOSS_DEBOUNCE_MS,
+  });
+  mode.update(game);
+  assert.equal(mode.active(), true);
+  assert.equal(mode.locking(), true);
+  mode.update(desktop); // alt-tab away: unlock clicks/chat, keep VRAM unloaded
+  assert.equal(mode.active(), true);
+  assert.equal(mode.locking(), false);
+  assert.deepEqual(events, [['wakeMuted', true], 'enter', 'unlock']);
+  mode.update(game); // back before grace ends: re-lock, still no exit/reload
+  assert.equal(mode.active(), true);
+  assert.equal(mode.locking(), true);
+  assert.deepEqual(events, [['wakeMuted', true], 'enter', 'unlock', 'relock']);
+  timers.tick(FOCUS_LOSS_DEBOUNCE_MS);
+  assert.equal(mode.active(), true);
+  assert.equal(events.includes('exit'), false);
+});
+
 test('the app waits for the focus-loss debounce, never exits at once', () => {
   const fs = require('node:fs');
   const path = require('node:path');

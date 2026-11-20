@@ -75,8 +75,8 @@ test('comment mode reuses quiet gates and never sends a bubble line', () => {
   assert.match(body, /speakQueue\.(?:start|feed|flush)/);
   assert.doesNotMatch(body, /sendCommand\(/);
   assert.doesNotMatch(body, /speakLine\(/); // must not use replyMode-gated speakLine
-  // Quiet gates stay tied to gameMode.active for both modes.
-  assert.match(main, /createGameQuiet\(\{ isActive: \(\) => Boolean\(gameMode\?\.active\(\)\) \}\)/);
+  // Quiet gates stay tied to gameMode.locking (foreground) for both modes.
+  assert.match(main, /createGameQuiet\(\{ isActive: \(\) => Boolean\(gameMode\?\.locking\?\.\(\)\) \}\)/);
   assert.match(main, /setClickThrough\(true, 'game'\)/);
 });
 
@@ -146,9 +146,12 @@ test('comment mode + game → visible and click-through, not folded', () => {
   assert.match(enter, /applyGamePlayVisual\('comment'\)/);
   // Re-assert on focus / window ticks while comment + game.
   assert.match(main, /gameQuiet\.pin\(getOverlay\(\)\)/);
-  assert.match(main, /mode\) === 'comment'\) \{\s*gameQuiet\.pin\(overlay\)/);
-  // Quiet gates still block focus / hover / bubbles.
-  assert.match(main, /createGameQuiet\(\{ isActive: \(\) => Boolean\(gameMode\?\.active\(\)\) \}\)/);
+  assert.match(main, /mode\) === 'comment'\) gameQuiet\.pin\(overlay\)/);
+  // Quiet gates still block focus / hover / bubbles — only while the game owns foreground.
+  assert.match(main, /createGameQuiet\(\{ isActive: \(\) => Boolean\(gameMode\?\.locking\?\.\(\)\) \}\)/);
+  assert.match(main, /onUnlock:\s*\(\)\s*=>\s*gameWindow\.unlock\(\)/);
+  assert.match(main, /setClickThrough\(false,\s*'game-focus-lost'\)/);
+  assert.match(main, /gameMode\?\.locking\?\.\(\)\s*&&\s*normalizeGamingMode/);
 });
 
 test('quiet mode + game → hidden (sleep), same as today', () => {

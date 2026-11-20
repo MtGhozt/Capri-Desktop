@@ -131,8 +131,7 @@ let voiceQueue = [];
 const chatVisible = createChatVisible({ log: (line) => logEvent(voiceLogPath(), `[capri] ${line}`) });
 let gameMode = null;
 let gameWindow = null;
-// A game on the screen: no show()/focus()/moveTop(), click-through stays on (game-quiet.js).
-const gameQuiet = createGameQuiet({ isActive: () => Boolean(gameMode?.active()) });
+const gameQuiet = createGameQuiet({ isActive: () => Boolean(gameMode?.locking?.()) });
 let reminders = null;
 let weather = null;
 let greeting = null;
@@ -1339,6 +1338,8 @@ function main() {
       onDecision: (decision) => gameWindow.log(`game decision=${decision.reason} rule=${decision.rule} exe=${decision.exe || '?'} full=${decision.full}`),
       onEnter: (windows) => gameWindow.enter(windows),
       onExit: () => gameWindow.leave(),
+      onUnlock: () => gameWindow.unlock(),
+      onRelock: () => gameWindow.relock(),
     });
     createTrayIcon();
     comments.start();
@@ -1379,12 +1380,9 @@ function main() {
         gameMode?.update(data);
         const cfg = config.load();
         const gameApps = cfg.gaming?.apps || [];
-        // Comment + fullscreen game, or a known windowed game: keep Capri above (no game-mode enter).
-        if (gameMode?.active() && normalizeGamingMode(cfg.gaming?.mode) === 'comment') {
-          gameQuiet.pin(overlay);
-        } else if (!gameMode?.active() && windowedGameInFront(data, gameApps)) {
-          gameQuiet.pin(overlay);
-        }
+        // Comment + fullscreen game in foreground, or a known windowed game: keep Capri above.
+        if (gameMode?.locking?.() && normalizeGamingMode(cfg.gaming?.mode) === 'comment') gameQuiet.pin(overlay);
+        else if (!gameMode?.active() && windowedGameInFront(data, gameApps)) gameQuiet.pin(overlay);
         gameWindow?.comment(); // comment mode: voice-only, respects interval + quiet gates
         comments?.observe(cfg.llm?.shareScreen === true
           ? windowContext(data, { apps: gameApps })

@@ -140,10 +140,24 @@ function createGameWindow(deps) {
     gameHidHer = false;
   }
 
+  // Focus lost during exit grace: clicks/chat back; VRAM unload stays until leave().
+  function gameUnlock() {
+    setClickThrough(false, 'game-focus-lost');
+  }
+
+  function gameRelock() {
+    setClickThrough(true, 'game');
+    if (normalizeGamingMode(config.load().gaming?.mode) === 'comment') {
+      gameQuiet.pin(getOverlay());
+    }
+  }
+
   return {
     // queued: a game comes and goes while the sidecar unloads
     enter: (windows) => queueGame(() => gameEnter(windows)),
     leave: () => queueGame(gameLeave),
+    unlock: gameUnlock,
+    relock: gameRelock,
     comment: maybeGameComment,
     visual: applyGamePlayVisual,
     log: gameLog,
