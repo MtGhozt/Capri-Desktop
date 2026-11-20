@@ -353,6 +353,43 @@ class WakePhraseTests(unittest.TestCase):
             self.assertEqual(server.strip_wake_phrase(heard), want, heard)
 
 
+class OmniLowVramNoCpuTests(unittest.TestCase):
+    """Below OMNI_MIN_GPU_MIB: refuse OmniVoice CPU (even with allow_cpu) and use Kokoro."""
+
+    def test_low_vram_skips_omnivoice_cpu_and_falls_back_to_kokoro(self):
+        import tts
+
+        logs = []
+        free = 1894  # voice.log: dipped below 2000 MiB and used to load device=cpu
+        fake_torch = type("Torch", (), {
+            "cuda": type("Cuda", (), {"is_available": staticmethod(lambda: True)})(),
+            "float16": object(),
+            "float32": object(),
+        })()
+
+        engine = tts.OmniVoiceTTS(Path("."), logs.append, None, None, instruct="voz")
+        with patch.object(tts, "import_omnivoice", return_value=(fake_torch, object(), object())), \
+             patch.object(tts, "cuda_arch_reason", return_value=None), \
+             patch.object(engine, "_boot") as boot, \
+             patch.object(engine, "warmup", return_value=0):
+            with self.assertRaises(tts.OmniVoiceUnavailable) as ctx:
+                engine.load(allow_cpu=True, free_vram=free)
+        boot.assert_not_called()
+        self.assertIn(str(free), str(ctx.exception))
+        self.assertIn(str(tts.OMNI_MIN_GPU_MIB), str(ctx.exception))
+        self.assertTrue(any("no-cpu fallback" in line for line in logs), logs)
+
+        kokoro = object()
+        with patch.object(tts, "OmniVoiceTTS", return_value=engine), \
+             patch.object(engine, "load", side_effect=tts.OmniVoiceUnavailable(str(ctx.exception))), \
+             patch.object(engine, "close"), \
+             patch.object(tts, "load_kokoro", return_value=kokoro) as load_k, \
+             patch.object(tts, "resolve_ref", return_value=(None, None)):
+            got = tts.load_engine("omnivoice", Path("."), logs.append, usable_vram=free)
+        self.assertIs(got, kokoro)
+        load_k.assert_called_once()
+
+
 class LowVramWarningTests(unittest.TestCase):
     def test_warning_text_is_neutral_on_cloud(self):
         engine = server.Engine.__new__(server.Engine)

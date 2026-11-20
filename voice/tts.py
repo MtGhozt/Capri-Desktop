@@ -398,12 +398,12 @@ class OmniVoiceTTS(TTSEngine):
                     self.log(f"omnivoice GPU failed: {err}")
                     if not allow_cpu:
                         raise OmniVoiceUnavailable(f"omnivoice GPU failed: {err}") from err
-        elif not allow_cpu:
+        else:
+            # Low VRAM / bad arch: never haul OmniVoice onto CPU (pins the desktop).
             reason = arch_reason or f"omnivoice skipped GPU: vram {free_vram} MiB < {OMNI_MIN_GPU_MIB}"
+            self.log(f"omnivoice no-cpu fallback: {reason}")
             raise OmniVoiceUnavailable(reason)
 
-        if not allow_cpu:
-            raise OmniVoiceUnavailable("omnivoice GPU unavailable")
         self._boot(OmniVoice, VoiceClonePrompt, torch, "cpu", torch.float32, transcript, use_clone)
         ms = self.warmup()
         if ms > OMNI_CPU_MAX_MS:
