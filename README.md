@@ -10,9 +10,9 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 > Fan art. **No** afiliado a CD PROJEKT RED. Licencia PolyForm Noncommercial — [LICENSE](LICENSE), [CREDITS.md](CREDITS.md).
 
-**Versión en el repo:** `0.2.8` (en preparación, sin publicar). **Última etiquetada:** `0.2.7`. El instalador más reciente está en [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
+**Versión:** `0.3.0` (publicada, etiqueta `v0.3.0`). El instalador más reciente está en [Releases](https://github.com/MtGhozt/Capri-Desktop/releases).
 
-**Novedades recientes:** 0.2.7 (etiquetada) restaura Gemini Flash-Lite gratis, el modelo dice qué lo hace funcionar y endurece el aviso hablado de recordatorios; **0.2.8 (en preparación)** mira el monitor correcto, clima/feriados, aviso anticipado y edición de recordatorios, y limpia Ajustes (startup, prioridad de cerebros, clip NVIDIA).
+**Novedades recientes (0.3.0):** voz por frase más rápida (primera oración sin hold + prefetch); modo juego separado **No molestar** vs **Comentar** y fijado sobre juegos en ventana; **YouTube Music** en navegador; protección de VRAM baja con fallback automático a Kokoro; menos falsos positivos con apps de trabajo (Zoom, Teams, Slack, Discord, etc.).
 
 <img src="docs/media/capri-desktop.png" alt="Capri en el escritorio" width="100%">
 
@@ -22,8 +22,9 @@ Capri es y siempre va a ser gratis. Si te gusta y querés ayudar a que siga crec
 
 Detalle y prioridad en [`docs/roadmap.md`](docs/roadmap.md):
 
+- **Siguiente (0.3.1):** recordatorios + Google Calendar (eventos/pendientes que también avisen en el celular; los avisos propios de Capri se mantienen).
 - **P1:** wake word sin interferir con audífonos Bluetooth; actualización con un clic.
-- **Siguiente:** 0.2.9 (P2 parte 1: volumen/Configuración/batería-disco-RAM-IP/tema) → resto de P2; 0.3/0.4 → P3 (sentir la PC y juegos).
+- Después: P3 (sentir la PC y juegos), integraciones y más cerebro/voz — ver el roadmap.
 
 Nada de esto es de pago: las donaciones, si aparecen, no desbloquean nada.
 
@@ -77,14 +78,14 @@ Log: `%APPDATA%\capri-desktop\logs\voice.log` — reportá en Discord **#bugs**.
 
 - **Chat** en la burbuja (`TÚ > …`), personalidad cyberpunk corta; varios comandos en una frase.
 - **Cerebro:** LM Studio / Ollama, keys en la nube, agentes CLI; prioridad de fallback en Ajustes o en el overlay.
-- **Voz (opcional):** wake «Hey Capri», STT, OmniVoice (NVIDIA) o Kokoro; clone propio en Ajustes → Oído y voz.
+- **Voz (opcional):** wake «Hey Capri», STT, OmniVoice (NVIDIA) o Kokoro; TTS por frase (más rápida); si no hay VRAM suficiente, fallback automático a Kokoro; clone propio en Ajustes → Oído y voz.
 - **Hora local**, y si configurás ciudad: **clima** y **feriados** (sin inventar si no hay red).
 - **Timers y recordatorios** persistentes (burbuja + voz); aviso anticipado en eventos; editar/mover/borrar por chat o **Ajustes → Recordatorios**.
 - **Mirá mi pantalla** a pedido (con consentimiento); la foto no queda en disco.
 - **Agentes** (Claude Code, Cursor, OpenCode, …): hooks locales; Capri avisa cuando trabajan o piden permiso.
 - **Mis apps:** abrir / cerrar programas, juegos y enlaces de su lista.
-- **Música** (Namida por defecto; Spotify opcional): play, pausa, siguiente, “pon \<tema\>”, “pon tu canción”; volumen solo de la música.
-- **No molestar** en pantalla completa (o lista de apps); dron ligero opcional.
+- **Música** (Namida por defecto; Spotify y **YouTube Music** en navegador opcionales): play, pausa, siguiente, “pon \<tema\>”, “pon tu canción”; volumen solo de la música.
+- **Modo juego** en Ajustes › Comportamiento › En juegos: **No molestar** (default) o **Comentar**; visible/fijada sobre juegos en ventana sin capturar clics; apps de trabajo no cuentan como juego.
 - **Energía del PC** con confirmación; **Diagnóstico** en Acerca de (copiar reporte / abrir log).
 - **Formas:** DORMANT, máscara, biochip, poses; caricias y saludos configurables; «Iniciar con Windows».
 
@@ -152,7 +153,7 @@ Si algo no arranca, mirá [`docs/SOPORTE.md`](docs/SOPORTE.md) (síntoma → cau
 | **No cierra / overlay trabado** | `Ctrl+Alt+Shift+Q`, o **Salir** dos veces en la bandeja. Menú pegado: bandeja → Cerrar menú. |
 | **Invisible / transparente** | Ajustes → Apariencia → Pantalla: volvé a **Automático (recomendado)** (evitar **OpenGL (experimental)** si falla). |
 | **¿Habla en voz alta?** | Por defecto **BLIPS**. **VOZ** con «Instalar voz» + GPU NVIDIA (OmniVoice). |
-| **¿Mac / Linux?** | Sin instalador aún (Windows x64 primero). |
+| **¿Mac / Linux?** | Solo **Windows 10/11 64-bit**. No hay builds para Mac ni Linux. |
 
 ---
 
@@ -166,12 +167,12 @@ Si algo no arranca, mirá [`docs/SOPORTE.md`](docs/SOPORTE.md) (síntoma → cau
 
 # Capri (English, short)
 
-Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop). **v0.2.8** in preparation (unpublished); latest tagged: **v0.2.7**. Download the latest installer from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases); SmartScreen → *More info* → *Run anyway*.
+Desktop companion overlay as **Capri** (*Cyberpunk: Edgerunners 2*), based on [mochiiwuff/capri-desktop](https://github.com/mochiiwuff/capri-desktop). **v0.3.0** published. Download the latest installer from [Releases](https://github.com/MtGhozt/Capri-Desktop/releases); SmartScreen → *More info* → *Run anyway*. Windows 10/11 64-bit only.
 
 **Brain:** LM Studio / Ollama locally, or free NVIDIA/Gemini keys, or OpenRouter, Groq, OpenAI, Mistral, DeepSeek in **Settings → Cerebro**. Keys stay on your PC (`safeStorage`).
 
-**Voice (optional):** not in the public installer. Without the local `voice/` sidecar she uses **typing blips** (default) or silence. With a sidecar: wake (“Hey Capri” / “Capri”), **Ctrl+Alt+V**, Whisper STT on CPU; cloned Capri reference audio is **not** shipped — without it you get blips / Kokoro, not her clone. Mood refs live under `voice/ref/` when you set that up yourself.
+**Voice (optional):** not in the public installer. Without the local `voice/` sidecar she uses **typing blips** (default) or silence. With a sidecar: wake (“Hey Capri” / “Capri”), **Ctrl+Alt+V**, Whisper STT on CPU; sentence-by-sentence TTS with low-VRAM fallback to Kokoro; cloned Capri reference audio is **not** shipped — without it you get blips / Kokoro, not her clone. Mood refs live under `voice/ref/` when you set that up yourself.
 
-**Can do:** text chat, optional voice (OmniVoice/Kokoro), timers/reminders (incl. advance notice + edit), local time/weather/holidays, look-at-screen with consent, agent hooks, Mis apps, music (Namida/Spotify), No molestar, brain priority, Diagnose, PC power with confirm.
+**Can do:** text chat, optional voice (OmniVoice/Kokoro), timers/reminders (incl. advance notice + edit), local time/weather/holidays, look-at-screen with consent, agent hooks, Mis apps, music (Namida/Spotify/YouTube Music in browser), game mode (Do Not Disturb vs Comment; stay on top of windowed games), brain priority, Diagnose, PC power with confirm.
 
 **Quit stuck:** **Ctrl+Alt+Shift+Q**, or tray **Salir** twice. Logs: `%APPDATA%\capri-desktop\logs\` (or **Settings → About → Open log**; **Diagnose → Copy report** for Discord). Fan project — not affiliated with CD PROJEKT RED. See [CREDITS.md](CREDITS.md) / [LICENSE](LICENSE).
