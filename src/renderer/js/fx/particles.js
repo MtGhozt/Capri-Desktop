@@ -1,6 +1,6 @@
 // Shards, beams, cut-ins, pointer reticle, glyphs (pure move from fx.js).
 
-import { COLORS, FRAME_MS, lerp, rand, shard as drawShard, sparkle, eye, fadeStep } from './primitives.js';
+import { COLORS, FRAME_MS, lerp, rand, clamp, shard as drawShard, sparkle, eye, fadeStep } from './primitives.js';
 import { stroke } from './electric.js';
 
 const CUTIN = { w: 360, h: 240 }; // assets/capri/cutin-*.png

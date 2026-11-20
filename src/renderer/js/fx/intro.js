@@ -1,6 +1,6 @@
 // Her first appearance: grab the screen (pure move from fx.js).
 
-import { clamp } from '../util.js';
+import { clamp, rand } from '../util.js';
 import { COLORS, FRAME_MS, lerp, hash } from './primitives.js';
 import { stroke } from './electric.js';
 

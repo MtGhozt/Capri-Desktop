@@ -20,7 +20,7 @@ const APP_PALETTE = ['magenta', 'magenta', 'magenta', 'violet', 'violet', 'green
 const SHARD_PALETTE = ['red', 'red', 'red', 'red', 'ink', 'ink', 'green', 'green', 'violet', 'paper'];
 const GLYPHS = ['01', '10', '▚', '▞', '◢', '◣', '>_', '{}', '#', '⌁', '//', '0x'];
 
-const DRAWERS = {
+export const DRAWERS = {
   shard: particles.shard,
   beam: particles.beam,
   streak: particles.streak,

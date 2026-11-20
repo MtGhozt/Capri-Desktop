@@ -93,10 +93,10 @@ export function bolt(fx, it, t, dt, now) {
   stroke(fx, pts, COLORS.red, it.width + 1);
   stroke(fx, pts, COLORS.paper, Math.max(0.8, it.width * 0.35));
   for (let f = 0; f < it.forks; f++) {
-    const [fx, fy] = pts[1 + Math.floor(rand(0, pts.length - 2))];
+    const [px, py] = pts[1 + Math.floor(rand(0, pts.length - 2))];
     const a = Math.atan2(b.y - it.from.y, b.x - it.from.x) + rand(-1.1, 1.1);
     const l = rand(20, 55);
-    const fork = jag(fx, { x: fx, y: fy }, { x: fx + Math.cos(a) * l, y: fy + Math.sin(a) * l }, 7);
+    const fork = jag(fx, { x: px, y: py }, { x: px + Math.cos(a) * l, y: py + Math.sin(a) * l }, 7);
     stroke(fx, fork, COLORS.red, Math.max(1, it.width * 0.6));
     stroke(fx, fork, COLORS.paper, 0.8);
   }
@@ -153,10 +153,10 @@ export function zap(fx, it, t, dt, now) {
   stroke(fx, pts, COLORS.magenta, w + 1);
   stroke(fx, pts, COLORS.paper, Math.max(0.8, w * 0.35));
   for (let f = 0; f < 2; f++) {
-    const [fx, fy] = pts[1 + Math.floor(rand(0, pts.length - 2))];
+    const [px, py] = pts[1 + Math.floor(rand(0, pts.length - 2))];
     const a = Math.atan2(tip.y - it.from.y, tip.x - it.from.x) + rand(-1.2, 1.2);
     const l = rand(16, 44);
-    const fork = jag(fx, { x: fx, y: fy }, { x: fx + Math.cos(a) * l, y: fy + Math.sin(a) * l }, 6);
+    const fork = jag(fx, { x: px, y: py }, { x: px + Math.cos(a) * l, y: py + Math.sin(a) * l }, 6);
     stroke(fx, fork, f ? COLORS.green : COLORS.magenta, Math.max(1, w * 0.55));
   }
   ctx.restore();
