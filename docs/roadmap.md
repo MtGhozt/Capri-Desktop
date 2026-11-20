@@ -94,6 +94,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 - **Recordatorios + Google Calendar:** crear eventos y pendientes en el calendario para que también avisen en el celular; los avisos propios de Capri se mantienen.
 - **Música en YouTube:** abrir y poner YouTube / YouTube Music como alternativa a Spotify.
+- **Búsquedas rápidas en Google y Spotify (idea de la comunidad):** abrir búsquedas por voz («buscame X en Google» / «buscame X en Spotify») primero; más adelante, búsqueda web corta opcional para preguntas del día cuando el cerebro lo soporte (sin convertir a Capri en un buscador de reportes largos).
 
 ## Descartado
 
