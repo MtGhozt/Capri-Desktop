@@ -35,7 +35,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 - **Hecho:** Discord/Spotify y apps normales fuera de la detección de juegos; No molestar siempre obedece el toggle manual; Ajustes › Oído sin freeze al abrir; «poné música» / «una canción» sin título = start/resume.
 
-### 0.3.0 — Velocidad
+### 0.3.0 — Velocidad, juegos, música y refactor (publicada, v0.3.0)
 
 - **Hecho:** TTS por frase: Main corta por oración (`speak.js`) y el sidecar sintetiza N+1 mientras suena N (`_synth_loop` / `_play_loop`, prefetch 2).
 - **Hecho:** Primera frase más corta: el primer `speak` del turno sale al cerrar oración o al primer coma ~25 chars (sin hold); el resto sigue empaquetando.
@@ -44,7 +44,15 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - **Hecho:** Spotify confirma que la canción arrancó (~2.5 s); si no, «No arrancó en Spotify, ¿lo abro?».
 - **Hecho:** Instalación: timeout de descarga colgada (60 s sin bytes) con mensaje + Reintentar, y progreso real por archivo (nombre + %).
 - **Hecho:** Perfil automático según tu PC: al arrancar (y desde Ajustes › Comportamiento) recomienda OmniVoice CUDA vs Kokoro, tamaño de Whisper y animaciones ligeras. No cambia nada sola: Aplicar / Ahora no.
-- **Hecho:** En juegos: selector No molestar / Comentar de vez en cuando (`gaming.mode` quiet|comment). Comment = click-through + voz ~8 min, sin foco; No molestar manual gana. Aviso anti-cheat una vez.
+- **Hecho:** OmniVoice nunca cae a CPU por falta de VRAM: pasa directo a Kokoro.
+- **Hecho:** En juegos: selector No molestar / Comentar de vez en cuando (`gaming.mode` quiet|comment). Comment = click-through + voz ~8 min, sin foco; No molestar manual gana. Aviso anti-cheat una vez. Denylist (Zoom/Teams/Slack/Discord/Spotify/…) y desbloqueo inmediato en focus-lost.
+- **Hecho:** YouTube Music como tercer reproductor en Ajustes › Música (sin login ni API).
+- **Hecho:** «Mirá mi pantalla» no abre el recorte; filtro de alucinaciones de Whisper («¡Suscríbete!», «gracias por ver»).
+- **Hecho:** Refactor modular de `main.js`, `menu.js`, `fx.js`, `app.js` y `voice/server.py` + `docs/ARCHITECTURE.md` + tests de grafo/efectos/límites.
+
+### 0.3.1 — Calendario
+
+- **Recordatorios + Google Calendar:** crear eventos y pendientes en el calendario para que también avisen en el celular; los avisos propios de Capri se mantienen.
 
 ## Próximo, por prioridad
 
@@ -92,8 +100,6 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ### Ideas de la comunidad (sin fecha, no agendadas)
 
-- **Recordatorios + Google Calendar:** crear eventos y pendientes en el calendario para que también avisen en el celular; los avisos propios de Capri se mantienen.
-- **Música en YouTube:** abrir y poner YouTube / YouTube Music como alternativa a Spotify.
 - **Búsquedas rápidas en Google y Spotify (idea de la comunidad):** abrir búsquedas por voz («buscame X en Google» / «buscame X en Spotify») primero; más adelante, búsqueda web corta opcional para preguntas del día cuando el cerebro lo soporte (sin convertir a Capri en un buscador de reportes largos).
 
 ## Descartado
@@ -102,7 +108,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ## Ideas e inspiraciones (revisado 2026-11-10)
 
-- **Upstream mochiiwuff** (fork, se puede reutilizar código): mirar la pantalla cuando se le pide (`e09878d`); sentir la PC: CPU, batería, red, USB, juegos (`2024660`); notar lo que conectás: teléfono, control, audífonos, cargador (`f167fd6`); enojarse después de que la tiran o celos de otra IA (`f7685d2`); buscar archivos y abrir la carpeta (`3cd5377`, `7d6cc1b`); chat con modelos cloud gratis de Ollama (`3e6f529`); abrir juegos de Roblox por nombre (`135d6b8`); dos pedidos en una frase (`d6c8070`).
+- **Upstream mochiiwuff** (referencia / PolyForm Noncommercial: portar solo lo permitido, ver licencia abajo): mirar la pantalla cuando se le pide (`e09878d`); sentir la PC: CPU, batería, red, USB, juegos (`2024660`); notar lo que conectás: teléfono, control, audífonos, cargador (`f167fd6`); enojarse después de que la tiran o celos de otra IA (`f7685d2`); buscar archivos y abrir la carpeta (`3cd5377`, `7d6cc1b`); chat con modelos cloud gratis de Ollama (`3e6f529`); abrir juegos de Roblox por nombre (`135d6b8`); dos pedidos en una frase (`d6c8070`).
 - **dark-anishi/capri-desktop-noir** (referencia): volumen de música sincronizado aparte del sistema (`b959290`); recuperar input del mouse y limpiar overlay de forma segura (`8e6a699`).
 - **lachydotmcg** (PolyForm Noncommercial: solo ideas, nada de código): no repetirse en el chat de voz; apodos de juegos ("cs" = Counter-Strike 2); usar el juego ya abierto en vez de abrir otra copia; que el wake word no interfiera con audífonos Bluetooth; dejar YouTube sonando; tamaño configurable; GitHub Pages, aviso SmartScreen, copiar detalles de error, actualizaciones con un clic.
 - **Capri 1.0.3** (referencia; solo ideas, nada de código): velocidad de respuesta (TTS por frase, tiempos en el log), acciones de PC y ventanas, modo música al ritmo, y límites claros en juegos (comentar, no controlar).

@@ -6,6 +6,14 @@
 const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
+  '0.3.0': [
+    'Perfil automático según tu PC (GPU/VRAM): te lo ofrezco al arrancar y en Ajustes.',
+    'Voz más rápida: la primera frase sale sin espera; si falta VRAM, paso a Kokoro sin trabar tu PC.',
+    'En juegos: «No molestar» o «Comentar de vez en cuando» (encima sin capturar clics).',
+    'Zoom/Teams/Slack/Discord/Spotify ya no cuentan como juego; Alt+Tab te desbloquea al toque.',
+    'YouTube Music en Ajustes › Música, y Spotify confirma que la canción arrancó.',
+    '«Mirá mi pantalla» ya no abre el recorte, y filtro frases fantasma del mic («¡Suscríbete!»).',
+  ],
   '0.2.12': [
     'Discord, Spotify y otras apps normales ya no cuentan como juego.',
     'No molestar siempre obedece si lo apagás o prendés a mano.',

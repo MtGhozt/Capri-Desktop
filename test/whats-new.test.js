@@ -112,6 +112,24 @@ test('0.2.12 has short lines about false games, No molestar, Oído and vague mus
   assert.match(all, /m[uú]sica|canci[oó]n/i);
 });
 
+test('0.3.0 has 5–6 short lines about profile, voice, games, music and screen', () => {
+  const lines = notesFor('0.3.0');
+  assert.equal(Array.isArray(lines), true);
+  assert.ok(lines.length >= 5 && lines.length <= 6);
+  for (const line of lines) assert.ok(line.length < 140);
+  const all = lines.join(' ');
+  assert.match(all, /[Pp]erfil|GPU|VRAM/);
+  assert.match(all, /voz|Kokoro|primera frase/i);
+  assert.match(all, /No molestar|Comentar/i);
+  assert.match(all, /YouTube Music|Spotify/i);
+  assert.match(all, /pantalla|recorte|Suscr[ií]bete/i);
+});
+
+test('upgrade from 0.2.12 shows the 0.3.0 notes once', () => {
+  assert.deepEqual(bootNotes({ version: '0.3.0', lastSeenVersion: '0.2.12' }), NOTES['0.3.0']);
+  assert.equal(bootNotes({ version: '0.3.0', lastSeenVersion: '0.3.0' }), null);
+});
+
 test('upgrade from 0.2.8 shows the 0.2.9 notes once', () => {
   assert.deepEqual(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.8' }), NOTES['0.2.9']);
   assert.equal(bootNotes({ version: '0.2.9', lastSeenVersion: '0.2.9' }), null);

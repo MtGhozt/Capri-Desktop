@@ -1,13 +1,41 @@
 # Changelog
 
-## 0.3.0 (en curso)
+## 0.3.0 (etiqueta `v0.3.0`)
+
+### Velocidad y hardware
+
+- **Perfil automático según tu PC:** al arrancar y en Ajustes › Comportamiento recomienda OmniVoice CUDA vs Kokoro, tamaño de Whisper y animaciones ligeras según GPU/VRAM. No cambia nada sola: Aplicar / Ahora no.
+- **Primera frase sin hold:** el primer `speak` del turno sale al cerrar oración o al primer coma ~25 chars; el resto sigue empaquetando. TTS por frase con prefetch.
+- **OmniVoice nunca cae a CPU por falta de VRAM:** si no hay GPU/VRAM suficiente, pasa directo a Kokoro sin trabar la PC.
+- **Instalación de voz:** timeout de descarga colgada (60 s sin bytes) con mensaje + Reintentar, y progreso real por archivo (nombre + %).
+- **Ajustes:** indicador «Cargando…» hasta que llega getMenu.
 
 ### En juegos: No molestar / Comentar
 
-- **Ajustes › Comportamiento › En juegos:** «No molestar» (default, igual que antes) o «Comentar de vez en cuando».
+- **Ajustes › Comportamiento › En juegos:** «No molestar» (default) o «Comentar de vez en cuando».
 - **Comentar:** Capri sigue sin tomar foco ni el mouse (mismas barreras de quiet); puede decir una línea de voz como máximo cada ~8 min. Sin burbuja. Comentarios según contexto de ventana solo si «Enviar mi pantalla…» ya está activo.
+- **Visible sobre juegos** en ventana y sin bordes (fullscreen/borderless), encima sin capturar clics.
+- **Denylist:** Zoom, Teams, Slack, Notion, Figma, VLC, Office, Discord, Spotify y otras apps normales no cuentan como juego.
+- **Desbloqueo inmediato** al salir con Alt+Tab (focus-lost): clicks/chat vuelven al toque; la gracia de VRAM sigue su curso.
 - **Aviso una vez** al elegir Comentar (anti-cheat / overlays). Capri nunca controla el juego.
 - **No molestar manual** sigue ganando sobre ambos modos.
+
+### Música
+
+- **YouTube Music** como tercer reproductor en Ajustes › Música: sin login ni API (abre/controla la app o la web).
+- **Spotify** confirma que la canción arrancó (~2.5 s); si no, «No arrancó en Spotify, ¿lo abro?».
+- **«Poné música»** / «poné una canción» sin título reanuda o arranca el player elegido.
+
+### Voz y pantalla
+
+- **Guardia de recorte:** «mirá mi pantalla» ya no abre el recorte de Windows por error.
+- **Filtro de alucinaciones de Whisper:** frases fantasma del mic («¡Suscríbete!», «gracias por ver», outros de YouTube) no abren un turno; «gracias» real no se bloquea.
+
+### Arquitectura interna
+
+- **Refactor modular:** `main.js`, `menu.js`, `fx.js`, `app.js` y `voice/server.py` partidos en módulos más chicos.
+- **`docs/ARCHITECTURE.md`:** mapa del main, turn flow y módulos de renderer/voz.
+- **Tests:** grafo de módulos, efectos/imports de fx y límites de tamaño de archivos.
 
 ## 0.2.12 (etiqueta `v0.2.12`)
 
