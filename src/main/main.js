@@ -6,15 +6,14 @@ const fs = require('node:fs');
 const { execFile } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const {
-  app, BrowserWindow, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, powerMonitor, dialog, safeStorage, clipboard,
+  app, BrowserWindow, Menu, ipcMain, screen, protocol, net, shell, globalShortcut, powerMonitor, clipboard,
 } = require('electron');
 
 const config = require('./config');
 const state = require('./state');
-const { reviveMigratedTts } = require('./config');
 const { TRAY, LANGS } = require('./labels');
 const { createBridge } = require('./bridge');
-const { startWindowWatch, restoreForeground } = require('./windows');
+const { startWindowWatch } = require('./windows');
 const { createLlm } = require('./llm');
 const {
   PROVIDERS, providerOptions, BRAIN_GROUPS, FREE_KEY_LINKS, OWN_KEY_LINKS,
@@ -24,14 +23,13 @@ const {
   keepCaptureFile,
 } = require('./screen-look');
 const { gameAppKey, windowedGameInFront } = require('./game-detect');
-const { checkForUpdate } = require('./updates');
 const { detectAgents, pickAuto, openAgentIds, runAgent } = require('./agent-brain');
 const { renderSwitches, HINTS: RENDER_HINTS, SOFTWARE_CONFIRM } = require('./render-mode');
 const { createLms } = require('./lms');
-const { createVoice, checkVoiceDir, resolveVoiceDir } = require('./voice');
-const { createVoiceInstall, PYTHON_URL, voiceInstallDir, hasNvidiaGpu } = require('./voice-install');
+const { createVoice } = require('./voice');
+const { createVoiceInstall, voiceInstallDir, hasNvidiaGpu } = require('./voice-install');
 const { VC_URL, VC_MESSAGE, missingVcRuntime } = require('./vc-runtime');
-const { activeVoiceLabel, saveCustomRef, transcriptFor } = require('./voice-ref');
+const { activeVoiceLabel } = require('./voice-ref');
 const { createSpeakQueue } = require('./speak');
 const {
   createReminders, formatWhen, deliverReminder,
@@ -73,16 +71,15 @@ const {
   normalizeGamingMode, gameCommentVoiceReady, canGameComment, gameCommentKind,
 } = require('./game-comment');
 const { vramText } = require('./vram');
-const {
-  recommendProfile, detectHardware, hardwareFingerprint, shouldOfferBubble,
-  applyPatch, bubbleLine, matchesConfig,
-} = require('./recommend-profile');
 const { logEvent, voiceLogPath } = require('./log');
+const { createVoiceWiring } = require('./voice-wiring');
+const { createOffers } = require('./offers');
+const { createOverlayWindow } = require('./overlay-window');
 const { createTurnTiming, currentTurn, fromSidecar } = require('./timing');
 const turns = createTurnTiming({ log: (line) => logEvent(voiceLogPath(), line) });
 const { createChatVisible } = require('./chat-visible');
 const { saveClip, clipFolderLabel } = require('./clips');
-const { micActive, voiceStatus: ttsStatus } = require('./voice-config');
+const { micActive } = require('./voice-config');
 const { createFollowUp, readMs } = require('./follow-up');
 const {
   SENS_MIN, SENS_MAX, SENS_STEP, pctFromThreshold,
@@ -118,7 +115,6 @@ protocol.registerSchemesAsPrivileged([
 
 let overlay = null;
 let settingsWindow = null;
-let demoTimer = null;
 let windowWatch = null;
 // the watcher only speaks when something changes: the overlay asks for this when it (re)loads
 let lastWindows = null;
@@ -133,8 +129,6 @@ let quietWake = false; // the capture running now began as an auto wake over a g
 let voiceMic = { open: true, needed: true, message: '' };
 let voiceQueue = [];
 const chatVisible = createChatVisible({ log: (line) => logEvent(voiceLogPath(), `[capri] ${line}`) });
-let previousForeground = null;
-let menuKeyboard = false; // her menu has a text field open (Corregir lo último): it needs the keyboard
 let gameMode = null;
 let gameWindow = null;
 // A game on the screen: no show()/focus()/moveTop(), click-through stays on (game-quiet.js).
@@ -147,214 +141,40 @@ let userFiles = null;
 
 const userSoundsDir = () => path.join(app.getPath('userData'), 'sounds');
 
-// capri://app/...        -> files of this repo
-// capri://usersounds/... -> the user's own sound overrides
-function serveProtocol() {
-  protocol.handle('capri', (request) => {
-    const url = new URL(request.url);
-    const base = url.host === 'usersounds' ? userSoundsDir() : ROOT;
-    const target = path.resolve(base, '.' + decodeURIComponent(url.pathname));
-    if (target !== base && !target.startsWith(base + path.sep)) {
-      return new Response('forbidden', { status: 403 });
-    }
-    return net.fetch(pathToFileURL(target).toString());
-  });
-}
-
-function targetDisplay() {
-  const { displayId } = config.load();
-  return screen.getAllDisplays().find((d) => d.id === displayId) || screen.getPrimaryDisplay();
-}
-
-// Her window: the work area, or the whole screen while she rests on the taskbar (she stands on its
-// top edge, or on the bottom of the screen while auto-hide keeps it down), less its top row of pixels: a window on top covering the whole screen is a fullscreen
-// app to Windows (animated wallpapers pause, notifications wait). `gap`: how much of her window is
-// below the top of the taskbar (0, or its height).
-function overlayArea() {
-  const { workArea, bounds } = targetDisplay();
-  const area = config.load().rest === 'taskbar'
-    ? { ...bounds, y: bounds.y + 1, height: bounds.height - 1 }
-    : workArea;
-  return { area, gap: area.y + area.height - (workArea.y + workArea.height) };
-}
-
-function fitOverlay() {
-  if (!overlay) return;
-  const { area, gap } = overlayArea();
-  overlay.setBounds(area);
-  overlay.webContents.send('overlay:resize', { width: area.width, height: area.height, gap });
-}
-
-// The pointer reaches her click-through window through a mouse hook, and Windows drops a hook that
-// doesn't answer in time without a word (waking from sleep, a locked screen, a stall): she can't be
-// clicked anymore. Off then on puts in a new one; her place on top and her size are set again too.
-function rearmOverlay() {
-  if (!overlay || overlay.isDestroyed()) return;
-  if (gameQuiet.active()) return; // a game owns the screen: clicks stay passed through
-  overlay.setIgnoreMouseEvents(false);
-  overlay.setAlwaysOnTop(true, 'screen-saver');
-  fitOverlay();
-  setTimeout(() => {
-    if (!overlay || overlay.isDestroyed() || menuGuard.menuOpen) return;
-    setClickThrough(true, 'rearm');
-  }, 0);
-  sendCommand('rearmed'); // click-through again: she waits for the pointer to be on her
-  console.log('[capri] mouse hook set up again');
-}
-
-// Win+L / sleep freezes heartbeats and Windows drops global shortcuts. Reset so the quick menu
-// and Ajustes are not stuck under an interactive fullscreen overlay with a dead Esc hook.
-// Same root cause as the look/drag freeze: busy/dragging can stay true across the lock, so
-// refreshHit keeps the overlay interactive over the whole desktop — rearm alone is not enough.
-function recoverAfterUnlock(reason = 'unlock') {
-  if (!overlay || overlay.isDestroyed()) return;
-  logEvent(voiceLogPath(), `[capri] recover after ${reason}`);
-  menuGuard.forceClose(reason);
-  menuKeyboardOn(false);
-  if (chatVisible.get()) closeChat('unlock');
-  else {
-    overlay.setFocusable(false);
-    overlay.showInactive();
-  }
-  // Clear busy/drag + reapply click-through (look/speak fault path). 'rearmed' alone leaves them.
-  resetOverlayInput(reason);
-  rearmOverlay();
-  // force Esc re-bind: Windows drops the accelerator on the lock screen while we still think it's ours
-  takeEscape(false);
-  raiseOverlay();
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    try { settingsWindow.moveTop(); settingsWindow.focus(); } catch { /* gone */ }
-  }
-}
-
-function resyncOverlay(reason = 'resync') {
-  if (!overlay || overlay.isDestroyed()) return;
-  logEvent(voiceLogPath(), `[capri] overlay resync after ${reason}`);
-  recoverAfterUnlock(reason);
-}
-
-// Back on top of everything, the taskbar included (it comes up over her when it's clicked). Twice:
-// the taskbar can come up again a moment later, as its menus and previews open.
-function raiseOverlay() {
-  if (gameQuiet.active()) return; // never moveTop() over a game
-  for (const wait of [0, 400]) {
-    setTimeout(() => {
-      if (!overlay || overlay.isDestroyed()) return;
-      overlay.setAlwaysOnTop(true, 'screen-saver');
-      overlay.moveTop();
-    }, wait);
-  }
-}
-
-function createOverlay() {
-  overlay = new BrowserWindow({
-    ...overlayArea().area,
-    transparent: true,
-    backgroundColor: '#00000000',
-    frame: false,
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    skipTaskbar: true,
-    focusable: false,
-    hasShadow: false,
-    alwaysOnTop: true,
-    type: process.platform === 'win32' ? 'toolbar' : undefined,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, '..', 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      backgroundThrottling: false,
-      autoplayPolicy: 'no-user-gesture-required',
-    },
-  });
-
-  overlay.setAlwaysOnTop(true, 'screen-saver');
-  overlay.setIgnoreMouseEvents(true, { forward: true });
-  overlay.loadURL('capri://app/src/renderer/index.html');
-  overlay.showInactive();
-  logEvent(voiceLogPath(), `[capri] startup window show visible=${overlay.isVisible()} opacity=${overlay.getOpacity()} render=${config.load().render}`);
-  // always shown: put away, she's still there as her biochip in the corner. Sized again first:
-  // Windows keeps a new window inside the work area, and resting on the taskbar it covers it too.
-  overlay.once('ready-to-show', () => {
-    fitOverlay();
-    overlay.showInactive();
-    logEvent(voiceLogPath(), `[capri] startup ready-to-show visible=${overlay.isVisible()} opacity=${overlay.getOpacity()}`);
-    if (!menuGuardTimer) menuGuardTimer = setInterval(() => menuGuard.tick(), 2000);
-    for (const payload of voiceQueue) overlay.webContents.send('voice:event', payload);
-    voiceQueue = [];
-  });
-  overlay.webContents.on('render-process-gone', (_e, details) => {
-    console.error('[capri] renderer gone:', details.reason);
-    rendererRecover.gone(details.reason);
-  });
-  // a stalled page can't take clicks back from the screen: give them back / reload once
-  overlay.webContents.on('unresponsive', () => {
-    rendererRecover.unresponsive();
-  });
-  overlay.webContents.on('responsive', () => {
-    logEvent(voiceLogPath(), '[capri] renderer responsive again');
-    rendererRecover.reset();
-  });
-  overlay.webContents.on('did-finish-load', () => {
-    fitOverlay();
-    overlay.showInactive();
-    logEvent(voiceLogPath(), `[capri] startup did-finish-load visible=${overlay.isVisible()} opacity=${overlay.getOpacity()}`);
-    rendererRecover.reset();
-    for (const payload of voiceQueue) overlay.webContents.send('voice:event', payload);
-    voiceQueue = [];
-  });
-  // another window came to the front (a click, Alt+Tab, the taskbar): her menu goes away
-  // (not when she hands the keyboard back herself: that's her menu changing page)
-  overlay.on('blur', () => {
-    if (Date.now() - handedBackAt < 1500) return;
-    sendCommand('menu-close');
-  });
-  // her errors in the log, so a stuck overlay can be traced
-  overlay.webContents.on('console-message', (e) => {
-    const { level, message, lineNumber, sourceId } = e;
-    if (level !== 'error' && level !== 3) return;
-    logEvent(voiceLogPath(), `[renderer] ${String(message).slice(0, 300)} (${String(sourceId).split('/').pop()}:${lineNumber})`);
-  });
-  if (DEV) {
-    overlay.webContents.on('console-message', (e) => {
-      const { level, message, lineNumber, sourceId } = e;
-      console.log(`[renderer:${level}] ${message} (${String(sourceId).split('/').pop()}:${lineNumber})`);
-    });
-    if (process.env.CAPRI_DEVTOOLS) overlay.webContents.openDevTools({ mode: 'detach' });
-  }
-}
-
-// Click-through, as she last asked for it: put back after anything that may touch the window's
-// styles (focusable, show, focus), and again on her heartbeat, so it can't stay off by itself.
-let clickThrough = true;
-let lastThrough = null; // last value written to the log: hover flips it on every click
-let handedBackAt = 0; // when she last gave the keyboard back to the window before her
-let quitSolid = false; // ¿Salir? visible: ignoreMouseEvents stays off until clear + grace
-let lastInteractive = null; // last hover state she acted on: an unchanged ask costs nothing
-function setClickThrough(on, reason = 'state') {
-  clickThrough = Boolean(on);
-  // Anything but hover moved her: the next hover ask has to be applied, not deduped away.
-  if (reason !== 'hover-on' && reason !== 'hover-off') lastInteractive = null;
-  if (!overlay || overlay.isDestroyed()) return;
-  // ¿Salir? / open menu: never re-enable ignoreMouseEvents (hover can stay false after Win+L).
-  // A game owns the screen: clicks always pass through, whatever she last asked for.
-  const through = gameQuiet.active()
-    ? true
-    : (quitSolid || menuGuard?.menuOpen) ? false : clickThrough;
-  // Hover can flip dozens of times/sec at the hit edge — only act (and log) on real changes.
-  if (through === lastThrough) return;
-  lastThrough = through;
-  if (reason !== 'hover-on' && reason !== 'hover-off' && reason !== 'heartbeat') {
-    logEvent(voiceLogPath(), `[capri] click-through ${through ? 'on' : 'off'} reason=${reason}`);
-  }
-  if (through) overlay.setIgnoreMouseEvents(true, { forward: true });
-  else overlay.setIgnoreMouseEvents(false);
-}
+// Her overlay window (overlay-window.js): create, fit, click-through, chat focus, Esc, demo.
+const overlayWin = createOverlayWindow({
+  root: ROOT,
+  userSoundsDir,
+  DEV,
+  demoSteps,
+  gameQuiet,
+  chatVisible,
+  getOverlay: () => overlay,
+  setOverlay: (win) => { overlay = win; },
+  getSettingsWindow: () => settingsWindow,
+  getMenuGuard: () => menuGuard,
+  getRendererRecover: () => rendererRecover,
+  getSystemFlow: () => systemFlow,
+  getLlm: () => llm,
+  getLastWindows: () => lastWindows,
+  getVoiceQueue: () => voiceQueue,
+  setVoiceQueue: (q) => { voiceQueue = q; },
+  getMenuGuardTimer: () => menuGuardTimer,
+  setMenuGuardTimer: (t) => { menuGuardTimer = t; },
+  rebuildTray: (...args) => rebuildTray(...args),
+});
+const {
+  serveProtocol, targetDisplay, overlayArea, fitOverlay, rearmOverlay, recoverAfterUnlock,
+  resyncOverlay, raiseOverlay, createOverlay, setClickThrough, takeEscape, systemEscape,
+  sendCommand, openChat, closeChat, menuKeyboardOn, toggleChat, toggleVisible, playDemo,
+  demoWindow, resetOverlayInput,
+} = overlayWin;
+const getClickThrough = overlayWin.getClickThrough;
+const getQuitSolid = overlayWin.getQuitSolid;
+const setQuitSolidFlag = overlayWin.setQuitSolidFlag;
+const getLastInteractive = overlayWin.getLastInteractive;
+const setLastInteractive = overlayWin.setLastInteractive;
+const getMenuKeyboard = overlayWin.getMenuKeyboard;
 
 function trayNotice(text) {
   const line = String(text || '').trim();
@@ -376,7 +196,7 @@ const rendererRecover = createRendererRecover({
 
 // Her menu can't hold the screen (menu-guard.js): heartbeat, forced close, Esc while it's open.
 const menuGuard = createMenuGuard({
-  clickThrough: () => clickThrough,
+  clickThrough: () => getClickThrough(),
   setClickThrough,
   sendCommand: (name, payload) => {
     sendCommand(name, payload);
@@ -395,7 +215,7 @@ const menuGuard = createMenuGuard({
       setClickThrough(false, 'menu-open');
       try { overlay?.focus(); } catch { /* focus can fail during unlock */ }
     } else {
-      if (!chatVisible.get() && !menuKeyboard) {
+      if (!chatVisible.get() && !getMenuKeyboard()) {
         overlay?.setFocusable(false);
         setClickThrough(true, 'menu-close');
       }
@@ -404,161 +224,7 @@ const menuGuard = createMenuGuard({
   log: (line) => logEvent(voiceLogPath(), line),
 });
 
-// Esc while her menu is open, wherever the keyboard is: the overlay rarely has it (it never takes
-// it by itself), so a key listener in her page alone can't be counted on.
-let escapeTaken = false;
 let menuGuardTimer = 0;
-function takeEscape(on) {
-  try {
-    // Always unregister first: after Win+L the OS may have dropped the hook while escapeTaken stayed true.
-    if (escapeTaken || !on) {
-      try { globalShortcut.unregister('Escape'); } catch { /* already gone */ }
-      escapeTaken = false;
-    }
-    if (!on) return;
-    escapeTaken = globalShortcut.register('Escape', () => menuGuard.forceClose('esc'));
-  } catch (err) {
-    console.error(`[capri] Esc for the menu: ${err.message}`);
-    escapeTaken = false;
-  }
-}
-
-// Esc while she says goodbye and the screen goes down (Paso 4G): the only key that stops it from anywhere.
-let systemEsc = false;
-function systemEscape(on) {
-  if (on) {
-    if (systemEsc || escapeTaken) return;
-    try {
-      if (globalShortcut.register('Escape', () => systemFlow.cancel('esc'))) systemEsc = true;
-    } catch (err) {
-      console.error(`[capri] Esc for the countdown: ${err.message}`);
-    }
-    return;
-  }
-  if (!systemEsc) return;
-  try { globalShortcut.unregister('Escape'); } catch { /* already gone */ }
-  systemEsc = false;
-}
-
-function sendCommand(name, payload = {}) {
-  overlay?.webContents.send('capri:command', { name, ...payload });
-}
-
-function overlayHwnd() {
-  if (!overlay) return null;
-  const handle = overlay.getNativeWindowHandle();
-  return handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0));
-}
-
-function captureForeground() {
-  const self = overlayHwnd();
-  const fg = lastWindows?.fg;
-  if (fg != null && self != null && String(fg) !== String(self)) return fg;
-  return previousForeground;
-}
-
-function openChat(source = 'overlay') {
-  if (!overlay) return;
-  if (gameQuiet.active()) return; // no show()/focus() and no chat while a game is on
-  if (!chatVisible.get()) previousForeground = captureForeground();
-  chatVisible.set(true, source);
-  overlay.setFocusable(true);
-  overlay.show();
-  overlay.focus();
-  setClickThrough(clickThrough);
-  sendCommand('chat', { on: true });
-}
-
-function closeChat(source = 'overlay') {
-  const wasOpen = chatVisible.get();
-  chatVisible.set(false, source);
-  llm?.cancel();
-  if (wasOpen) sendCommand('chat', { on: false });
-  const target = previousForeground;
-  previousForeground = null;
-  // Restore first while we still own focus, then drop keyboard on the overlay.
-  handedBackAt = Date.now();
-  if (target != null) restoreForeground(target);
-  overlay?.setFocusable(false);
-  overlay?.showInactive();
-  setClickThrough(clickThrough);
-}
-
-// Her menu's text fields (Corregir lo último): the keyboard while they're open, given back after.
-function menuKeyboardOn(on) {
-  if (!overlay) return;
-  if (on && gameQuiet.active()) return; // never pull the window up over a game
-  if (on) {
-    if (!menuKeyboard && !chatVisible.get()) previousForeground = captureForeground();
-    menuKeyboard = true;
-    overlay.setFocusable(true);
-    overlay.show();
-    overlay.focus();
-    setClickThrough(clickThrough);
-    return;
-  }
-  if (!menuKeyboard) return;
-  menuKeyboard = false;
-  if (chatVisible.get()) return; // the chat still has it
-  const target = previousForeground;
-  previousForeground = null;
-  handedBackAt = Date.now();
-  if (target != null) restoreForeground(target);
-  overlay.setFocusable(false);
-  overlay.showInactive();
-  setClickThrough(clickThrough);
-}
-
-function toggleChat() {
-  if (chatVisible.get()) closeChat('shortcut');
-  else openChat('shortcut');
-}
-
-function toggleVisible(force) {
-  const visible = typeof force === 'boolean' ? force : !config.load().visible;
-  if (!visible && chatVisible.get()) closeChat('stow');
-  config.save({ visible });
-  sendCommand('stow', { on: !visible });
-  rebuildTray();
-}
-
-function playDemo() {
-  clearTimeout(demoTimer);
-  let i = 0;
-  const next = () => {
-    if (i >= demoSteps.length) return;
-    const [delay, evt] = demoSteps[i++];
-    demoTimer = setTimeout(() => {
-      overlay?.webContents.send('claude:event', evt);
-      next();
-    }, delay);
-  };
-  next();
-}
-
-// During the demo, a little fake terminal for her to sit on and take over (window tracking is
-// Windows only, so only there). Opened without stealing focus; closing it drops her off it.
-let demoWin = null;
-const DEMO_TERMINAL = `<body style="margin:0;background:#14101c;color:#8f8aa3;font:13px/1.7 Consolas,monospace;padding:14px 18px">
-<div style="color:#36ff7a">PS C:\\night-city-api&gt; npm test -- gigs</div>
-<div>&nbsp;&nbsp;GET /gigs</div><div style="color:#36ff7a">&nbsp;&nbsp;&nbsp;&nbsp;✓ returns 20 items per page</div>
-<div style="color:#36ff7a">&nbsp;&nbsp;&nbsp;&nbsp;✓ paginates with a cursor</div><div style="color:#36ff7a">&nbsp;&nbsp;&nbsp;&nbsp;✓ rejects a bad cursor</div>
-<div>&nbsp;&nbsp;6 passing (212ms)</div><div style="color:#36ff7a">PS C:\\night-city-api&gt; _</div></body>`;
-
-function demoWindow(open) {
-  demoWin?.destroy();
-  demoWin = null;
-  if (!open || process.platform !== 'win32') return false;
-  const b = overlay.getBounds();
-  demoWin = new BrowserWindow({
-    x: Math.round(b.x + b.width * 0.5 - 310), y: Math.round(b.y + b.height * 0.42), width: 620, height: 300,
-    show: false, alwaysOnTop: true, title: 'night-city-api — npm test', backgroundColor: '#14101c', autoHideMenuBar: true,
-  });
-  demoWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(DEMO_TERMINAL)}`);
-  demoWin.once('ready-to-show', () => demoWin?.showInactive());
-  demoWin.on('closed', () => { demoWin = null; });
-  return true;
-}
 
 // 'auto' -> the first system language Capri speaks, English otherwise.
 function resolveLang(setting) {
@@ -602,7 +268,7 @@ const followUp = createFollowUp({
     && !state.overlayFolded
     && !goodnight.pending
     && !gameMode?.active?.()
-    && !menuKeyboard
+    && !getMenuKeyboard()
   ),
   open: (secs) => {
     logEvent(voiceLogPath(), `[capri] follow-up listen ${secs}s chain=${followUp.chain}`);
@@ -662,93 +328,6 @@ async function runAgentAsBrain(providerId, user, persona) {
     windows.length && `Apps/ventanas abiertas: ${windows.join(' | ')}`,
   ].filter(Boolean).join('\n');
   return runAgent({ id, prompt: context ? `${user}\n\n${context}` : user, persona, installed });
-}
-
-let pendingUpdate = null;
-
-async function runUpdateCheck({ force = false } = {}) {
-  const cfg = config.load();
-  const now = Date.now();
-  const result = await checkForUpdate({
-    localVersion: app.getVersion(),
-    skippedVersion: cfg.updates?.skippedVersion,
-    enabled: force ? true : cfg.updates?.enabled !== false,
-    lastCheck: force ? 0 : cfg.updates?.lastCheck,
-    now,
-  });
-  if (result.checked) updateConfig({ updates: { lastCheck: now } });
-  if (result.error) {
-    appLog(`updates check failed: ${result.error}`);
-    return force ? { ok: false, message: 'No pude mirar GitHub ahora.' } : { ok: true };
-  }
-  if (!result.update) {
-    return force ? { ok: true, message: 'Ya estás al día.' } : { ok: true };
-  }
-  pendingUpdate = result.update;
-  sendCommand('update-ask', {
-    text: `¡Salió Capri v${result.update.version}! ¿Querés actualizar?`,
-    version: result.update.version,
-    url: result.update.url,
-  });
-  return { ok: true, update: result.update };
-}
-
-function answerUpdatePrompt(value) {
-  const update = pendingUpdate;
-  pendingUpdate = null;
-  const answer = String(value || '');
-  if (answer === 'yes' && update?.url) {
-    shell.openExternal(update.url);
-    return { ok: true };
-  }
-  if (answer === 'skip' && update?.version) {
-    updateConfig({ updates: { skippedVersion: update.version } });
-    return { ok: true };
-  }
-  return { ok: true }; // later
-}
-
-let pendingProfile = null;
-
-function maybeOfferProfile({ force = false } = {}) {
-  if (gameQuiet.active()) return { ok: true, skipped: 'game' };
-  const cfg = config.load();
-  const hw = detectHardware();
-  if (!hw) return { ok: true, skipped: 'detect' };
-  const rec = recommendProfile(hw);
-  if (force && matchesConfig(cfg, rec)) {
-    sendCommand('line', { badge: 'PERFIL', text: 'Ya estás en el perfil que te conviene.' });
-    return { ok: true, skipped: 'match' };
-  }
-  if (!shouldOfferBubble({
-    cfg,
-    rec,
-    hw,
-    force,
-    firstRun: !cfg.welcomed,
-    gameQuiet: gameQuiet.active(),
-  })) {
-    return { ok: true, skipped: 'no-offer' };
-  }
-  pendingProfile = { rec, hw };
-  sendCommand('profile-ask', { text: bubbleLine(rec) });
-  return { ok: true, offered: true };
-}
-
-function answerProfilePrompt(value) {
-  const pending = pendingProfile;
-  pendingProfile = null;
-  if (!pending?.rec || !pending?.hw) return { ok: true };
-  const answer = String(value || '');
-  if (answer === 'apply') {
-    updateConfig(applyPatch(pending.rec));
-    return { ok: true, applied: true };
-  }
-  if (answer === 'dismiss') {
-    updateConfig({ profile: { dismissedHw: hardwareFingerprint(pending.hw) } });
-    return { ok: true, dismissed: true };
-  }
-  return { ok: true };
 }
 
 // One of her direct-command lines (lines-es.js), said and shown where the command came from:
@@ -861,12 +440,6 @@ const systemFlow = createSystemFlow({
   escape: (on) => systemEscape(on),
 });
 
-function resolveVoiceModelsRoot(cfg = config.load()) {
-  const raw = cfg?.voice?.dir;
-  if (raw != null && String(raw).trim()) return path.resolve(String(raw).trim());
-  return path.join(ROOT, 'voice');
-}
-
 // Real exit: stop the voice sidecar first (will-quit also does; do it here so it can't linger),
 // then app.quit(). A delayed exit covers anything that holds the process open.
 function doQuit() {
@@ -886,7 +459,7 @@ function setQuitSolid(on) {
   }
   if (on) {
     if (gameQuiet.active()) return; // ¿Salir? never comes up over a game
-    quitSolid = true;
+    setQuitSolidFlag(true);
     if (!overlay || overlay.isDestroyed()) return;
     setClickThrough(false);
     overlay.setAlwaysOnTop(true, 'screen-saver');
@@ -898,10 +471,10 @@ function setQuitSolid(on) {
   // restore normal click-through only after the confirm closes (+~300 ms)
   quitSolidTimer = setTimeout(() => {
     quitSolidTimer = 0;
-    quitSolid = false;
+    setQuitSolidFlag(false);
     if (!overlay || overlay.isDestroyed()) return;
-    if (!chatVisible.get() && !menuKeyboard) overlay.setFocusable(false);
-    setClickThrough(clickThrough);
+    if (!chatVisible.get() && !getMenuKeyboard()) overlay.setFocusable(false);
+    setClickThrough(getClickThrough());
   }, 300);
 }
 const quitFlow = createQuitFlow({
@@ -1002,6 +575,29 @@ const {
   llmKey, hasAnyLlmKey, setChatProvider, setChatModel, reorderBrains, setChatKey, probeChatFromMenu,
 } = chatSettings;
 
+// Ajustes › AUDIO helpers (voice-wiring.js): folder, install, custom ref, reply-on status.
+const voiceWiring = createVoiceWiring({
+  root: ROOT,
+  updateConfig,
+  getOverlay: () => overlay,
+  getSettingsWindow: () => settingsWindow,
+  getVoice: () => voice,
+  getVoiceInstall: () => voiceInstall,
+});
+const {
+  resolveVoiceModelsRoot, pickVoiceDir, runVoiceInstall, pickVoiceRefWav, pickVoiceRefText,
+  saveVoiceRef, clearVoiceRef, voiceReplyOn, voiceStatus,
+} = voiceWiring;
+
+// Optional update / profile bubbles (offers.js).
+const offers = createOffers({
+  updateConfig,
+  sendCommand,
+  appLog: (text) => appLog(text),
+  gameQuietActive: () => gameQuiet.active(),
+});
+const { runUpdateCheck, answerUpdatePrompt, maybeOfferProfile, answerProfilePrompt } = offers;
+
 async function maybeOpenSetupHint() {
   const cfg = config.load();
   if (cfg.guide?.setupHint) return;
@@ -1058,71 +654,6 @@ const appFx = createAppFx({
   },
 });
 
-// "abrí Descargas": a folder or any file, opened through the shell like a .lnk.
-// Ajustes › AUDIO: her voice folder chosen with a dialog instead of hand-editing config.json.
-// A folder that cannot run (no server.py / no .venv) is refused and the config is left alone.
-async function pickVoiceDir() {
-  const res = await dialog.showOpenDialog(overlay, {
-    title: 'Carpeta de voz',
-    properties: ['openDirectory'],
-  });
-  const chosen = !res.canceled && res.filePaths?.[0];
-  if (!chosen) return { ok: false, message: '' };
-  const check = checkVoiceDir(chosen);
-  if (!check.ok) return check;
-  await voice?.stop(); // applyConfig below brings it back up on the new folder
-  updateConfig({ voice: { dir: check.dir, ...reviveMigratedTts(config.load().voice) } });
-  const says = String(config.load().voice?.replyMode || 'blips') === 'voice' ? '' : ' Elegí VOZ en Respuesta para que te hable.';
-  return { ok: true, message: `Voz en ${path.basename(check.dir)}.${says}` };
-}
-
-// Ajustes › AUDIO › Instalar voz: sources → %LOCALAPPDATA%\capri-desktop\voice, then setup.ps1.
-async function runVoiceInstall(value = {}) {
-  if (!voiceInstall) return { ok: false, message: 'Instalador de voz no listo.' };
-  const result = await voiceInstall.start({
-    omniVoice: value?.omniVoice == null ? undefined : Boolean(value.omniVoice),
-  });
-  if (!result.ok) {
-    return {
-      ok: false,
-      needPython: Boolean(result.needPython),
-      message: result.error || 'Error al instalar la voz.',
-      pythonUrl: PYTHON_URL,
-    };
-  }
-  const dir = result.dir || voiceInstall.dir();
-  const check = checkVoiceDir(dir);
-  if (!check.ok) return { ok: false, message: check.message || 'La voz no quedó usable.' };
-  await voice?.stop();
-  state.ttsLoading = true;
-  state.lastTts = { engine: 'omnivoice', state: 'loading' };
-  updateConfig({
-    voice: {
-      dir: check.dir,
-      noticeShown: true,
-      ...(result.omniVoice ? { tts: 'auto' } : {}),
-    },
-  });
-  voice?.start({ force: true });
-  return {
-    ok: true,
-    needVc: Boolean(result.needVc),
-    message: result.needVc ? VC_MESSAGE : 'Voz instalada',
-    dir: check.dir,
-  };
-}
-
-// After look/speak/hide: never leave the overlay eating the desktop or stuck click-through.
-function resetOverlayInput(reason = 'reset') {
-  if (!overlay || overlay.isDestroyed()) return;
-  try {
-    if (!overlay.isVisible()) overlay.showInactive();
-  } catch { /* gone */ }
-  // show()/hide() can desync ignoreMouseEvents from our clickThrough flag — reapply.
-  setClickThrough(clickThrough);
-  sendCommand('input-reset', { reason: String(reason || 'reset') });
-}
-
 // Looking at the screen (screen-capture.js): the shot in memory and the auto look.
 const screenCapture = createScreenCapture({
   getOverlay: () => overlay,
@@ -1134,11 +665,10 @@ const screenCapture = createScreenCapture({
   voiceReplyOn,
   openChat,
   resetOverlayInput,
-  reapplyClickThrough: () => setClickThrough(clickThrough),
+  reapplyClickThrough: () => setClickThrough(getClickThrough()),
   targetDisplay,
 });
 const { captureFilePath, snapScreenForLook, armAutoLook } = screenCapture;
-
 
 function sayWithoutLlm(text) {
   const line = String(text || '').trim();
@@ -1152,98 +682,6 @@ function sayWithoutLlm(text) {
     speakQueue?.feed(line);
     speakQueue?.flush(speakId);
   }
-}
-
-// Ajustes › AUDIO › Usar mi propia voz: pick a short .wav (transcript typed in the panel).
-async function pickVoiceRefWav() {
-  const parent = (settingsWindow && !settingsWindow.isDestroyed()) ? settingsWindow : overlay;
-  const res = await dialog.showOpenDialog(parent, {
-    title: 'Tu voz (.wav o transcripción .txt)',
-    properties: ['openFile', 'multiSelections'],
-    filters: [{ name: 'Audio o transcripción', extensions: ['wav', 'txt'] }],
-  });
-  const files = !res.canceled ? (res.filePaths || []) : [];
-  const file = files.find((item) => /\.wav$/i.test(item)) || files.find((item) => /\.txt$/i.test(item));
-  if (!file) return { ok: false, message: '' };
-  if (/\.txt$/i.test(file)) {
-    const wav = file.replace(/\.txt$/i, '.wav');
-    if (!fs.existsSync(wav)) return { ok: false, message: 'No encontré el .wav con el mismo nombre.' };
-    return { ok: true, path: wav, transcriptPath: file, transcript: transcriptFor(wav, file) };
-  }
-  const selectedTxt = files.find((item) => /\.txt$/i.test(item)
-    && path.basename(item, path.extname(item)).toLowerCase() === path.basename(file, path.extname(file)).toLowerCase());
-  const sidecar = file.replace(/\.wav$/i, '.txt');
-  const transcriptPath = selectedTxt || (fs.existsSync(sidecar) ? sidecar : '');
-  return { ok: true, path: file, transcriptPath, transcript: transcriptFor(file, transcriptPath) };
-}
-
-// Ajustes › AUDIO › Cargar .txt: only the transcript, never the audio.
-async function pickVoiceRefText() {
-  const parent = (settingsWindow && !settingsWindow.isDestroyed()) ? settingsWindow : overlay;
-  const res = await dialog.showOpenDialog(parent, {
-    title: 'Transcripción del audio (.txt)',
-    properties: ['openFile'],
-    filters: [{ name: 'Transcripción', extensions: ['txt'] }],
-  });
-  const file = !res.canceled && res.filePaths?.[0];
-  if (!file) return { ok: false, message: '' };
-  return { ok: true, transcript: transcriptFor('', file) };
-}
-
-async function saveVoiceRef(value = {}) {
-  const cfg = config.load();
-  const dir = resolveVoiceDir(ROOT, cfg) || voiceInstall?.dir?.();
-  const saved = saveCustomRef({
-    voiceDir: dir,
-    wavPath: value?.path || value?.wav,
-    transcript: value?.transcript ?? value?.text,
-    transcriptPath: value?.transcriptPath,
-  });
-  if (!saved.ok) return saved;
-  await voice?.stop();
-  state.ttsLoading = true;
-  state.lastTts = { engine: 'omnivoice', state: 'loading' };
-  updateConfig({
-    voice: {
-      ttsRef: saved.ttsRef,
-      ttsSourceName: saved.sourceName,
-      ...reviveMigratedTts(cfg.voice),
-      ...(String(cfg.voice?.tts || 'off').toLowerCase() === 'off' ? { tts: 'auto' } : {}),
-    },
-  });
-  voice?.start({ force: true });
-  return {
-    ok: true,
-    message: saved.message || 'Tu voz (archivo) lista.',
-    ttsRef: saved.ttsRef,
-    sourceName: saved.sourceName,
-  };
-}
-
-function clearVoiceRef() {
-  voice?.stop();
-  updateConfig({ voice: { ttsRef: null } });
-  voice?.start({ force: true });
-  return { ok: true, message: 'Voz por defecto.' };
-}
-
-// Whether a spoken line is wanted. Loading TTS does not gate it: the sidecar holds the reply
-// until the clone is up, so a reply is never dropped into silence nor spoken by Kokoro.
-function voiceReplyOn() {
-  const cfg = config.load();
-  if (cfg.muted) return false;
-  if (String(cfg.voice?.replyMode || 'blips').toLowerCase() !== 'voice') return false;
-  const kind = String(cfg.voice?.tts || 'off').toLowerCase();
-  return kind !== 'off' && kind !== 'none' && kind !== 'false';
-}
-
-// Ajustes › AUDIO: the shared helper (voice-config.js) with what only main knows.
-function voiceStatus(cfg) {
-  return ttsStatus(cfg, {
-    running: voice?.running?.(),
-    tts: state.lastTts,
-    sleeping: state.overlayFolded,
-  });
 }
 
 function commentRange(value, fallbackMinutes) {
@@ -1531,8 +969,8 @@ function registerIpc() {
     getVoice: () => voice,
     getLastWindows: () => lastWindows,
     getOverlay: () => overlay,
-    getLastInteractive: () => lastInteractive,
-    setLastInteractive: (value) => { lastInteractive = value; },
+    getLastInteractive,
+    setLastInteractive,
   });
   registerMiscIpc(ipcMain, {
     turn,
@@ -1554,7 +992,7 @@ async function debugHandler(route, body) {
   }
   if (route === 'eval') {
     // what her page says about itself (menu, click-through...), for smoke tests
-    return { ok: true, value: await overlay.webContents.executeJavaScript(String(body.js || 'null')), clickThrough };
+    return { ok: true, value: await overlay.webContents.executeJavaScript(String(body.js || 'null')), clickThrough: getClickThrough() };
   }
   if (route === 'force-close-menu') {
     menuGuard.forceClose('debug');

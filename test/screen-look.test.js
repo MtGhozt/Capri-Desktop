@@ -354,7 +354,7 @@ test('unlock, resume, and display changes use the same overlay resync', () => {
   assert.match(main, /}, 500\);/);
   assert.match(main, /setIgnoreMouseEvents\(false\)[\s\S]*?setClickThrough\(true, 'rearm'\)/);
   assert.match(main, /click-through \$\{through \? 'on' : 'off'\} reason=\$\{reason\}/);
-  assert.match(main, /quitSolid \|\| menuGuard\?\.menuOpen/);
+  assert.match(main, /quitSolid \|\| getMenuGuard\(\)\?\.menuOpen/);
 });
 
 test('click-through is logged only when it changes, not on every hover', () => {

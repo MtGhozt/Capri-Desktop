@@ -13,7 +13,7 @@ const LIMIT = 600;
 
 // The offenders as of the split (main.js, step 1 of 5). Lower each number as the file shrinks.
 const ALLOW = {
-  'src/main/main.js': 2174,
+  'src/main/main.js': 1471,
   'src/renderer/js/menu.js': 2865,
   'src/renderer/js/capri.js': 2099,
   'src/renderer/js/fx.js': 1934,
