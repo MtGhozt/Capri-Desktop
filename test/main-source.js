@@ -11,7 +11,7 @@ const DIR = path.join(__dirname, '..', 'src', 'main');
 const MODULES = [
   'game-window.js', 'ipc-overlay.js', 'ipc-settings.js', 'ipc-voice.js', 'ipc-misc.js',
   'menu-state.js', 'replies.js', 'turn.js', 'music-wiring.js', 'menu-actions.js', 'apps-wiring.js',
-  'screen-capture.js', 'shortcuts.js', 'tray.js', 'state.js', 'main.js',
+  'screen-capture.js', 'chat-settings.js', 'shortcuts.js', 'tray.js', 'state.js', 'main.js',
 ];
 
 module.exports = MODULES
