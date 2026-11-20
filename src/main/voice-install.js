@@ -19,10 +19,8 @@ const VOICE_FILES = [
   'requirements.txt',
   'requirements-torch.txt',
   'requirements-omnivoice.txt',
-  'heavy.py',
-  'greet.py',
-  'tts_text.py',
-  'vram.py',
+  'heavy.py', 'greet.py', 'tts_text.py', 'vram.py',
+  'wake.py', 'stt.py', 'tts_runtime.py',
 ];
 // Public wake word only when it already ships with the sources (gitignored onnx stays local).
 const OPTIONAL_FILES = ['models/hey_capri.onnx'];

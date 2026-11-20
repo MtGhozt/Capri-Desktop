@@ -20,9 +20,10 @@ const ALLOW = {
   'src/renderer/js/app.js': 396,
   'src/main/pc-actions.js': 899,
   'src/renderer/js/bubble.js': 664,
-  'src/main/voice-install.js': 604,
-  'voice/server.py': 2454,
+  'src/main/voice-install.js': 602,
+  'voice/server.py': 700,
   'voice/tts.py': 627,
+  'voice/tts_runtime.py': 889,
 };
 
 function countLines(file) {

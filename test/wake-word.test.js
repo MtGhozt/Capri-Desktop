@@ -63,10 +63,10 @@ test('a whisper wake already stripped is fine; one that still carries the wake w
 });
 
 test('voice sidecar repairs wake resources and falls back with a friendly notice', () => {
-  const server = fs.readFileSync(path.join(__dirname, '..', 'voice', 'server.py'), 'utf8');
-  assert.match(server, /missing_resources/);
-  assert.match(server, /openWakeWord resources missing after download/);
-  assert.match(server, /El 'Hey Capri' no pudo arrancar; uso la detección por voz/);
+  const wake = fs.readFileSync(path.join(__dirname, '..', 'voice', 'wake.py'), 'utf8');
+  assert.match(wake, /missing_resources/);
+  assert.match(wake, /openWakeWord resources missing after download/);
+  assert.match(wake, /El 'Hey Capri' no pudo arrancar; uso la detección por voz/);
 });
 
 test('her persona never greets with the date, and knows he is a man', () => {

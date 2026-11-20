@@ -66,6 +66,9 @@ El estado mutable compartido está en `state.js`.
 
 1. **Voz.** El sidecar (Python, `voice/`) oye la wake word o el push-to-talk, transcribe con
    faster-whisper y manda `{type:'transcript', text, turn, stt}` por WebSocket a `127.0.0.1`.
+   `server.py` es el shell (`Engine` + WebSocket); la lógica vive en mixins hermanos:
+   `wake.py` (wake/VAD), `stt.py` (mic/Whisper), `tts_runtime.py` (sintesis/OmniVoice).
+   Helpers compartidos: `heavy.py`, `greet.py`, `tts.py`, `tts_text.py`, `vram.py`.
 2. **Oído.** `voice.js` entrega el evento a `main.js`; `hearTranscript()` descarta alucinaciones
    del STT, aplica `hearing.fixes` (`fixes.js`) y quita la wake word (`command-text.js`).
 3. **Pantalla.** El evento `voice` llega al renderer (`app.js`) y `bubble.submitFromVoice()` hace

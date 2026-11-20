@@ -45,6 +45,7 @@ class MissingWakeModelTests(unittest.TestCase):
         engine.cfg = {"wakeModel": "hey_absent_test", "wakeMode": "both", "wakeWord": True}
         engine._wake = None
         engine._whisper = object()
+        engine.clients = set()
         return engine
 
     def test_openwakeword_is_never_loaded(self):

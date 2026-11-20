@@ -16,12 +16,13 @@ test('only a model missing from the HF cache announces a download', () => {
   assert.match(tts, /models--/);
   assert.match(tts, /snapshots/);
 
-  const server = read('voice', 'server.py');
+  const stt = read('voice', 'stt.py');
+  const ttsRuntime = read('voice', 'tts_runtime.py');
   // OmniVoice and Whisper both gate the message on the cache check
-  assert.match(server, /model_cached\(MODELS \/ "hf" \/ "hub", OMNI_MODEL\)/);
-  assert.match(server, /model_cached\(root, WHISPER_REPOS\.get\(name/);
-  assert.match(server, /def _set_download/);
-  assert.match(server, /"state": "downloading"/);
+  assert.match(ttsRuntime, /model_cached\(S\.MODELS \/ "hf" \/ "hub", S\.OMNI_MODEL\)/);
+  assert.match(stt, /model_cached\(root, S\.WHISPER_REPOS\.get\(name/);
+  assert.match(ttsRuntime, /def _set_download/);
+  assert.match(ttsRuntime, /"state": "downloading"/);
 });
 
 test('the download message reaches the voice bar, cached loads keep saying Cargando voz', () => {
