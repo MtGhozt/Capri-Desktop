@@ -149,3 +149,18 @@ sección en el mismo orden DOM que antes.
 
 Los tests que antes leían sólo `menu.js` usan `test/menu-source.js` (concatenación en orden
 de sección). SALIR queda inline en `menu.js`.
+
+## Renderer: capa FX (`fx.js` + `fx/`)
+
+`src/renderer/js/fx.js` sigue siendo el shell: `FxLayer`, canvas/resize/frame, la API pública
+que dispara efectos, y un mapa `DRAWERS[type](fx, it, t, dt, now)` en lugar del switch largo.
+Los callers (`app.js`, `chip.js`) importan `FxLayer`, `COLORS`, `GRAB_FRAMES`, `drawMask` desde
+`fx.js` como antes.
+
+| Módulo | Qué dibuja |
+| --- | --- |
+| `fx/primitives.js` | `COLORS`, `FRAME_MS`, `lerp`/`hash`/`onTwos`, `drawMask`/`drawEye`, `shard`/`sparkle`/`fadeStep`/`eye`. |
+| `fx/electric.js` | `jag`/`ribbon`/`along`/`stroke` y drawers: bolt, crackle, zap, hitbox, flare, ring, lines. |
+| `fx/possession.js` | `possession` y drawers: motes, satellite, surge, possess. |
+| `fx/particles.js` | Drawers: shard, beam, streak, slice, slit, vortex, drift, cutin, pointer, glyph. |
+| `fx/intro.js` | Intro: `GRAB`/`GRAB_FRAMES`/`prepareGrab`/`grabbed`/… y el drawer `intro`. |
