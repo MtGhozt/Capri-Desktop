@@ -11,7 +11,8 @@ El estado mutable compartido está en `state.js`.
 
 | Módulo | Qué hace |
 | --- | --- |
-| `main.js` | Ventana overlay, arranque (`main()`), cableado de IPC y el detector de juegos. |
+| `main.js` | Arranque (`main()`), cableado de IPC/fábricas y el detector de juegos (objetivo: &lt;1500 líneas). |
+| `overlay-window.js` | La ventana overlay: create/fit, click-through, foco del chat, Esc y la ventana demo. |
 | `state.js` | Banderas mutables compartidas: `overlayFolded`, `ttsLoading`, `voiceTalking`, `llmBusy`, `lastTts`, `lastHeard`. |
 | `config.js` | `config.json` en `%APPDATA%\Capri`, migraciones y valores por defecto. |
 | `log.js` | Una línea por evento en local, `voice.log` con rotación a 5 MB. |
@@ -111,6 +112,9 @@ El estado mutable compartido está en `state.js`.
 | `screen-look.js` | Mirar la pantalla a pedido; el JPEG vive sólo en memoria. |
 | `screen-capture.js` | El cableado de `screen-look.js` que vivía en `main.js`: qué pantalla, el escudo, el JPEG en memoria y el auto look cada minuto. |
 | `voice-install.js`, `voice-ref.js`, `voice-config.js`, `vc-runtime.js` | Instalar la voz, tu propia referencia, lo que recibe el sidecar, el runtime VC++. |
+| `voice-wiring.js` | Diálogos de Ajustes › AUDIO (carpeta, instalar, ref propia) y si la respuesta hablada está encendida. |
+| `chat-settings.js` | Cerebro: proveedor, modelo, claves cifradas y el probe desde Ajustes. |
+| `offers.js` | Burbujas opcionales al arrancar: actualización en GitHub y perfil de hardware. |
 | `recommend-profile.js`, `assistants.js`, `agent-brain.js` | Perfiles sugeridos, agentes que vigila y usarlos como cerebro. |
 | `hearing.js` | Sensibilidad de la wake word y hotkey del push-to-talk. |
 | `game-detect.js`, `game-mode.js`, `game-quiet.js`, `game-window.js`, `game-comment.js` | Un juego a pantalla completa: bajarse de la GPU, no robar foco ni clics, comentar sólo con voz. |
