@@ -11,6 +11,7 @@ const NOTES = {
     'Sin login ni API: se abre la página del evento en tu navegador; mis burbujas y avisos de voz siguen igual.',
     '«¿Qué sabés hacer?» te resume lo que puedo hacer, sin gastar modelo.',
     'Búsquedas rápidas: «buscame X en Google» o «en Spotify» abre la búsqueda, sin leer resultados.',
+    'Si cerrás Ajustes un rato, suelto su memoria; al abrirlo otra vez arranca limpio.',
   ],
   '0.3.0': [
     'Perfil automático según tu PC (GPU/VRAM): te lo ofrezco al arrancar y en Ajustes.',

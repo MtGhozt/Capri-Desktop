@@ -16,6 +16,12 @@ root.append(nav, content);
 
 const menu = new AppMenu({ el: menuEl, host: window.host, folded: () => false });
 menu.settingsMode = true;
+// Main asks this before idle-destroying the hidden Ajustes window (pending voice / shortcut).
+window.capriSettingsHasUnsaved = () => Boolean(
+  menu.capturingId
+  || menu.pendingRefWav
+  || (menu.voiceRefForm && String(menu.pendingRefText || '').trim()),
+);
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     event.preventDefault();

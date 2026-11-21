@@ -39,7 +39,7 @@ El estado mutable compartido está en `state.js`.
 | `shortcuts.js` | Atajos globales: mostrar/ocultar, chat, push-to-talk, cerrar el menú y salir de emergencia. |
 | `tray.js` | El icono de la bandeja y su menú, reconstruido (con debounce) cuando cambia la config. |
 | `labels.js` | El menú de bandeja en cada idioma. |
-| `settings-window.js` | La ventana de Ajustes (una sola instancia). |
+| `settings-window.js` | La ventana de Ajustes (una sola instancia): hide al cerrar, destroy tras 1 min idle. |
 
 ## Un turno
 

@@ -2,6 +2,10 @@
 
 ## 0.3.1
 
+### Memoria
+
+- **Ajustes libera RAM:** si cerrás Ajustes y no lo volvés a abrir en 1 minuto, se destruye la ventana (el renderer) para liberar memoria; la próxima vez se abre igual que la primera. Si hay cambios sin guardar (voz propia / atajo a medias), no se destruye.
+
 ### Calendario sin login
 
 - **Agregar a Google Calendar:** cada recordatorio con fecha y hora tiene un botón en Ajustes › Recordatorios que abre Google Calendar con el evento ya completado (título, hora y detalle). Los timers de cuenta regresiva no lo muestran.

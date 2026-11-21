@@ -7,6 +7,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const { app, shell } = require('electron');
+const { hideSettingsWindow } = require('./settings-window');
 
 function registerSettingsIpc(ipcMain, deps) {
 
@@ -82,7 +83,8 @@ function registerSettingsIpc(ipcMain, deps) {
       return result && typeof result === 'object' ? result : { ok: true };
     });
     ipcMain.on('settings:close', () => {
-      if (getSettingsWindow() && !getSettingsWindow().isDestroyed()) getSettingsWindow().close();
+      const win = getSettingsWindow();
+      if (win && !win.isDestroyed()) hideSettingsWindow(win);
     });
     ipcMain.handle('settings:open', (_e, tab = null) => openSettingsTab(tab || null));
     // artist handoff stills → %USERPROFILE%\Desktop\capri-art-kit\shots\
