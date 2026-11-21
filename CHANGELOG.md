@@ -9,6 +9,12 @@
 - **Sin login ni API:** es el enlace público de "crear evento" con los datos en la URL; no hay OAuth, tokens ni llamadas de red. Las burbujas y avisos de voz de Capri no cambian.
 - **Tests:** enlace (acentos/`&`, UTC desde la zona de Costa Rica, fin 15 min por defecto) y el comando.
 
+### Ayuda y búsquedas rápidas
+
+- **«¿Qué sabés hacer?»:** «qué sabés hacer», «qué podés hacer», «ayuda» y «en qué me ayudás» se contestan local, sin modelo, con 4–6 líneas cortas (recordatorios + Google Calendar, música, acciones de PC, búsquedas y modo juego). La lista se arma desde los comandos que existen: si uno desaparece, su línea también.
+- **Búsquedas rápidas por voz:** «buscame X en Google» / «buscá X en Google» abre `google.com/search?q=X`; «buscame X en Spotify» abre la búsqueda en la app (`spotify:search:X`) y, si no está instalada, `open.spotify.com/search/X`. Solo abre la página, sin leer resultados. Sin X, pregunta qué querés buscar.
+- **Tests:** frases de ayuda y parseo de búsquedas (Google/Spotify, sin palabras, sin falsos positivos).
+
 ## 0.3.0 (etiqueta `v0.3.0`)
 
 ### Velocidad y hardware

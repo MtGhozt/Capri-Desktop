@@ -375,7 +375,7 @@ const replies = createReplies({
 });
 const {
   pcReply, musicReply, runReplyAction, goSleepReply, goWakeReply, goForgetReply, goNameReply,
-  goWhatsNewReply, goMicReply, goFixReply, goClipReply, goReminderReply, refreshSettingsMenu,
+  goWhatsNewReply, goAbilitiesReply, goSearchReply, goMicReply, goFixReply, goClipReply, goReminderReply, refreshSettingsMenu,
   weatherFallbackLine, reminderLabel, applyReminderEventMove, GAME_BAR_CLIP_HOTKEY,
 } = replies;
 
@@ -900,7 +900,7 @@ const turn = createTurn({
   askQuit,
   goFixReply,
   goNameReply,
-  goWhatsNewReply,
+  goWhatsNewReply, goAbilitiesReply, goSearchReply,
   goReminderReply,
   goSleepReply,
   goWakeReply,

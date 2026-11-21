@@ -9,6 +9,8 @@ const NOTES = {
   '0.3.1': [
     'Recordatorios con fecha y hora: «agregalo a mi calendario» o el botón en Ajustes abren Google Calendar ya completado.',
     'Sin login ni API: se abre la página del evento en tu navegador; mis burbujas y avisos de voz siguen igual.',
+    '«¿Qué sabés hacer?» te resume lo que puedo hacer, sin gastar modelo.',
+    'Búsquedas rápidas: «buscame X en Google» o «en Spotify» abre la búsqueda, sin leer resultados.',
   ],
   '0.3.0': [
     'Perfil automático según tu PC (GPU/VRAM): te lo ofrezco al arrancar y en Ajustes.',

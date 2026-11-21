@@ -6,6 +6,8 @@
 const { parseFixCommand } = require('./fix-command');
 const { parseNameCommand } = require('./name-command');
 const { isWhatsNewCommand } = require('./whats-new');
+const { isAbilitiesCommand } = require('./abilities');
+const { parseQuickSearch } = require('./quick-search');
 const { parseSystemCommand } = require('./system-command');
 const { isStopTtsCommand } = require('./stop-tts-command');
 const { parseReminderCommand } = require('./reminders');
@@ -25,6 +27,8 @@ function matchDirect(text, { apps = [], herSong, timeZone } = {}) {
   if (parseFixCommand(text)) return 'fix';
   if (parseNameCommand(text)) return 'name';
   if (isWhatsNewCommand(text)) return 'whatsNew';
+  if (isAbilitiesCommand(text)) return 'abilities';
+  if (parseQuickSearch(text)) return 'search';
   if (parseSystemCommand(text)) return 'system';
   if (isStopTtsCommand(text)) return 'stopTts';
   if (parseReminderCommand(text, { timeZone })) return 'reminder';

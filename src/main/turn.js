@@ -18,6 +18,8 @@ const { isForgetCommand } = require('./forget-command');
 const { isStopTtsCommand } = require('./stop-tts-command');
 const { parseNameCommand } = require('./name-command');
 const { isWhatsNewCommand } = require('./whats-new');
+const { isAbilitiesCommand } = require('./abilities');
+const { parseQuickSearch } = require('./quick-search');
 const { isWakeCommand } = require('./wake-command');
 const { parseMusicCommand } = require('./music-command');
 const { parsePcCommand, filterReplySnip } = require('./pc-actions');
@@ -44,6 +46,8 @@ function createTurn(deps) {
     goFixReply,
     goNameReply,
     goWhatsNewReply,
+    goAbilitiesReply,
+    goSearchReply,
     goReminderReply,
     goSleepReply,
     goWakeReply,
@@ -77,6 +81,9 @@ function createTurn(deps) {
     const newName = parseNameCommand(line);
     if (newName) return goNameReply(newName);
     if (isWhatsNewCommand(line)) return goWhatsNewReply();
+    if (isAbilitiesCommand(line)) return goAbilitiesReply();
+    const searchOrder = parseQuickSearch(line);
+    if (searchOrder) return goSearchReply(searchOrder);
     const powerOrder = await getSystemFlow().command(line);
     if (powerOrder) return { ok: true };
     const reminderOrder = parseReminderCommand(line, { timeZone: config.load().timeZone });

@@ -95,6 +95,11 @@ const ROWS = [
   ['dónde está la foto del perro', 'files'],
   ['buscá la canción Bohemian', 'music'],
   ['buscá en Google recetas', 'llm'],
+  ['buscame pizza en Google', 'search'],
+  ['buscá pizza en Spotify', 'search'],
+  ['qué sabés hacer', 'abilities'],
+  ['ayuda', 'abilities'],
+  ['me das una ayuda', 'llm'],
   ['buscame una excusa para mañana', 'llm'],
   ['dónde está Discord', 'llm'],
 ];

@@ -14,7 +14,7 @@ Resumen de lo cerrado (el detalle está en el historial de git y en el CHANGELOG
 - **Fase 6 — Hecho:** hooks de agentes (Claude Code, Codex, Antigravity, Cursor y OpenCode), "Usar mi agente instalado", ver la pantalla a pedido con consentimiento, detección de juegos con No molestar y proveedores con key.
 - **Fixes 0.2.x — Hecho:** 0.2.2 (aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL experimental, etiquetas de Mis apps); 0.2.4 (Diagnóstico en Acerca de con "Copiar detalles de error" y "Abrir log"); 0.2.5 (varios comandos en una frase, CLIs fuera del PATH, Spotify con más frases y reintentos, voz que cae a Kokoro en GPUs débiles y contexto sin charla vieja); 0.2.6 (hora local elegible, timers y recordatorios persistentes con aviso en burbuja y voz, primera descarga de voz explicada); **0.2.7 publicada** (`v0.2.7`: Gemini vuelve a `gemini-flash-lite-latest` y corrige configs guardadas, el modelo dice qué proveedor/modelo lo hace funcionar, CUDA forward-compatible para clonar voz, voz personalizada en 2 pasos claros, aviso hablado de recordatorios más firme si falla el TTS).
 - **0.2.8 — Hecho:** clima y feriados por ciudad (Open-Meteo + Nager.Date); recordatorios editables con aviso antes y formato 12h/24h; limpieza de Ajustes; clip sin NVIDIA (Xbox Game Bar / Win+Alt+G); "mirá mi pantalla" por el monitor de la ventana activa; fixes de instalación de voz y lock de voz clonada.
-- **0.3.1 — Hecho:** agregar recordatorios con fecha a Google Calendar sin login ni API (botón en Ajustes y comando por chat/voz con el enlace `action=TEMPLATE`); login real con OAuth queda como idea.
+- **0.3.1 — Hecho:** agregar recordatorios con fecha a Google Calendar sin login ni API (botón en Ajustes y comando por chat/voz con el enlace `action=TEMPLATE`); «¿qué sabés hacer?» / «ayuda» responde local con un resumen de sus comandos; búsquedas rápidas por voz en Google y Spotify (solo abren la búsqueda). Login real con OAuth queda como idea.
 
 Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía corta por opción y leer el estado del juego.
 
@@ -51,9 +51,11 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - **Hecho:** «Mirá mi pantalla» no abre el recorte; filtro de alucinaciones de Whisper («¡Suscríbete!», «gracias por ver»).
 - **Hecho:** Refactor modular de `main.js`, `menu.js`, `fx.js`, `app.js` y `voice/server.py` + `docs/ARCHITECTURE.md` + tests de grafo/efectos/límites.
 
-### 0.3.1 — Calendario (publicada, v0.3.1)
+### 0.3.1 — Calendario, ayuda y búsquedas rápidas (publicada, v0.3.1)
 
 - **Hecho:** recordatorios con fecha y hora se agregan a Google Calendar sin login ni API: botón en Ajustes › Recordatorios y «agregalo a mi calendario» / «ponelo en Google Calendar» por chat o voz (el más reciente o el que nombres). Es el enlace `action=TEMPLATE` con título, fechas en UTC y detalle «Recordatorio creado con Capri»; los timers de cuenta regresiva no lo tienen. Las burbujas y avisos de voz de Capri siguen igual.
+- **Hecho:** «¿Qué sabés hacer?» / «qué podés hacer» / «ayuda» / «en qué me ayudás» responde local, sin modelo, con 4–6 líneas cortas armadas desde los comandos que existen (recordatorios + Google Calendar, música, PC, búsquedas, modo juego).
+- **Hecho:** búsquedas rápidas por voz: «buscame X en Google» abre `google.com/search?q=X`; «buscame X en Spotify» usa `spotify:search:X` y cae a `open.spotify.com/search/X` si la app no está. Solo abre la búsqueda, sin leer resultados; sin X pregunta qué buscar.
 - **Más adelante:** login real de Google (OAuth) para crear el evento sin abrir el navegador; por ahora queda como idea.
 
 ## Próximo, por prioridad
@@ -102,7 +104,7 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 
 ### Ideas de la comunidad (sin fecha, no agendadas)
 
-- **Búsquedas rápidas en Google y Spotify (idea de la comunidad):** abrir búsquedas por voz («buscame X en Google» / «buscame X en Spotify») primero; más adelante, búsqueda web corta opcional para preguntas del día cuando el cerebro lo soporte (sin convertir a Capri en un buscador de reportes largos).
+- **Búsquedas rápidas en Google y Spotify (hecho en 0.3.1):** abrir búsquedas por voz («buscame X en Google» / «buscame X en Spotify»); más adelante, búsqueda web corta opcional para preguntas del día cuando el cerebro lo soporte (sin convertir a Capri en un buscador de reportes largos).
 
 ## Descartado
 

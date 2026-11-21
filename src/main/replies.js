@@ -11,6 +11,8 @@ const state = require('./state');
 const pcActions = require('./pc-actions');
 const { pickLine, fillLine } = require('./lines-es');
 const { notesFor } = require('./whats-new');
+const { abilitiesLines } = require('./abilities');
+const { searchUrl } = require('./quick-search');
 const { parseMusicCommand } = require('./music-command');
 const { logEvent, voiceLogPath } = require('./log');
 const { saveClip } = require('./clips');
@@ -268,6 +270,39 @@ function createReplies(deps) {
     };
   }
 
+  // "¿qué sabés hacer?": the features that still exist, short and spoken, no model
+  function goAbilitiesReply({ chat = true } = {}) {
+    const lines = abilitiesLines();
+    const line = lines.length
+      ? `Puedo hacer esto: ${lines.join(' ')}`
+      : 'Todavía no tengo comandos cargados, choom.';
+    return { ok: true, line: announce(line, { chat, badge: 'CAPRI' }) };
+  }
+
+  // "buscame X en Google/Spotify": open the search page. No scraping, no reading results.
+  async function goSearchReply(order, { chat = true } = {}) {
+    if (!order.query) {
+      return { ok: true, line: announce('¿Qué querés buscar?', { chat, badge: 'BUSCAR' }) };
+    }
+    try {
+      if (order.target === 'spotify') {
+        // same URI the music player uses; the web page is the fallback when the app is missing
+        try {
+          await shell.openExternal(`spotify:search:${order.query}`);
+        } catch {
+          await shell.openExternal(searchUrl('spotify', order.query));
+        }
+      } else {
+        await shell.openExternal(searchUrl('google', order.query));
+      }
+    } catch {
+      showLine('No pude abrir la búsqueda.', { chat, badge: 'BUSCAR' });
+      return { ok: false };
+    }
+    const where = order.target === 'spotify' ? 'Spotify' : 'Google';
+    return { ok: true, line: announce(`Busco «${order.query}» en ${where}.`, { chat, badge: 'BUSCAR' }) };
+  }
+
   function goMicReply(on, { chat = true } = {}) {
     updateConfig({ voice: { enabled: Boolean(on) } });
     commandReply(on ? 'unmute' : 'mute', { chat, badge: 'MIC' });
@@ -487,6 +522,8 @@ function createReplies(deps) {
     goForgetReply,
     goNameReply,
     goWhatsNewReply,
+    goAbilitiesReply,
+    goSearchReply,
     goMicReply,
     GAME_BAR_CLIP_HOTKEY,
     goFixReply,
