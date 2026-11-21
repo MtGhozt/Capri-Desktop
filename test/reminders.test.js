@@ -184,11 +184,42 @@ test('settings menu lists pending reminders with edit and delete actions', () =>
   assert.match(menu, /RECORDATORIOS/);
   assert.match(menu, /reminder-update/);
   assert.match(menu, /reminder-delete/);
+  assert.match(menu, /reminder-calendar/);
   assert.match(menu, /datetime-local/);
   const main = require('./main-source');
   assert.match(main, /case 'reminder-update'/);
   assert.match(main, /case 'reminder-delete'/);
+  assert.match(main, /case 'reminder-calendar'/);
   assert.match(main, /reminders:\s*\(getReminders\(\)/);
+});
+
+test('Google Calendar link: UTC stamps, 15 min end and encoded text', () => {
+  const { calendarUrl, parseDateTimeLocal } = require('../src/main/reminders');
+  // 08:00 in Costa Rica is 14:00Z: the link carries UTC, whatever cfg.timeZone says
+  const at = parseDateTimeLocal('2026-11-08T08:00', 'America/Costa_Rica');
+  const url = calendarUrl({ at, text: 'Reunión & café' });
+  assert.match(url, /^https:\/\/calendar\.google\.com\/calendar\/render\?action=TEMPLATE&text=/);
+  assert.ok(url.includes(`text=${encodeURIComponent('Reunión & café')}`));
+  assert.ok(url.includes(`dates=${encodeURIComponent('20261108T140000Z/20261108T141500Z')}`));
+  assert.ok(url.includes(`details=${encodeURIComponent('Recordatorio creado con Capri')}`));
+
+  // an event with advance notice uses the event clock, not the fire time
+  const notice = calendarUrl({
+    at: Date.parse('2026-11-08T13:00:00.000Z'),
+    eventAt: Date.parse('2026-11-08T14:00:00.000Z'),
+    text: 'evento',
+  });
+  assert.ok(notice.includes(encodeURIComponent('20261108T140000Z/')));
+  assert.equal(calendarUrl({ at: NaN, text: 'x' }), '');
+});
+
+test('"agregalo a mi calendario" matches the reminder by text', () => {
+  assert.deepEqual(parseReminderCommand('agregalo a mi calendario'), { action: 'calendar', match: '' });
+  assert.deepEqual(parseReminderCommand('ponelo en Google Calendar'), { action: 'calendar', match: '' });
+  assert.deepEqual(parseReminderCommand('agregá la reunión a mi calendario'), {
+    action: 'calendar', match: 'reunion',
+  });
+  assert.equal(parseReminderCommand('poné música'), null);
 });
 
 test('confirmation names the resolved local time', () => {
@@ -210,10 +241,11 @@ test('reminders survive a restart', () => {
   const file = path.join(dir, 'reminders.json');
   try {
     const first = createReminders({ file, now: () => 1000, intervalMs: 0 });
-    first.add({ at: 1000 + 10 * MIN, text: 'sacar la basura' });
+    first.add({ at: 1000 + 10 * MIN, text: 'sacar la basura', fixed: true });
     const second = createReminders({ file, now: () => 2000, intervalMs: 0 });
     second.start();
     assert.deepEqual(second.list().map((item) => item.text), ['sacar la basura']);
+    assert.equal(second.list()[0].fixed, true);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

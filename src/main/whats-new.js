@@ -6,6 +6,10 @@
 const { normalizeCommandText } = require('./command-text');
 
 const NOTES = {
+  '0.3.1': [
+    'Recordatorios con fecha y hora: «agregalo a mi calendario» o el botón en Ajustes abren Google Calendar ya completado.',
+    'Sin login ni API: se abre la página del evento en tu navegador; mis burbujas y avisos de voz siguen igual.',
+  ],
   '0.3.0': [
     'Perfil automático según tu PC (GPU/VRAM): te lo ofrezco al arrancar y en Ajustes.',
     'Voz más rápida: la primera frase sale sin espera; si falta VRAM, paso a Kokoro sin trabar tu PC.',

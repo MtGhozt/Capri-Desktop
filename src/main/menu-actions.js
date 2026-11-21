@@ -22,7 +22,7 @@ const { COMMENT_WARN, normalizeGamingMode } = require('./game-comment');
 const { openClipsFolder } = require('./clips');
 const { cleanName } = require('./name-command');
 const { copyErrorPayload } = require('./diagnose');
-const { normalizeTimeFormat } = require('./reminders');
+const { normalizeTimeFormat, calendarUrl } = require('./reminders');
 const {
   thresholdFromPct, wakeSensitivity,
 } = require('./hearing');
@@ -431,6 +431,13 @@ function createMenuActions(deps) {
         return done
           ? { ok: true, message: `Pasado a ${reminderLabel(done)}.` }
           : { ok: false, message: 'No encontré ese recordatorio.' };
+      }
+      case 'reminder-calendar': {
+        const id = String(value?.id || value || '').trim();
+        const item = (reminders?.list?.() || []).find((one) => one.id === id);
+        if (!item?.fixed) return { ok: false, message: 'Ese recordatorio no tiene fecha fija.' };
+        shell.openExternal(calendarUrl(item));
+        return { ok: true };
       }
       case 'reminder-delete': {
         const done = reminders?.remove?.(String(value?.id || value || '').trim());

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1
+
+### Calendario sin login
+
+- **Agregar a Google Calendar:** cada recordatorio con fecha y hora tiene un botón en Ajustes › Recordatorios que abre Google Calendar con el evento ya completado (título, hora y detalle). Los timers de cuenta regresiva no lo muestran.
+- **Por chat o voz:** después de crear un recordatorio con fecha, «agregalo a mi calendario» / «ponelo en Google Calendar» (o nombrándolo: «agregá la reunión a mi calendario») abre el evento del más reciente o del que coincida. Si no hay uno con fecha y hora, te lo digo.
+- **Sin login ni API:** es el enlace público de "crear evento" con los datos en la URL; no hay OAuth, tokens ni llamadas de red. Las burbujas y avisos de voz de Capri no cambian.
+- **Tests:** enlace (acentos/`&`, UTC desde la zona de Costa Rica, fin 15 min por defecto) y el comando.
+
 ## 0.3.0 (etiqueta `v0.3.0`)
 
 ### Velocidad y hardware

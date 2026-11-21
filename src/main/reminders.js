@@ -188,11 +188,20 @@ function findMatches(items, match, { now = Date.now(), timeZone = '' } = {}) {
 // The direct orders: "timer 10 minutos", "avisame en media hora", "recordame en 2 horas",
 // "cancelá el recordatorio", "qué recordatorios tengo", "pasá el de las 8 a las 9".
 // Anything with a real date create ("mañana a las 8") is left for the model and its [remind:...] tag.
+const CALENDAR_VERB = /^(?:agrega(?:lo|la|me)?|agregar|pon(?:e|elo|ela|eme)?|poner|suma(?:lo|la)?|sumar|guarda(?:lo|la)?|guardar)\b/;
+
 function parseReminderCommand(text, { now = Date.now(), timeZone = '' } = {}) {
   const said = normalizeCommandText(text);
   if (!said) return null;
   if (/^(?:que|cuales)\s+.*\b(?:recordatorios?|temporizadores?|timers?|avisos?|alarmas?)\b/.test(said)) {
     return { action: 'list' };
+  }
+  // "agregalo a mi calendario", "ponelo en Google Calendar", "agregá la reunión al calendario"
+  if (CALENDAR_VERB.test(said) && /\bcalendar(?:io)?\b/.test(said)) {
+    const match = matchFromPart(said
+      .replace(CALENDAR_VERB, '')
+      .replace(/\b(?:a|al|en|para)?\s*(?:mi\s+|el\s+|la\s+)?(?:google\s+)?calendar(?:io)?\b/, ''));
+    return { action: 'calendar', match };
   }
   if (/^(?:cancela|cancelar|borra|borrar|elimina|eliminar|quita|quitar)\b.*\b(?:recordatorios?|temporizadores?|timers?|avisos?|alarmas?)\b/.test(said)) {
     const all = /todos|todas/.test(said);
@@ -267,6 +276,19 @@ function normalizeTimeFormat(value) {
   return String(value || '').toLowerCase() === '12h' ? '12h' : '24h';
 }
 
+// Google Calendar's own "new event" form, prefilled: no OAuth, no API, no tokens. Times are
+// absolute ms, so the UTC stamp is the same in any cfg.timeZone (08:00 in CR is 14:00Z).
+function calendarUrl(item) {
+  const start = Number(item?.eventAt) || Number(item?.at);
+  if (!Number.isFinite(start)) return '';
+  const minutes = Number(item?.durationMin) > 0 ? Number(item.durationMin) : 15;
+  const stamp = (ms) => new Date(ms).toISOString().replace(/[-:]|\.\d{3}/g, '');
+  return 'https://calendar.google.com/calendar/render'
+    + `?action=TEMPLATE&text=${encodeURIComponent(String(item?.text || 'Recordatorio'))}`
+    + `&dates=${encodeURIComponent(`${stamp(start)}/${stamp(start + minutes * 60000)}`)}`
+    + `&details=${encodeURIComponent('Recordatorio creado con Capri')}`;
+}
+
 function formatWhen(at, { now = new Date(), timeZone = '', timeFormat = '24h' } = {}) {
   const zone = resolveTimeZone(timeZone);
   const hour12 = normalizeTimeFormat(timeFormat) === '12h';
@@ -321,6 +343,8 @@ function createReminders({
     // Keep eventAt whenever present so an edit that recomputes `at` cannot drop it.
     if (Number.isFinite(eventAt)) item.eventAt = eventAt;
     if (Number.isFinite(noticeMin) && noticeMin > 0) item.noticeMin = noticeMin;
+    // A real date/time (model tag), unlike a countdown "timer 10 minutos".
+    if (raw?.fixed) item.fixed = true;
     return item;
   };
 
@@ -345,8 +369,10 @@ function createReminders({
     return items.slice().sort((a, b) => a.at - b.at);
   }
 
-  function add({ at, text, eventAt, noticeMin }) {
-    const item = clean({ id: `r${now()}-${++seq}`, at, text, eventAt, noticeMin });
+  function add({ at, text, eventAt, noticeMin, fixed }) {
+    const item = clean({
+      id: `r${now()}-${++seq}`, at, text, eventAt, noticeMin, fixed,
+    });
     if (!item) return null;
     items = [...items, item];
     save();
@@ -457,5 +483,5 @@ function createReminders({
 module.exports = {
   CHECK_MS, DEFAULT_NOTICE_MIN, parseReminderCommand, parseNoticeMinutes, resolveFireAt,
   parseMoveTarget, findMatches, formatWhen, normalizeTimeFormat, formatDateTimeLocal, parseDateTimeLocal,
-  deliverReminder, createReminders, readsAsReminderRequest, promisesReminder, durationText,
+  deliverReminder, createReminders, readsAsReminderRequest, promisesReminder, durationText, calendarUrl,
 };

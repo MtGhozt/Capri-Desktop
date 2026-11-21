@@ -108,6 +108,7 @@ function createMenuState(deps) {
           when: reminderLabel(item),
           eventAt: item.eventAt || null,
           noticeMin: item.noticeMin || 0,
+          fixed: Boolean(item.fixed),
         })),
         theme: cfg.ui?.theme === 'capri' ? 'capri' : 'cyberpunk',
         gaming: {

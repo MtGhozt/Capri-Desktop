@@ -68,6 +68,16 @@ export function render(menu, state, ctx) {
         menu.act('reminder-update', { id: item.id, at: iso });
       });
       row.append(whenInput);
+      if (item.fixed) {
+        const cal = build('button', 'appmenu__toggle-btn', 'Google Calendar');
+        cal.type = 'button';
+        cal.title = 'Agregar a Google Calendar';
+        cal.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menu.act('reminder-calendar', { id: item.id });
+        });
+        row.append(cal);
+      }
       const del = build('button', 'appmenu__toggle-btn', 'Borrar');
       del.type = 'button';
       del.addEventListener('click', (e) => {

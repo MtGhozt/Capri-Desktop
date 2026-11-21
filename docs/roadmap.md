@@ -14,6 +14,7 @@ Resumen de lo cerrado (el detalle está en el historial de git y en el CHANGELOG
 - **Fase 6 — Hecho:** hooks de agentes (Claude Code, Codex, Antigravity, Cursor y OpenCode), "Usar mi agente instalado", ver la pantalla a pedido con consentimiento, detección de juegos con No molestar y proveedores con key.
 - **Fixes 0.2.x — Hecho:** 0.2.2 (aviso de VC++ faltante, barra "Cargando voz", "Modo juego" → "No molestar" + ayuda "?", OpenGL experimental, etiquetas de Mis apps); 0.2.4 (Diagnóstico en Acerca de con "Copiar detalles de error" y "Abrir log"); 0.2.5 (varios comandos en una frase, CLIs fuera del PATH, Spotify con más frases y reintentos, voz que cae a Kokoro en GPUs débiles y contexto sin charla vieja); 0.2.6 (hora local elegible, timers y recordatorios persistentes con aviso en burbuja y voz, primera descarga de voz explicada); **0.2.7 publicada** (`v0.2.7`: Gemini vuelve a `gemini-flash-lite-latest` y corrige configs guardadas, el modelo dice qué proveedor/modelo lo hace funcionar, CUDA forward-compatible para clonar voz, voz personalizada en 2 pasos claros, aviso hablado de recordatorios más firme si falla el TTS).
 - **0.2.8 — Hecho:** clima y feriados por ciudad (Open-Meteo + Nager.Date); recordatorios editables con aviso antes y formato 12h/24h; limpieza de Ajustes; clip sin NVIDIA (Xbox Game Bar / Win+Alt+G); "mirá mi pantalla" por el monitor de la ventana activa; fixes de instalación de voz y lock de voz clonada.
+- **0.3.1 — Hecho:** agregar recordatorios con fecha a Google Calendar sin login ni API (botón en Ajustes y comando por chat/voz con el enlace `action=TEMPLATE`); login real con OAuth queda como idea.
 
 Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía corta por opción y leer el estado del juego.
 
@@ -50,9 +51,10 @@ Queda abierto de la Fase 6: Anthropic y Grok como proveedores propios, la guía 
 - **Hecho:** «Mirá mi pantalla» no abre el recorte; filtro de alucinaciones de Whisper («¡Suscríbete!», «gracias por ver»).
 - **Hecho:** Refactor modular de `main.js`, `menu.js`, `fx.js`, `app.js` y `voice/server.py` + `docs/ARCHITECTURE.md` + tests de grafo/efectos/límites.
 
-### 0.3.1 — Calendario
+### 0.3.1 — Calendario (publicada, v0.3.1)
 
-- **Recordatorios + Google Calendar:** crear eventos y pendientes en el calendario para que también avisen en el celular; los avisos propios de Capri se mantienen.
+- **Hecho:** recordatorios con fecha y hora se agregan a Google Calendar sin login ni API: botón en Ajustes › Recordatorios y «agregalo a mi calendario» / «ponelo en Google Calendar» por chat o voz (el más reciente o el que nombres). Es el enlace `action=TEMPLATE` con título, fechas en UTC y detalle «Recordatorio creado con Capri»; los timers de cuenta regresiva no lo tienen. Las burbujas y avisos de voz de Capri siguen igual.
+- **Más adelante:** login real de Google (OAuth) para crear el evento sin abrir el navegador; por ahora queda como idea.
 
 ## Próximo, por prioridad
 

@@ -17,7 +17,7 @@ const { saveClip } = require('./clips');
 const { hasNvidiaGpu } = require('./voice-install');
 const { addFix, removeFix, cleanFixes } = require('./fixes');
 const {
-  formatWhen, normalizeTimeFormat, resolveFireAt, durationText, parseMoveTarget,
+  formatWhen, normalizeTimeFormat, resolveFireAt, durationText, parseMoveTarget, findMatches, calendarUrl,
 } = require('./reminders');
 const { isWeatherOrHolidayQuestion } = require('./weather');
 
@@ -372,6 +372,7 @@ function createReplies(deps) {
     const created = getReminders()?.add({
       at: resolved.at,
       text: order.text,
+      fixed: !order.minutes,
       eventAt: noticeMin > 0 ? resolved.eventAt : undefined,
       noticeMin: noticeMin > 0 ? noticeMin : undefined,
     });
@@ -383,6 +384,9 @@ function createReplies(deps) {
     let line = fillLine(pickLine('recordatorioListo'), { when: reminderLabel(created) });
     if (noticeMin > 0) {
       line = `Listo: el evento es ${reminderWhen(resolved.eventAt)}, te aviso ${durationText(noticeMin)} antes (${reminderWhen(created.at)}).`;
+    }
+    if (created.fixed) {
+      line += ' Decime «agregalo a mi calendario» si lo querés en Google Calendar.';
     }
     if (say) {
       const spoken = Boolean(speakLine(line));
@@ -428,6 +432,20 @@ function createReplies(deps) {
         ? `Listo, lo pasé a ${reminderLabel(done)}: ${done.text}.`
         : 'No pude mover ese recordatorio.';
       return { ok: true, line: announce(line, { chat, badge: 'RECORDATORIO' }) };
+    }
+    if (order.action === 'calendar') {
+      const fixed = (getReminders()?.list() || []).filter((item) => item.fixed);
+      const hits = order.match
+        ? findMatches(fixed, order.match, { timeZone: config.load().timeZone })
+        : fixed;
+      const hit = hits[hits.length - 1]; // list()/findMatches sort by time: the latest one
+      if (!hit) {
+        const line = 'Para eso necesito un recordatorio con fecha y hora, no un timer.';
+        return { ok: true, line: announce(line, { chat, badge: 'CALENDARIO' }) };
+      }
+      shell.openExternal(calendarUrl(hit));
+      const line = `Listo, abrí Google Calendar con «${hit.text}».`;
+      return { ok: true, line: announce(line, { chat, badge: 'CALENDARIO' }) };
     }
     if (order.action === 'cancel') {
       if (order.all) {

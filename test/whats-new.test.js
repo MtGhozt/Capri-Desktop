@@ -112,6 +112,21 @@ test('0.2.12 has short lines about false games, No molestar, Oído and vague mus
   assert.match(all, /m[uú]sica|canci[oó]n/i);
 });
 
+test('0.3.1 has short lines about Google Calendar without login', () => {
+  const lines = notesFor('0.3.1');
+  assert.equal(Array.isArray(lines), true);
+  assert.ok(lines.length >= 2 && lines.length <= 3);
+  for (const line of lines) assert.ok(line.length < 140);
+  const all = lines.join(' ');
+  assert.match(all, /calendario|Google Calendar/i);
+  assert.match(all, /sin login|sin API|navegador/i);
+});
+
+test('upgrade from 0.3.0 shows the 0.3.1 notes once', () => {
+  assert.deepEqual(bootNotes({ version: '0.3.1', lastSeenVersion: '0.3.0' }), NOTES['0.3.1']);
+  assert.equal(bootNotes({ version: '0.3.1', lastSeenVersion: '0.3.1' }), null);
+});
+
 test('0.3.0 has 5–6 short lines about profile, voice, games, music and screen', () => {
   const lines = notesFor('0.3.0');
   assert.equal(Array.isArray(lines), true);
