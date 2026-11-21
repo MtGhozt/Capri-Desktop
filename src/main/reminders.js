@@ -374,6 +374,9 @@ function createReminders({
       id: `r${now()}-${++seq}`, at, text, eventAt, noticeMin, fixed,
     });
     if (!item) return null;
+    // Answering her "¿te aviso…?" with "sí" re-emits the same tag: one reminder, not two.
+    const same = items.find((one) => one.at === item.at && fold(one.text) === fold(item.text));
+    if (same) return same;
     items = [...items, item];
     save();
     return item;

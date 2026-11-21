@@ -179,6 +179,25 @@ test('moving a reminder with noticeMin keeps the offset', () => {
   }
 });
 
+test('confirming with "sí" never saves the reminder twice', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capri-reminders-'));
+  const file = path.join(dir, 'reminders.json');
+  try {
+    const store = createReminders({ file, now: () => 1000, intervalMs: 0 });
+    const at = Date.parse('2026-11-08T20:00:00.000Z');
+    // her [remind:…] tag on the first answer, then the same tag again after "sí"
+    const first = store.add({ at, text: 'entregar un trabajo', fixed: true });
+    const again = store.add({ at, text: 'Entregar un trabajo', fixed: true });
+    assert.equal(store.list().length, 1);
+    assert.equal(again.id, first.id);
+    // the same text at another time is a real second reminder
+    store.add({ at: at + 60 * MIN, text: 'entregar un trabajo', fixed: true });
+    assert.equal(store.list().length, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('settings menu lists pending reminders with edit and delete actions', () => {
   const menu = require('./menu-source');
   assert.match(menu, /RECORDATORIOS/);
